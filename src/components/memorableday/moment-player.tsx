@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight, Heart, RotateCcw, X } from "lucide-react";
+import { ChevronRight, Heart, RotateCcw, Share2, X } from "lucide-react";
 import type { PlayerPayload } from "./md-context";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
@@ -138,7 +138,7 @@ function SceneDots({ total, current, light }: { total: number; current: number; 
 const SCENE_COUNT = 4;
 
 export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClose: () => void }) {
-  const { setTab, notify } = useMD();
+  const { setTab, notify, openShare, sheet } = useMD();
   const [scene, setScene] = useState(0);
   const [giftOpen, setGiftOpen] = useState(false);
 
@@ -152,14 +152,14 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
     setScene((s) => Math.min(s + 1, SCENE_COUNT - 1));
   }, [scene, giftOpen]);
 
-  // Escape to close
+  // Escape to close (deferred while a sheet is layered above the player)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !sheet) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, sheet]);
 
   const isFinal = scene === SCENE_COUNT - 1;
   const isLightScene = isFinal;
@@ -417,11 +417,21 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      openShare({ id: moment.id, title: moment.title });
+                    }}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.1] bg-white py-3 text-[14px] font-semibold text-[#007AFF] hairline transition-transform active:scale-[0.97]"
+                  >
+                    <Share2 size={14} aria-hidden /> Share this moment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       replay();
                     }}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.1] bg-white py-3 text-[14px] font-semibold text-[#1D1D1F] hairline transition-transform active:scale-[0.97]"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full py-2 text-[13.5px] font-semibold text-[#AAAAAA] transition-colors active:text-[#1D1D1F]"
                   >
-                    <RotateCcw size={14} aria-hidden /> Replay
+                    <RotateCcw size={13} aria-hidden /> Replay
                   </button>
                 </motion.div>
               </div>
@@ -451,7 +461,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
         </AnimatePresence>
       </div>
 
-      {/* Top chrome: close + scene dots (adapts to light/dark scenes) */}
+      {/* Top chrome: close + scene dots + share (adapts to light/dark scenes) */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 pt-4">
         <button
           type="button"
@@ -467,7 +477,22 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
           <X size={19} strokeWidth={2.4} />
         </button>
         <SceneDots total={SCENE_COUNT} current={scene} light={isLightScene} />
-        <span className="h-10 w-10" aria-hidden />
+        <button
+          type="button"
+          aria-label="Share experience"
+          onClick={(e) => {
+            e.stopPropagation();
+            openShare({ id: moment.id, title: moment.title });
+          }}
+          className={cn(
+            "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+            isLightScene
+              ? "bg-white/80 text-[#007AFF] hairline backdrop-blur-xl"
+              : "bg-[#1D1D1F]/35 text-white backdrop-blur-md"
+          )}
+        >
+          <Share2 size={17} strokeWidth={2.2} />
+        </button>
       </div>
     </motion.div>
   );

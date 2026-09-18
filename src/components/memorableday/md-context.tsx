@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 
 export type Tab = "home" | "create" | "explore" | "gallery" | "profile";
-export type Sheet = "create" | "pricing" | null;
+export type Sheet = "create" | "pricing" | "notifications" | "share" | null;
 
 /** Payload for the recipient experience player */
 export interface PlayerPayload {
@@ -11,6 +11,12 @@ export interface PlayerPayload {
   title: string;
   cover: number;
   dedication: string;
+}
+
+/** Payload for the share sheet */
+export interface SharePayload {
+  id: string;
+  title: string;
 }
 
 export interface MDContextValue {
@@ -21,7 +27,14 @@ export interface MDContextValue {
   submitSearch: (q?: string) => void;
   notify: (message: string) => void;
   openSheet: (sheet: Exclude<Sheet, null>) => void;
+  /** Currently open sheet (lets layered UI e.g. the player defer Escape) */
+  sheet: Sheet;
   openMoment: (moment: PlayerPayload) => void;
+  /** Opens the share sheet for a moment */
+  openShare: (moment: SharePayload) => void;
+  /** Number of unread activity notifications (drives the bell badge) */
+  unreadCount: number;
+  markAllRead: () => void;
 }
 
 export const MDContext = createContext<MDContextValue | null>(null);

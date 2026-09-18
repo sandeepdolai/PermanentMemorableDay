@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { MomentStatus } from "@/lib/mock-data";
 
@@ -114,6 +115,65 @@ export function EmptyState({
       </span>
       <p className="text-[16px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{title}</p>
       <p className="mt-1 max-w-[240px] text-[13px] leading-relaxed text-[#AAAAAA]">{sub}</p>
+    </div>
+  );
+}
+
+/**
+ * Animated numeric count-up (iOS-style stat entrance).
+ * Accepts values like "87%" or "34" — animates the digits, keeps the suffix.
+ * Respects prefers-reduced-motion.
+ */
+export function CountUp({ value, className }: { value: string; className?: string }) {
+  const m = value.match(/^(\d+)(.*)$/);
+  const target = m ? Number(m[1]) : null;
+  const suffix = m ? m[2] : "";
+  const [n, setN] = useState(0);
+
+  useEffect(() => {
+    if (target === null || Number.isNaN(target)) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // Reduced motion or zero target → jump straight to the value (async, so SSR-safe)
+    if (reduce || target === 0) {
+      const jump = requestAnimationFrame(() => setN(target));
+      return () => cancelAnimationFrame(jump);
+    }
+
+    let raf = 0;
+    const DURATION = 850;
+    const tick = (t: number, t0: number) => {
+      const p = Math.min((t - t0) / DURATION, 1);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      setN(Math.round(eased * (target ?? 0)));
+      if (p < 1) raf = requestAnimationFrame((tt) => tick(tt, t0));
+    };
+    raf = requestAnimationFrame((t0) => {
+      raf = requestAnimationFrame((t) => tick(t, t0));
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+
+  if (target === null || Number.isNaN(target)) {
+    return <span className={className}>{value}</span>;
+  }
+  return (
+    <span className={className} aria-label={value}>
+      {n}
+      {suffix}
+    </span>
+  );
+}
+
+/** Shimmering skeleton card for loading states (grid preview) */
+export function SkeletonCard({ aspect }: { aspect: string }) {
+  return (
+    <div aria-hidden className="card-shadow hairline overflow-hidden rounded-[22px] bg-white">
+      <div className={cn("skeleton w-full", aspect)} />
+      <div className="space-y-2.5 p-3">
+        <div className="skeleton h-3.5 w-3/4 rounded-full" />
+        <div className="skeleton h-3 w-1/2 rounded-full" />
+      </div>
     </div>
   );
 }

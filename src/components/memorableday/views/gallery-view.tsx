@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { Archive, Eye } from "lucide-react";
 import { MOMENTS, type MomentStatus } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
-import { EmptyState, LargeTitle, StatusBadge } from "../bits";
+import { EmptyState, LargeTitle, SkeletonCard, StatusBadge } from "../bits";
+import { useSkeleton } from "../use-skeleton";
 import { useMD } from "../md-context";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +23,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 export function GalleryView() {
   const { openMoment } = useMD();
   const [filter, setFilter] = useState<Filter>("all");
+  const loading = useSkeleton(filter);
 
   const moments = useMemo(
     () => MOMENTS.filter((m) => (filter === "all" ? true : m.status === filter)),
@@ -61,7 +64,13 @@ export function GalleryView() {
         })}
       </div>
 
-      {moments.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-2 gap-4" aria-hidden>
+          {Array.from({ length: 4 }, (_, i) => (
+            <SkeletonCard key={i} aspect="aspect-square" />
+          ))}
+        </div>
+      ) : moments.length === 0 ? (
         <EmptyState
           icon={<Archive size={26} aria-hidden />}
           title="Nothing here yet"
@@ -69,10 +78,13 @@ export function GalleryView() {
         />
       ) : (
         <div className="grid grid-cols-2 gap-4">
-          {moments.map((m) => (
-            <button
+          {moments.map((m, idx) => (
+            <motion.button
               key={m.id}
               type="button"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(idx * 0.035, 0.25), duration: 0.3, ease: "easeOut" }}
               onClick={() => openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` })}
               className="card-shadow hairline overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.97]"
             >
@@ -92,7 +104,7 @@ export function GalleryView() {
                   {m.date} · {m.scenes} scenes
                 </p>
               </div>
-            </button>
+            </motion.button>
           ))}
         </div>
       )}

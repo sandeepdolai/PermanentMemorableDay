@@ -136,6 +136,22 @@
   ::selection {
     background: rgba(0, 122, 255, 0.18);
   }
+  /* Keyboard navigation ring — System Blue, iOS focus style */
+  :focus-visible {
+    outline: 2.5px solid #007aff;
+    outline-offset: 2px;
+  }
+  /* Respect users who prefer reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer utilities {
@@ -176,5 +192,25 @@
   /* Hairline border used across iOS UI */
   .hairline {
     border: 1px solid rgba(29, 29, 31, 0.07);
+  }
+  /* Shimmering skeleton placeholder */
+  .skeleton {
+    background: linear-gradient(
+      100deg,
+      rgba(29, 29, 31, 0.05) 40%,
+      rgba(29, 29, 31, 0.09) 50%,
+      rgba(29, 29, 31, 0.05) 60%
+    );
+    background-size: 200% 100%;
+    animation: md-shimmer 1.3s ease-in-out infinite;
+  }
+}
+
+@keyframes md-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }

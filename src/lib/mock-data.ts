@@ -177,3 +177,100 @@ export const SEARCH_SUGGESTIONS: Array<{ label: string; hint: string }> = [
   { label: "Minimal", hint: "Aesthetic" },
   { label: "AI Creator", hint: "Generate an experience" },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Notifications (activity feed — abstract, no themed content)         */
+/* ------------------------------------------------------------------ */
+
+export type NotificationKind = "opened" | "loved" | "milestone" | "reminder" | "credits";
+
+export interface AppNotification {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  time: string;
+  group: "today" | "earlier";
+  unread: boolean;
+  /** Moment reference — tapping the notification opens the player */
+  moment?: { id: string; title: string; cover: number; dedication: string };
+}
+
+export const NOTIFICATIONS: AppNotification[] = [
+  {
+    id: "n1",
+    kind: "opened",
+    title: "Maya opened your moment",
+    body: "“Golden Hour” was just opened and finished",
+    time: "2m",
+    group: "today",
+    unread: true,
+    moment: { id: "m1", title: "Golden Hour", cover: 1, dedication: "For Maya" },
+  },
+  {
+    id: "n2",
+    kind: "loved",
+    title: "Alex loved “Neon District”",
+    body: "Your moment received a new love reaction",
+    time: "18m",
+    group: "today",
+    unread: true,
+    moment: { id: "m4", title: "Neon District", cover: 6, dedication: "For Alex" },
+  },
+  {
+    id: "n3",
+    kind: "milestone",
+    title: "“First Light” was completed",
+    body: "Sara finished every scene — 100% completion",
+    time: "1h",
+    group: "today",
+    unread: true,
+    moment: { id: "m5", title: "First Light", cover: 7, dedication: "For Sara" },
+  },
+  {
+    id: "n4",
+    kind: "reminder",
+    title: "“Paper Planes” sends tomorrow",
+    body: "Scheduled for Oct 24 · 9:00 AM — review it before it goes",
+    time: "3h",
+    group: "today",
+    unread: true,
+    moment: { id: "m3", title: "Paper Planes", cover: 2, dedication: "For Jordan" },
+  },
+  {
+    id: "n5",
+    kind: "credits",
+    title: "AI credits refilled",
+    body: "Your monthly 240 credits are ready to use",
+    time: "1d",
+    group: "earlier",
+    unread: false,
+  },
+  {
+    id: "n6",
+    kind: "milestone",
+    title: "“Static Dreams” passed 25 views",
+    body: "Recipients keep coming back to it",
+    time: "2d",
+    group: "earlier",
+    unread: false,
+    moment: { id: "m7", title: "Static Dreams", cover: 8, dedication: "For Kabir" },
+  },
+  {
+    id: "n7",
+    kind: "loved",
+    title: "3 new loves this week",
+    body: "People loved your recent moments",
+    time: "4d",
+    group: "earlier",
+    unread: false,
+  },
+];
+
+/** Deterministic share slug for the QR/link preview (8 chars, non-guessable per PRD §sharing) */
+export function shareSlug(id: string): string {
+  const seed = [...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 2147483647, 7);
+  return seed.toString(36).padStart(4, "0").slice(0, 4) + "K" + seed.toString(36).slice(-3);
+}
+
+export const SHARE_URL_BASE = "memorableday.in/e/";

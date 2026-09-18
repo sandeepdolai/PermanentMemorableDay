@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
-import { PRICING_PLANS } from "@/lib/mock-data";
-import { MDContext, type PlayerPayload, type Sheet, type Tab } from "./md-context";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import { Bell, Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
+import { NOTIFICATIONS, PRICING_PLANS } from "@/lib/mock-data";
+import { MDContext, type PlayerPayload, type SharePayload, type Sheet, type Tab } from "./md-context";
 import { SearchBar } from "./search-bar";
 import { BottomNav } from "./bottom-nav";
 import { BottomSheet } from "./bottom-sheet";
 import { MomentPlayer } from "./moment-player";
+import { NotificationsContent, ShareContent } from "./sheet-contents";
 import { HomeView } from "./views/home-view";
 import { CreateView } from "./views/create-view";
 import { ExploreView } from "./views/explore-view";
@@ -27,7 +28,7 @@ const TAB_TITLES: Record<Tab, string> = {
 /** iOS-style dark glass toast */
 function GlassToast({ message }: { message: string }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[70px] z-[60] flex justify-center px-6">
+    <div className="pointer-events-none absolute inset-x-0 top-[70px] z-[90] flex justify-center px-6">
       <motion.div
         initial={{ opacity: 0, y: -14, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -40,6 +41,33 @@ function GlassToast({ message }: { message: string }) {
         <span className="truncate text-[13px] font-medium text-white">{message}</span>
       </motion.div>
     </div>
+  );
+}
+
+/** Notification bell — fixed top chrome, iOS badge style */
+function BellButton({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={count > 0 ? `${count} unread notifications` : "Notifications"}
+      className="relative flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-[#1D1D1F]/[0.06] bg-white/90 text-[#1D1D1F] shadow-[0_10px_30px_-12px_rgba(29,29,31,0.25)] backdrop-blur-xl transition-transform active:scale-90"
+    >
+      <Bell size={19} strokeWidth={2.1} aria-hidden />
+      <AnimatePresence>
+        {count > 0 ? (
+          <motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            exit={{ scale: 0 }}
+            transition={{ type: "spring", stiffness: 500, damping: 22 }}
+            className="absolute -right-0.5 -top-0.5 flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-[#FF375F] px-1 text-[10.5px] font-bold leading-none text-white shadow-[0_4px_10px_-2px_rgba(255,55,95,0.6)] ring-2 ring-white"
+          >
+            {count > 9 ? "9+" : count}
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
+    </button>
   );
 }
 
@@ -172,6 +200,8 @@ export function AppShell() {
   const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [player, setPlayer] = useState<PlayerPayload | null>(null);
+  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
+  const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const notify = useCallback((message: string) => {
@@ -216,14 +246,25 @@ export function AppShell() {
 
   const closeMoment = useCallback(() => setPlayer(null), []);
 
+  const openShare = useCallback((m: SharePayload) => {
+    setSharePayload(m);
+    setSheet("share");
+  }, []);
+
+  const markAllRead = useCallback(() => {
+    setUnreadCount(0);
+    notify("All notifications marked as read");
+  }, [notify]);
+
   const isSearchTab = tab === "home" || tab === "explore";
 
   return (
-    <MDContext.Provider
-      value={{ tab, setTab, query, setQuery, submitSearch, notify, openSheet, openMoment }}
-    >
+    <MotionConfig reducedMotion="user">
+      <MDContext.Provider
+        value={{ tab, setTab, query, setQuery, submitSearch, notify, openSheet, sheet, openMoment, openShare, unreadCount, markAllRead }}
+      >
       <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05]">
-        {/* Top chrome: signature search pill (Home/Explore) or compact title on scroll */}
+        {/* Top chrome: signature search pill + bell (Home/Explore) or compact title + bell on scroll */}
         <div
           className={cn(
             "absolute inset-x-0 top-0 z-50 px-5 pb-5 pt-4 transition-colors duration-200",
@@ -233,9 +274,14 @@ export function AppShell() {
           )}
         >
           {isSearchTab ? (
-            <SearchBar />
+            <div className="flex items-center gap-2.5">
+              <div className="min-w-0 flex-1">
+                <SearchBar />
+              </div>
+              <BellButton count={unreadCount} onClick={() => openSheet("notifications")} />
+            </div>
           ) : (
-            <div className="flex h-[46px] items-center justify-center">
+            <div className="relative flex h-[46px] items-center justify-center">
               <span
                 className={cn(
                   "text-[16px] font-semibold tracking-[-0.02em] text-[#1D1D1F] transition-opacity duration-200",
@@ -244,6 +290,9 @@ export function AppShell() {
               >
                 {TAB_TITLES[tab]}
               </span>
+              <div className="absolute right-0">
+                <BellButton count={unreadCount} onClick={() => openSheet("notifications")} />
+              </div>
             </div>
           )}
         </div>
@@ -274,7 +323,7 @@ export function AppShell() {
         {/* Floating pill navigation */}
         <BottomNav />
 
-        {/* Toast */}
+        {/* Toast — topmost layer, above sheets and the player */}
         <AnimatePresence>
           {toast ? <GlassToast key={toast.id} message={toast.message} /> : null}
         </AnimatePresence>
@@ -303,6 +352,26 @@ export function AppShell() {
           />
         </BottomSheet>
 
+        {/* Notifications sheet */}
+        <BottomSheet open={sheet === "notifications"} onClose={() => setSheet(null)} title="Notifications">
+          <NotificationsContent
+            onMarkAllRead={markAllRead}
+            onOpenMoment={(m) => {
+              setSheet(null);
+              openMoment(m);
+            }}
+          />
+        </BottomSheet>
+
+        {/* Share sheet */}
+        <BottomSheet
+          open={sheet === "share"}
+          onClose={() => setSheet(null)}
+          title={sharePayload ? `Share “${sharePayload.title}”` : "Share moment"}
+        >
+          {sharePayload ? <ShareContent moment={sharePayload} onNotify={notify} /> : null}
+        </BottomSheet>
+
         {/* Recipient experience player */}
         <AnimatePresence>
           {player ? (
@@ -310,6 +379,7 @@ export function AppShell() {
           ) : null}
         </AnimatePresence>
       </div>
-    </MDContext.Provider>
+      </MDContext.Provider>
+    </MotionConfig>
   );
 }

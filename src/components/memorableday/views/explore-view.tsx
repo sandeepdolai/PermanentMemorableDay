@@ -5,10 +5,10 @@ import { motion } from "framer-motion";
 import { Eye, Heart, SearchX } from "lucide-react";
 import { EXPLORE_ITEMS } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
-import { EmptyState, LargeTitle } from "../bits";
+import { EmptyState, LargeTitle, SkeletonCard } from "../bits";
 import { SegmentedControl } from "../segmented-control";
+import { useSkeleton } from "../use-skeleton";
 import { useMD } from "../md-context";
-import { cn } from "@/lib/utils";
 
 type Segment = "trending" | "new" | "picks";
 
@@ -25,6 +25,7 @@ function formatCount(n: number): string {
 export function ExploreView() {
   const { query, setQuery, openMoment } = useMD();
   const [segment, setSegment] = useState<Segment>("trending");
+  const loading = useSkeleton(segment);
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -71,7 +72,13 @@ export function ExploreView() {
         </div>
       ) : null}
 
-      {items.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-2 gap-4" aria-hidden>
+          {Array.from({ length: 4 }, (_, i) => (
+            <SkeletonCard key={i} aspect="aspect-[4/3.4]" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
         <EmptyState
           icon={<SearchX size={26} aria-hidden />}
           title="Nothing found"

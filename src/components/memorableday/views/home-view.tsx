@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight, Eye, Heart } from "lucide-react";
+import { Eye, Heart, Share2 } from "lucide-react";
 import { MOMENTS, USER } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
-import { SectionHeader, StatusBadge } from "../bits";
+import { CountUp, SectionHeader, StatusBadge } from "../bits";
 import { useMD } from "../md-context";
 
 const STATS = [
@@ -14,7 +14,7 @@ const STATS = [
 ];
 
 export function HomeView() {
-  const { setTab, notify, openMoment } = useMD();
+  const { setTab, notify, openMoment, openShare } = useMD();
   const [greeting, setGreeting] = useState("Hello");
 
   useEffect(() => {
@@ -74,7 +74,10 @@ export function HomeView() {
         <div className="grid grid-cols-3 gap-3">
           {STATS.map((s) => (
             <div key={s.label} className="card-shadow hairline rounded-[20px] bg-white px-3.5 py-3.5">
-              <p className="text-[22px] font-bold tracking-[-0.02em] text-[#1D1D1F]">{s.value}</p>
+              <CountUp
+                value={s.value}
+                className="text-[22px] font-bold tabular-nums tracking-[-0.02em] text-[#1D1D1F]"
+              />
               <p className="mt-0.5 text-[11px] font-medium leading-tight text-[#AAAAAA]">{s.label}</p>
             </div>
           ))}
@@ -114,35 +117,57 @@ export function HomeView() {
       <section aria-label="Recent moments">
         <SectionHeader title="Recent Moments" action="Gallery" onAction={() => setTab("gallery")} />
         <div className="card-shadow hairline divide-y divide-[#1D1D1F]/[0.06] overflow-hidden rounded-[24px] bg-white">
-          {recent.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` })}
-              className="flex w-full items-center gap-3.5 px-4 py-3 text-left transition-colors active:bg-[#007AFF]/[0.04]"
-            >
-              <CoverArt variant={m.cover} className="h-[52px] w-[52px] shrink-0 rounded-[14px]" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
-                  {m.title}
-                </span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-[#AAAAAA]">
-                  <span className="truncate">For {m.recipient}</span>
-                  <span aria-hidden>·</span>
-                  <span className="shrink-0">{m.date}</span>
-                </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-2.5">
-                {m.views ? (
-                  <span className="flex items-center gap-1 text-[12px] font-medium text-[#AAAAAA]">
-                    <Eye size={13} aria-hidden /> {m.views}
+          {recent.map((m) => {
+            const open = () =>
+              openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` });
+            return (
+              <div
+                key={m.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${m.title}, for ${m.recipient}, ${m.date}`}
+                onClick={open}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    open();
+                  }
+                }}
+                className="flex w-full cursor-pointer items-center gap-3.5 px-4 py-3 text-left transition-colors active:bg-[#007AFF]/[0.04]"
+              >
+                <CoverArt variant={m.cover} className="h-[52px] w-[52px] shrink-0 rounded-[14px]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+                    {m.title}
                   </span>
-                ) : null}
-                <StatusBadge status={m.status} />
-                <ChevronRight size={15} className="text-[#C7C7CC]" aria-hidden />
-              </span>
-            </button>
-          ))}
+                  <span className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-[#AAAAAA]">
+                    <span className="truncate">For {m.recipient}</span>
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0">{m.date}</span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {m.views ? (
+                    <span className="flex items-center gap-1 text-[12px] font-medium text-[#AAAAAA]">
+                      <Eye size={13} aria-hidden /> {m.views}
+                    </span>
+                  ) : null}
+                  <StatusBadge status={m.status} />
+                  <button
+                    type="button"
+                    aria-label={`Share ${m.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openShare({ id: m.id, title: m.title });
+                    }}
+                    className="flex h-[32px] w-[32px] items-center justify-center rounded-full bg-[#007AFF]/[0.09] text-[#007AFF] transition-transform active:scale-90"
+                  >
+                    <Share2 size={14.5} strokeWidth={2.2} aria-hidden />
+                  </button>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </section>
 

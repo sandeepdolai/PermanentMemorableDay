@@ -159,3 +159,40 @@ Stage Summary:
 - Still UI-only (mock data, no backend, no themed content — abstract moments per user instruction).
 - Open polish ideas for next rounds: skeleton loading states, notifications sheet (bell in chrome), animated stat count-ups, more scene block previews, share sheet UI (QR/link), settings sub-pages.
 - Unresolved risks: none critical. Note: agent-browser `find text` occasionally reports a covered element for grid cards (locator quirk); ref-based clicks work — treat as tooling artifact, not app bug.
+
+---
+Task ID: 4
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 2)
+Task: Assess project status, QA via agent-browser, then continue development (fix bugs + add features + styling polish per round mandate).
+
+Work Log:
+- Status assessment: read worklog, checked dev server (GET / 200, compiles clean). QA pass on existing build — all 5 tabs, moment player open/advance/close, search flow, zero page errors, zero console errors. Confirmed stable (previous round's "covered element" reports remain agent-browser locator quirks; real pointer/eval clicks work; player persists indefinitely when idle).
+- NEW FEATURE — Notifications system:
+  - mock-data.ts: NOTIFICATIONS feed (7 items, kinds opened/loved/milestone/reminder/credits, groups Today/Earlier, 4 unread, moment references).
+  - md-context.tsx: Sheet type extended ("notifications" | "share"), SharePayload, openShare, unreadCount, markAllRead, sheet exposed in context.
+  - New sheet-contents.tsx: NotificationsContent (grouped rows w/ tinted icon chips, unread dots + bold titles, "X new · Y total" header, Mark all read pill, max-h scroll area) + ShareContent.
+  - app-shell.tsx: BellButton in top chrome on ALL tabs (next to search pill on Home/Explore; right side of compact title row on Create/Gallery/Profile), iOS red badge with spring pop + count, aria-label updates ("4 unread notifications" → "Notifications"), Mark-all-read clears badge + toast.
+  - Notification rows with moment refs close the sheet AND open the Moment Player (verified: "Maya opened your moment" → Golden Hour player).
+- NEW FEATURE — Share sheet (PRD §sharing):
+  - Installed qrcode.react@4.2.0. Real scannable QR (SVG, fg #1D1D1F on white, memorableday.in/e/{slug} with deterministic 8-char non-guessable slug per PRD).
+  - Layout: QR hero card ("Scan to open the experience"), link row with mono font + Copy button (clipboard API → "Copied" green state 1.8s + toast), 4 channel tiles (Messages/WhatsApp/Mail/More) with toasts, product-accurate footer ("Anyone with the link can view — no account needed", replay note).
+  - Entry points: player top-chrome Share circle (adapts light/dark scenes), player final scene "Share this moment" button, Home recent-moment row share circles (rows restructured as accessible div[role=button] w/ keyboard Enter/Space + nested share buttons w/ stopPropagation).
+- NEW FEATURE — Animated stat count-ups on Home (CountUp in bits.tsx): easeOutCubic over 850ms, tabular-nums, suffix support ("87%"), aria-label keeps final value, prefers-reduced-motion jumps instantly.
+- NEW FEATURE — Skeleton loading (use-skeleton.ts hook): 340ms shimmer grids re-arm on Explore segment change + Gallery filter change (and on mount); SkeletonCard in bits.tsx; md-shimmer keyframes in globals.css; Gallery cards got staggered entrance (0.035s steps).
+- BUGS FIXED (found during this round's QA):
+  1. Z-index layering: BottomSheet (z-54/55) rendered UNDER MomentPlayer (z-70) — sharing from the player was visually hidden. Fixed: sheet z-80/81, toast z-60 → z-90 (topmost). Verified via computed z-index + elementFromPoint hit test + VLM.
+  2. Escape key conflict: sheet + player both listened; one Escape closed both. Fixed: BottomSheet owns Escape while open; MomentPlayer defers Escape when a sheet is open (new `sheet` field in context). Verified: Esc closes sheet only → second Esc closes player.
+  3. BottomSheet had no Escape handling at all — added.
+- STYLING/A11Y polish:
+  - Global :focus-visible ring (2.5px #007AFF, iOS focus style) in globals.css.
+  - prefers-reduced-motion: global CSS media query + framer-motion MotionConfig reducedMotion="user" wrapping the whole app + CountUp support.
+  - Bell badge spring animation; WhatsApp/Messages distinct icons; aria-labels on all new controls.
+- Lint: clean (0 errors). Full agent-browser verification: bell → sheet → mark-all-read (badge clears, label updates) → notif row opens player → player Share → QR sheet renders above player → Copy (Copied state + toast + reset) → Home row share → Gallery/Explore skeletons (12 shimmer els, re-arm verified at 100-300ms; drafts=2, archived=1 correct) → Create sheet regression (AI-assisted → toast) → Pricing regression (Pro → checkout toast) → count-ups finalize ("87%") → desktop 1440px centered column. VLM visual QA on 6 screenshots: ALL PASS. Zero page errors, zero console errors across the entire session.
+
+Stage Summary:
+- Round 2 of webDevReview complete. App now has: 5 tabs + Moment Player + notifications (bell/sheet/badge) + share system (QR/link/channels, 3 entry points) + count-ups + skeletons + full a11y/reduced-motion support.
+- Still UI-only mock data, no backend, no themed content (per user instruction).
+- Files: NEW sheet-contents.tsx + use-skeleton.ts; MODIFIED mock-data, md-context, bits, app-shell, bottom-sheet, moment-player, home/explore/gallery views, globals.css; ADDED qrcode.react dep.
+- Known tooling quirks (not app bugs): agent-browser snapshot -i doesn't reflect overlay dialog contents; synchronous double-clicks in one eval hit stale React closures (real users unaffected).
+- Next-phase candidates: settings sub-pages, AI credits ring in Profile, onboarding tour, recipient route /e/[id] (real share target), Prisma backend + auth, experience builder canvas.
+- Reminder: user should rotate the GitHub token shared earlier in chat.
