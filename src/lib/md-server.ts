@@ -126,9 +126,9 @@ const GIFT_NOTES = [
 ];
 const CAPTIONS = ["golden hour, somewhere quiet", "the exact color of that evening", "saved this one for you"];
 const CTA_ROWS = [
-  { label: "Keep going", action: "Reply" },
-  { label: "Say it back", action: "Reply" },
-  { label: "Continue", action: "Open link" },
+  { label: "Keep going", action: "Reply", url: "" },
+  { label: "Say it back", action: "Reply", url: "" },
+  { label: "Continue", action: "Open link", url: "https://memorableday.in" },
 ];
 
 /** Builds a real authored SceneDoc[] for a seeded moment (deterministic per id). */
@@ -162,7 +162,7 @@ export function seedSceneDoc(id: string, title: string): SceneDoc[] {
         b(6, "confetti", { style: ["Burst", "Rain", "Hearts"][h % 3] }),
       ],
     },
-    { id: `ss-${id}-4`, blocks: [b(7, "cta", { label: cta.label, action: cta.action })] },
+    { id: `ss-${id}-4`, blocks: [b(7, "cta", { label: cta.label, action: cta.action, ...(cta.url ? { url: cta.url } : {}) })] },
   ];
 }
 
@@ -226,10 +226,15 @@ async function seedContent(userId: string) {
   });
 }
 
-/** One-time upgrade for DBs seeded before authored scene docs existed. */
+/** One-time upgrade for DBs seeded before authored scene docs existed
+ *  (or before CTA blocks carried links). Seed docs are deterministic, so
+ *  refreshing them is always safe — user-created moments are never touched. */
 async function backfillSeedDocs() {
   const missing = await db.moment.findMany({
-    where: { source: "seed", sceneData: null },
+    where: {
+      source: "seed",
+      OR: [{ sceneData: null }, { sceneData: { not: { contains: '"url":' } } }],
+    },
     select: { id: true, title: true },
   });
   for (const m of missing) {

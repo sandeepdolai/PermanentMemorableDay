@@ -1,0 +1,702 @@
+  1024→        )}
+  1025→      </div>
+  1026→
+  1027→      {/* Snippet picker — Instagram-Notes style “choose the part” */}
+  1028→      {chosen ? (
+  1029→        <div className="mt-4 rounded-[20px] border border-[#007AFF]/25 bg-[#007AFF]/[0.04] p-4">
+  1030→          <div className="flex items-center gap-3">
+  1031→            {chosen.artwork ? (
+  1032→              <img src={chosen.artwork} alt="" aria-hidden className="h-12 w-12 shrink-0 rounded-[13px] object-cover" />
+  1033→            ) : null}
+  1034→            <div className="min-w-0 flex-1">
+  1035→              <p className="truncate text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{chosen.title}</p>
+  1036→              <p className="mt-0.5 truncate text-[11.5px] text-[#AAAAAA]">Pick the part that plays</p>
+  1037→            </div>
+  1038→          </div>
+  1039→
+  1040→          {/* Waveform-ish scrubber */}
+  1041→          <div className="mt-3.5">
+  1042→            <div className="mb-2 flex items-center justify-between">
+  1043→              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Start</span>
+  1044→              <span className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F]">
+  1045→                {formatClock(start)} → {formatClock(start + length)}
+  1046→              </span>
+  1047→            </div>
+  1048→            <div aria-hidden className="flex h-8 items-center gap-[2px]">
+  1049→              {Array.from({ length: 40 }, (_, i) => {
+  1050→                const frac = i / 40;
+  1051→                const inSnippet = frac >= start / 30 && frac <= (start + length) / 30;
+  1052→                const h = 8 + ((i * 37) % 19);
+  1053→                return (
+  1054→                  <span
+  1055→                    key={i}
+  1056→                    className={cn("flex-1 rounded-full transition-colors", inSnippet ? "bg-[#007AFF]" : "bg-[#1D1D1F]/[0.12]")}
+  1057→                    style={{ height: `${h}px` }}
+  1058→                  />
+  1059→                );
+  1060→              })}
+  1061→            </div>
+  1062→            <Slider
+  1063→              value={[start]}
+  1064→              min={0}
+  1065→              max={Math.max(0, 30 - length)}
+  1066→              step={0.5}
+  1067→              onValueChange={(v) => setStart(v[0])}
+  1068→              aria-label="Snippet start time"
+  1069→              className="mt-1"
+  1070→            />
+  1071→          </div>
+  1072→
+  1073→          {/* Length chips */}
+  1074→          <div className="mt-3">
+  1075→            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Length</p>
+  1076→            <div className="flex gap-2">
+  1077→              {SNIPPET_LENGTHS.map((len) => (
+  1078→                <button
+  1079→                  key={len}
+  1080→                  type="button"
+  1081→                  aria-pressed={length === len}
+  1082→                  onClick={() => {
+  1083→                    setLength(len);
+  1084→                    setStart((s) => Math.min(s, Math.max(0, 30 - len)));
+  1085→                  }}
+  1086→                  className={cn(
+  1087→                    "flex-1 rounded-full border py-2 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
+  1088→                    length === len
+  1089→                      ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+  1090→                      : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+  1091→                  )}
+  1092→                >
+  1093→                  {formatClock(len)}
+  1094→                </button>
+  1095→              ))}
+  1096→            </div>
+  1097→          </div>
+  1098→
+  1099→          <div className="mt-4 flex gap-2">
+  1100→            <button
+  1101→              type="button"
+  1102→              onClick={() =>
+  1103→                playingId === `snippet-${chosen.id}`
+  1104→                  ? stop()
+  1105→                  : play(`snippet-${chosen.id}`, chosen.previewUrl, start, length)
+  1106→              }
+  1107→              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97]"
+  1108→            >
+  1109→              {playingId === `snippet-${chosen.id}` ? (
+  1110→                <>
+  1111→                  <Pause size={13} aria-hidden /> Pause
+  1112→                </>
+  1113→              ) : (
+  1114→                <>
+  1115→                  <Play size={13} fill="currentColor" aria-hidden /> Preview
+  1116→                </>
+  1117→              )}
+  1118→            </button>
+  1119→            <button
+  1120→              type="button"
+  1121→              onClick={confirm}
+  1122→              className="flex-[1.6] rounded-full bg-[#007AFF] py-2.5 text-[14px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+  1123→            >
+  1124→              Use this song
+  1125→            </button>
+  1126→          </div>
+  1127→        </div>
+  1128→      ) : null}
+  1129→
+  1130→      <p className="mt-3 px-1 text-center text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+  1131→        Previews are 30-second catalog clips — pick the exact part that plays, Instagram-style.
+  1132→      </p>
+  1133→    </div>
+  1134→  );
+  1135→}
+  1136→
+  1137→function BlockEditorContent({
+  1138→  block,
+  1139→  onChange,
+  1140→}: {
+  1141→  block: Block;
+  1142→  onChange: (data: BlockData) => void;
+  1143→}) {
+  1144→  const d: BlockData = block.data ?? {};
+  1145→  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  1146→
+  1147→  switch (block.type) {
+  1148→    case "text":
+  1149→      return (
+  1150→        <div className="pb-2">
+  1151→          <label htmlFor="md-block-text" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1152→            Message
+  1153→          </label>
+  1154→          <textarea
+  1155→            id="md-block-text"
+  1156→            rows={4}
+  1157→            maxLength={240}
+  1158→            value={d.body ?? ""}
+  1159→            onChange={(e) => set({ body: e.target.value })}
+  1160→            placeholder="Type the words your recipient will land on…"
+  1161→            className={cn(fieldInput, "resize-none leading-relaxed")}
+  1162→          />
+  1163→          <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">
+  1164→            {(d.body ?? "").length}/240
+  1165→          </p>
+  1166→          <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1167→            One idea per scene keeps recipients tapping through.
+  1168→          </p>
+  1169→        </div>
+  1170→      );
+  1171→    case "photo":
+  1172→      return (
+  1173→        <div className="space-y-4 pb-2">
+  1174→          <div>
+  1175→            <FieldLabel>Photo</FieldLabel>
+  1176→            <MediaUploadField
+  1177→              kind="photo"
+  1178→              value={d.image}
+  1179→              onUploaded={(url) => set({ image: url })}
+  1180→              onRemove={() => set({ image: undefined })}
+  1181→            />
+  1182→          </div>
+  1183→          <div>
+  1184→            <FieldLabel>Filter</FieldLabel>
+  1185→            <ChipGroup
+  1186→              options={PHOTO_FILTERS.map((f) => ({ value: f as string, label: f }))}
+  1187→              value={d.filter ?? "Original"}
+  1188→              onChange={(v) => set({ filter: v })}
+  1189→              groupLabel="Photo filter"
+  1190→            />
+  1191→          </div>
+  1192→          <div>
+  1193→            <label htmlFor="md-photo-caption" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1194→              Caption
+  1195→            </label>
+  1196→            <input
+  1197→              id="md-photo-caption"
+  1198→              maxLength={60}
+  1199→              value={d.caption ?? ""}
+  1200→              onChange={(e) => set({ caption: e.target.value })}
+  1201→              placeholder="A soft line under the photo"
+  1202→              className={fieldInput}
+  1203→            />
+  1204→          </div>
+  1205→        </div>
+  1206→      );
+  1207→    case "video":
+  1208→      return (
+  1209→        <div className="space-y-4 pb-2">
+  1210→          <div>
+  1211→            <FieldLabel>Video</FieldLabel>
+  1212→            <MediaUploadField
+  1213→              kind="video"
+  1214→              value={d.video}
+  1215→              onUploaded={(url) => set({ video: url })}
+  1216→              onRemove={() => set({ video: undefined, duration: undefined })}
+  1217→            />
+  1218→          </div>
+  1219→          {d.video ? (
+  1220→            <div>
+  1221→              <div className="flex items-baseline justify-between">
+  1222→                <FieldLabel>Play length</FieldLabel>
+  1223→                <span className="text-[13px] font-bold tabular-nums text-[#1D1D1F]">{formatDuration(d.duration ?? 12)}</span>
+  1224→              </div>
+  1225→              <Slider
+  1226→                value={[d.duration ?? 12]}
+  1227→                min={5}
+  1228→                max={60}
+  1229→                step={1}
+  1230→                onValueChange={(v) => set({ duration: v[0] })}
+  1231→                aria-label="Clip length in seconds"
+  1232→                className="mt-1"
+  1233→              />
+  1234→              <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1235→                The clip plays for this long in the experience.
+  1236→              </p>
+  1237→            </div>
+  1238→          ) : (
+  1239→            <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1240→              Upload a clip — short videos hold attention best.
+  1241→            </p>
+  1242→          )}
+  1243→        </div>
+  1244→      );
+  1245→    case "audio":
+  1246→      return (
+  1247→        <div className="pb-2">
+  1248→          <FieldLabel>Song — search, listen, pick the part</FieldLabel>
+  1249→          <SongPickerContent
+  1250→            selected={d.song ?? null}
+  1251→            onConfirm={(song) => set(song ? { song } : { song: undefined })}
+  1252→          />
+  1253→        </div>
+  1254→      );
+  1255→    case "gift":
+  1256→      return (
+  1257→        <div className="space-y-4 pb-2">
+  1258→          <div>
+  1259→            <label htmlFor="md-gift-note" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1260→              Note inside the gift
+  1261→            </label>
+  1262→            <textarea
+  1263→              id="md-gift-note"
+  1264→              rows={2}
+  1265→              maxLength={90}
+  1266→              value={d.message ?? ""}
+  1267→              onChange={(e) => set({ message: e.target.value })}
+  1268→              placeholder="Shown when the box opens"
+  1269→              className={cn(fieldInput, "resize-none leading-relaxed")}
+  1270→            />
+  1271→          </div>
+  1272→          <div>
+  1273→            <FieldLabel>Wrap</FieldLabel>
+  1274→            <div className="flex gap-2.5" role="radiogroup" aria-label="Gift wrap color">
+  1275→              {GIFT_WRAPS.map((c) => {
+  1276→                const active = (d.wrap ?? "#5E5CE6") === c;
+  1277→                return (
+  1278→                  <button
+  1279→                    key={c}
+  1280→                    type="button"
+  1281→                    role="radio"
+  1282→                    aria-checked={active}
+  1283→                    aria-label={`Wrap color ${c}`}
+  1284→                    onClick={() => set({ wrap: c })}
+  1285→                    className={cn(
+  1286→                      "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+  1287→                      active && "ring-2 ring-[#1D1D1F] ring-offset-2 ring-offset-white"
+  1288→                    )}
+  1289→                    style={{ backgroundColor: c }}
+  1290→                  >
+  1291→                    {active ? <Check size={15} strokeWidth={3} className="text-white drop-shadow" aria-hidden /> : null}
+  1292→                  </button>
+  1293→                );
+  1294→              })}
+  1295→            </div>
+  1296→          </div>
+  1297→        </div>
+  1298→      );
+  1299→    case "countdown":
+  1300→      return (
+  1301→        <div className="pb-2">
+  1302→          <FieldLabel>Unlocks after</FieldLabel>
+  1303→          <ChipGroup
+  1304→            options={COUNTDOWN_PRESETS.map((p) => ({ value: p.minutes, label: p.label }))}
+  1305→            value={d.minutes}
+  1306→            onChange={(v) => set({ minutes: v })}
+  1307→            groupLabel="Countdown duration"
+  1308→          />
+  1309→          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1310→            The scene stays sealed until the timer runs out — perfect for a timed reveal.
+  1311→          </p>
+  1312→        </div>
+  1313→      );
+  1314→    case "quiz": {
+  1315→      const options = d.options?.length ? d.options : ["Option A", "Option B"];
+  1316→      const answer = d.answer ?? 0;
+  1317→      const setOptions = (next: string[]) =>
+  1318→        set({ options: next, answer: Math.min(answer, next.length - 1) });
+  1319→      return (
+  1320→        <div className="space-y-4 pb-2">
+  1321→          <div>
+  1322→            <label htmlFor="md-quiz-q" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1323→              Question
+  1324→            </label>
+  1325→            <input
+  1326→              id="md-quiz-q"
+  1327→              maxLength={80}
+  1328→              value={d.question ?? ""}
+  1329→              onChange={(e) => set({ question: e.target.value })}
+  1330→              placeholder="Ask something only they'd know"
+  1331→              className={fieldInput}
+  1332→            />
+  1333→          </div>
+  1334→          <div>
+  1335→            <FieldLabel>Answers — tap the circle to mark the right one</FieldLabel>
+  1336→            <div className="space-y-2">
+  1337→              {options.map((o, i) => (
+  1338→                <div key={i} className="flex items-center gap-2.5">
+  1339→                  <button
+  1340→                    type="button"
+  1341→                    onClick={() => set({ answer: i })}
+  1342→                    aria-pressed={answer === i}
+  1343→                    aria-label={`Mark option ${i + 1} as correct`}
+  1344→                    className={cn(
+  1345→                      "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+  1346→                      answer === i ? "border-[#30D158] bg-[#30D158]" : "border-[#D1D1D6]"
+  1347→                    )}
+  1348→                  >
+  1349→                    {answer === i ? <Check size={13} strokeWidth={3} className="text-white" aria-hidden /> : null}
+  1350→                  </button>
+  1351→                  <input
+  1352→                    value={o}
+  1353→                    maxLength={30}
+  1354→                    aria-label={`Option ${i + 1}`}
+  1355→                    onChange={(e) => setOptions(options.map((x, j) => (j === i ? e.target.value : x)))}
+  1356→                    className={cn(fieldInput, "flex-1 py-2")}
+  1357→                    placeholder={`Option ${i + 1}`}
+  1358→                  />
+  1359→                  {options.length > 2 ? (
+  1360→                    <button
+  1361→                      type="button"
+  1362→                      onClick={() => setOptions(options.filter((_, j) => j !== i))}
+  1363→                      aria-label={`Remove option ${i + 1}`}
+  1364→                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.08] text-[#FF375F] transition-transform active:scale-90"
+  1365→                    >
+  1366→                      <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+  1367→                    </button>
+  1368→                  ) : null}
+  1369→                </div>
+  1370→              ))}
+  1371→            </div>
+  1372→            {options.length < 4 ? (
+  1373→              <button
+  1374→                type="button"
+  1375→                onClick={() => setOptions([...options, `Option ${String.fromCharCode(65 + options.length)}`])}
+  1376→                className="mt-2.5 flex items-center gap-1.5 rounded-full bg-[#007AFF]/[0.08] px-3.5 py-1.5 text-[12.5px] font-semibold text-[#007AFF] transition-transform active:scale-95"
+  1377→              >
+  1378→                <Plus size={13} strokeWidth={2.4} aria-hidden /> Add option
+  1379→              </button>
+  1380→            ) : null}
+  1381→          </div>
+  1382→        </div>
+  1383→      );
+  1384→    }
+  1385→    case "reward":
+  1386→      return (
+  1387→        <div className="space-y-4 pb-2">
+  1388→          <div>
+  1389→            <FieldLabel>Reward type</FieldLabel>
+  1390→            <ChipGroup
+  1391→              options={REWARD_KINDS.map((k) => ({ value: k, label: k }))}
+  1392→              value={d.rewardKind}
+  1393→              onChange={(v) => set({ rewardKind: v })}
+  1394→              groupLabel="Reward type"
+  1395→            />
+  1396→          </div>
+  1397→          <div>
+  1398→            <label htmlFor="md-reward-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1399→              Code or link
+  1400→            </label>
+  1401→            <input
+  1402→              id="md-reward-code"
+  1403→              maxLength={24}
+  1404→              value={d.code ?? ""}
+  1405→              onChange={(e) => set({ code: e.target.value.toUpperCase() })}
+  1406→              placeholder="SPRING24"
+  1407→              className={cn(fieldInput, "font-mono tracking-[0.08em]")}
+  1408→            />
+  1409→          </div>
+  1410→        </div>
+  1411→      );
+  1412→    case "cta":
+  1413→      return (
+  1414→        <div className="space-y-4 pb-2">
+  1415→          <div>
+  1416→            <label htmlFor="md-cta-label" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1417→              Button label
+  1418→            </label>
+  1419→            <input
+  1420→              id="md-cta-label"
+  1421→              maxLength={24}
+  1422→              value={d.label ?? ""}
+  1423→              onChange={(e) => set({ label: e.target.value })}
+  1424→              placeholder="Continue"
+  1425→              className={fieldInput}
+  1426→            />
+  1427→          </div>
+  1428→          <div>
+  1429→            <FieldLabel>On tap</FieldLabel>
+  1430→            <ChipGroup
+  1431→              options={CTA_ACTIONS.map((a) => ({ value: a, label: a }))}
+  1432→              value={d.action}
+  1433→              onChange={(v) => set({ action: v })}
+  1434→              groupLabel="Button action"
+  1435→            />
+  1436→          </div>
+  1437→        </div>
+  1438→      );
+  1439→    case "confetti":
+  1440→      return (
+  1441→        <div className="pb-2">
+  1442→          <FieldLabel>Celebration style</FieldLabel>
+  1443→          <ChipGroup
+  1444→            options={CONFETTI_STYLES.map((s) => ({ value: s, label: s }))}
+  1445→            value={d.style}
+  1446→            onChange={(v) => set({ style: v })}
+  1447→            groupLabel="Confetti style"
+  1448→          />
+  1449→          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1450→            Fires the moment this scene opens.
+  1451→          </p>
+  1452→        </div>
+  1453→      );
+  1454→    default:
+  1455→      return null;
+  1456→  }
+  1457→}
+  1458→
+  1459→/* ------------------------------------------------------------------ */
+  1460→/* Soundtrack picker (experience-level music) — shared equalizer bars   */
+  1461→/* ------------------------------------------------------------------ */
+  1462→
+  1463→/** Mini animated equalizer bars (playing state) */
+  1464→function EqBars({ className }: { className?: string }) {
+  1465→  return (
+  1466→    <span aria-hidden className={cn("md-eq", className)}>
+  1467→      <span />
+  1468→      <span />
+  1469→      <span />
+  1470→    </span>
+  1471→  );
+  1472→}
+  1473→
+  1474→/* ------------------------------------------------------------------ */
+  1475→/* Cover art picker (palette grid, sheet content)                       */
+  1476→/* ------------------------------------------------------------------ */
+  1477→
+  1478→function CoverArtContent({
+  1479→  selected,
+  1480→  onSelect,
+  1481→}: {
+  1482→  selected: number;
+  1483→  onSelect: (variant: number) => void;
+  1484→}) {
+  1485→  return (
+  1486→    <div className="pb-2">
+  1487→      <div className="grid grid-cols-2 gap-3">
+  1488→        {COVER_NAMES.map((name, v) => {
+  1489→          const selectedTile = selected === v;
+  1490→          return (
+  1491→            <button
+  1492→              key={v}
+  1493→              type="button"
+  1494→              aria-pressed={selectedTile}
+  1495→              onClick={() => onSelect(v)}
+  1496→              className={cn(
+  1497→                "group relative overflow-hidden rounded-[18px] border-2 bg-white p-1.5 text-left transition-transform active:scale-[0.97]",
+  1498→                selectedTile ? "border-[#007AFF]" : "border-transparent"
+  1499→              )}
+  1500→            >
+  1501→              <span className="relative block">
+  1502→                <CoverArt variant={v} className="aspect-[4/3] w-full rounded-[13px]" />
+  1503→                <AnimatePresence>
+  1504→                  {selectedTile ? (
+  1505→                    <motion.span
+  1506→                      initial={{ scale: 0 }}
+  1507→                      animate={{ scale: 1 }}
+  1508→                      exit={{ scale: 0 }}
+  1509→                      transition={{ type: "spring", stiffness: 500, damping: 22 }}
+  1510→                      className="absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-[#007AFF] text-white shadow-[0_4px_12px_-2px_rgba(0,122,255,0.6)] ring-2 ring-white"
+  1511→                    >
+  1512→                      <Check size={14} strokeWidth={3.2} aria-hidden />
+  1513→                    </motion.span>
+  1514→                  ) : null}
+  1515→                </AnimatePresence>
+  1516→              </span>
+  1517→              <span className="block truncate px-1.5 pb-1 pt-2 text-[12.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+  1518→                {name}
+  1519→              </span>
+  1520→            </button>
+  1521→          );
+  1522→        })}
+  1523→      </div>
+  1524→      <p className="mt-3 px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1525→        The palette colors every scene. Changes apply instantly — undo with ⌘Z.
+  1526→      </p>
+  1527→    </div>
+  1528→  );
+  1529→}
+  1530→
+  1531→/* ------------------------------------------------------------------ */
+  1532→/* Schedule send (date + time picker, sheet content)                  */
+  1533→/* ------------------------------------------------------------------ */
+  1534→
+  1535→function ScheduleContent({ onConfirm }: { onConfirm: (label: string, iso: string) => void }) {
+  1536→  const [dayIdx, setDayIdx] = useState(0);
+  1537→  const [time, setTime] = useState(SCHEDULE_TIMES[0]);
+  1538→
+  1539→  const days = useMemo(() => {
+  1540→    const out: Array<{ label: string; sub: string; full: string; date: Date }> = [];
+  1541→    const now = new Date();
+  1542→    for (let i = 0; i < 7; i++) {
+  1543→      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+  1544→      out.push({
+  1545→        label: i === 0 ? "Today" : i === 1 ? "Tmrw" : new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(d),
+  1546→        sub: new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(d),
+  1547→        full: new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(d),
+  1548→        date: d,
+  1549→      });
+  1550→    }
+  1551→    return out;
+  1552→  }, []);
+  1553→
+  1554→  /** Combines the picked day + time chip into a real Date */
+  1555→  const scheduledDate = useMemo(() => {
+  1556→    const d = new Date(days[dayIdx].date);
+  1557→    const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(time);
+  1558→    if (m) {
+  1559→      let h = Number(m[1]);
+  1560→      const min = Number(m[2]);
+  1561→      const mer = m[3];
+  1562→      if (mer === "PM" && h < 12) h += 12;
+  1563→      if (mer === "AM" && h === 12) h = 0;
+  1564→      d.setHours(h, min, 0, 0);
+  1565→    }
+  1566→    return d;
+  1567→  }, [days, dayIdx, time]);
+  1568→
+  1569→  return (
+  1570→    <div className="pb-2">
+  1571→      {/* Live summary */}
+  1572→      <div className="mb-4 rounded-[18px] bg-[#007AFF]/[0.07] px-4 py-3 text-center">
+  1573→        <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#007AFF]">Sends</p>
+  1574→        <p className="mt-0.5 text-[16px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+  1575→          {days[dayIdx].full} · {time}
+  1576→        </p>
+  1577→      </div>
+  1578→
+  1579→      <FieldLabel>Day</FieldLabel>
+  1580→      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+  1581→        {days.map((d, i) => {
+  1582→          const active = i === dayIdx;
+  1583→          return (
+  1584→            <button
+  1585→              key={i}
+  1586→              type="button"
+  1587→              aria-pressed={active}
+  1588→              onClick={() => setDayIdx(i)}
+  1589→              className={cn(
+  1590→                "flex w-[72px] shrink-0 flex-col items-center rounded-[16px] border-2 py-2.5 transition-all active:scale-[0.96]",
+  1591→                active ? "border-[#007AFF] bg-[#007AFF]/[0.06]" : "border-[#1D1D1F]/[0.07] bg-white"
+  1592→              )}
+  1593→            >
+  1594→              <span className={cn("text-[10.5px] font-bold uppercase tracking-wide", active ? "text-[#007AFF]" : "text-[#AAAAAA]")}>
+  1595→                {d.label}
+  1596→              </span>
+  1597→              <span className={cn("mt-0.5 text-[15px] font-bold tabular-nums", active ? "text-[#1D1D1F]" : "text-[#1D1D1F]/70")}>
+  1598→                {d.sub}
+  1599→              </span>
+  1600→            </button>
+  1601→          );
+  1602→        })}
+  1603→      </div>
+  1604→
+  1605→      <div className="mt-4">
+  1606→        <FieldLabel>Time</FieldLabel>
+  1607→        <div className="grid grid-cols-3 gap-2">
+  1608→          {SCHEDULE_TIMES.map((t) => {
+  1609→            const active = time === t;
+  1610→            return (
+  1611→              <button
+  1612→                key={t}
+  1613→                type="button"
+  1614→                aria-pressed={active}
+  1615→                onClick={() => setTime(t)}
+  1616→                className={cn(
+  1617→                  "rounded-full border py-2.5 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
+  1618→                  active
+  1619→                    ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+  1620→                    : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+  1621→                )}
+  1622→              >
+  1623→                {t}
+  1624→              </button>
+  1625→            );
+  1626→          })}
+  1627→        </div>
+  1628→      </div>
+  1629→
+  1630→      <p className="mt-3.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1631→        Times shown in your local timezone. You can cancel anytime before it sends.
+  1632→      </p>
+  1633→      <button
+  1634→        type="button"
+  1635→        onClick={() => onConfirm(`${days[dayIdx].full} · ${time}`, scheduledDate.toISOString())}
+  1636→        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+  1637→      >
+  1638→        <CalendarDays size={16} aria-hidden /> Schedule send
+  1639→      </button>
+  1640→    </div>
+  1641→  );
+  1642→}
+  1643→
+  1644→/* ------------------------------------------------------------------ */
+  1645→/* Draggable scene row (reorder mode)                                  */
+  1646→/* ------------------------------------------------------------------ */
+  1647→
+  1648→function SceneRow({
+  1649→  scene,
+  1650→  index,
+  1651→  cover,
+  1652→  active,
+  1653→  onSelect,
+  1654→  onRemove,
+  1655→  onGripDown,
+  1656→}: {
+  1657→  scene: Scene;
+  1658→  index: number;
+  1659→  cover: number;
+  1660→  active: boolean;
+  1661→  onSelect: () => void;
+  1662→  onRemove: () => void;
+  1663→  onGripDown: (e: React.PointerEvent) => void;
+  1664→}) {
+  1665→  const controls = useDragControls();
+  1666→  return (
+  1667→    <Reorder.Item
+  1668→      value={scene}
+  1669→      dragListener={false}
+  1670→      dragControls={controls}
+  1671→      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+  1672→      className={cn(
+  1673→        "card-shadow hairline flex items-center gap-3 rounded-[18px] bg-white p-2.5",
+  1674→        active && "ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
+  1675→      )}
+  1676→    >
+  1677→      <button
+  1678→        type="button"
+  1679→        onClick={onSelect}
+  1680→        aria-label={`Select scene ${index + 1}`}
+  1681→        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+  1682→      >
+  1683→        <span
+  1684→          className={cn(
+  1685→            "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold",
+  1686→            active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/[0.08] text-[#1D1D1F]/70"
+  1687→          )}
+  1688→        >
+  1689→          {index + 1}
+  1690→        </span>
+  1691→        <CoverArt variant={(cover + index) % 10} className="h-[44px] w-[64px] shrink-0 rounded-[10px]" />
+  1692→        <span className="min-w-0 flex-1">
+  1693→          <span className="block text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+  1694→            Scene {index + 1}
+  1695→          </span>
+  1696→          <span className="mt-0.5 block text-[11.5px] font-medium text-[#AAAAAA]">
+  1697→            {scene.blocks.length} {scene.blocks.length === 1 ? "block" : "blocks"}
+  1698→          </span>
+  1699→        </span>
+  1700→      </button>
+  1701→      <button
+  1702→        type="button"
+  1703→        onClick={onRemove}
+  1704→        aria-label={`Remove scene ${index + 1}`}
+  1705→        className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.09] text-[#FF375F] transition-transform active:scale-90"
+  1706→      >
+  1707→        <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+  1708→      </button>
+  1709→      <button
+  1710→        type="button"
+  1711→        aria-label={`Reorder scene ${index + 1}`}
+  1712→        onPointerDown={(e) => {
+  1713→          onGripDown(e);
+  1714→          controls.start(e);
+  1715→        }}
+  1716→        className="shrink-0 cursor-grab touch-none rounded-md p-1 text-[#C7C7CC] transition-colors active:cursor-grabbing hover:text-[#1D1D1F]/50"
+  1717→      >
+  1718→        <GripVertical size={18} strokeWidth={2.2} aria-hidden />
+  1719→      </button>
+  1720→    </Reorder.Item>
+  1721→  );
+  1722→}
+  1723→
+
+[showing lines 1024-1723 of 2544; use offset=1724 with limit to continue reading]

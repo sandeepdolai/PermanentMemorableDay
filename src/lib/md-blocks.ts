@@ -5,24 +5,25 @@
  */
 
 /** A song pick from the music search (Apple Music/iTunes catalog today,
- *  Spotify-ready: `source` marks the catalog the pick came from). */
+ *  Spotify-ready: `source` marks the catalog the pick came from) OR a
+ *  user-uploaded audio file (`source: "upload"`). */
 export interface SongPick {
-  /** Catalog track id (iTunes trackId / Spotify track id) */
+  /** Catalog track id (iTunes trackId / Spotify track id) or upload token */
   id: string;
   title: string;
   artist: string;
   album?: string;
-  /** Album artwork URL (square, ~600px) */
+  /** Album artwork URL (square, ~600px) — empty for uploads */
   artwork: string;
-  /** 30s preview clip URL (what actually plays) */
+  /** 30s preview clip URL, or the full uploaded file URL (what actually plays) */
   previewUrl: string;
-  /** Full track length in ms (catalog metadata) */
+  /** Full track length in ms (catalog metadata / audio metadata for uploads) */
   durationMs: number;
   /** Snippet start offset in seconds (Instagram-Notes style "which part") */
   start: number;
-  /** Snippet length in seconds (10 / 15 / 30, capped by the preview clip) */
+  /** Snippet length in seconds (10 / 15 / 30, capped by the clip) */
   length: number;
-  source: "itunes" | "spotify";
+  source: "itunes" | "spotify" | "upload";
 }
 
 /** Search result row (no snippet yet — becomes a SongPick when picked). */
@@ -48,8 +49,10 @@ export interface BlockData {
   /** video */
   video?: string;
   duration?: number;
-  /** audio: the picked song + snippet */
+  /** audio: the picked song/upload + snippet */
   song?: SongPick;
+  /** audio: where it plays — "scene" shows a song card, "background" plays unseen */
+  playMode?: "scene" | "background";
   /** gift */
   message?: string;
   wrap?: string;
@@ -65,6 +68,8 @@ export interface BlockData {
   /** cta */
   label?: string;
   action?: string;
+  /** cta / reward: the destination link (opened in a new tab) */
+  url?: string;
   /** confetti */
   style?: string;
 }
@@ -115,6 +120,24 @@ export function photoFilterCss(filter?: string): React.CSSProperties {
 export function formatClock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/** Makes a bare pasted link safe to open (auto-prefixes https://). */
+export function normalizeUrl(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
+/** "memorableday.in" from "https://www.memorableday.in/gift" — for link chips. */
+export function urlDomain(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  try {
+    return new URL(normalizeUrl(t)).hostname.replace(/^www\./i, "");
+  } catch {
+    return t.replace(/^https?:\/\//i, "").split("/")[0];
+  }
 }
 
 /** Parses a JSON column into a scene doc array (null-safe). */

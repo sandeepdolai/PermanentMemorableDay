@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, Reorder, motion, useDragControls } from "framer-motion";
 import {
+  AudioLines,
   Award,
   CalendarDays,
   Check,
   ChevronLeft,
   Clock,
+  ExternalLink,
+  FileMusic,
   Gift,
   GripVertical,
   Images as ImagesIcon,
+  Link2,
   ListChecks,
   MousePointerClick,
   Music,
@@ -26,6 +30,7 @@ import {
   Trash2,
   Type,
   Undo2,
+  Upload,
   Video,
   X,
 } from "lucide-react";
@@ -35,6 +40,7 @@ import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
 import {
   formatClock,
   photoFilterCss,
+  urlDomain,
   PHOTO_FILTERS,
   type BlockData,
   type BlockDoc,
@@ -42,6 +48,7 @@ import {
   type SongPick,
   type SongResult,
 } from "@/lib/md-blocks";
+import { SegmentedControl } from "./segmented-control";
 import { CoverArt, COVER_NAMES } from "./cover-art";
 import { BottomSheet } from "./bottom-sheet";
 import { RenameDialog } from "./moment-menu";
@@ -278,24 +285,38 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     }
     case "audio": {
       const song = d?.song;
+      const background = d?.playMode === "background";
       if (song) {
         return (
           <div className="flex items-center gap-3">
             {song.artwork ? (
               <img src={song.artwork} alt="" aria-hidden className="h-10 w-10 shrink-0 rounded-[12px] object-cover" />
             ) : (
-              <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#FF375F]/15 text-[#FF375F]">
-                <Music size={15} />
+              <span
+                aria-hidden
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-gradient-to-br from-[#FF375F] to-[#5E5CE6] text-white"
+              >
+                {song.source === "upload" ? <FileMusic size={15} /> : <Music size={15} />}
               </span>
             )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
                 {song.title}
               </p>
-              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">{song.artist}</p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[#AAAAAA]">
+                {background ? <AudioLines size={11} aria-hidden className="text-[#FF375F]" /> : null}
+                <span className="truncate">{song.artist}</span>
+              </p>
             </div>
-            <span className="shrink-0 rounded-full bg-[#FF375F]/[0.1] px-2 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
-              {formatClock(song.length)} clip
+            <span className="flex shrink-0 flex-col items-end gap-1">
+              <span className="rounded-full bg-[#FF375F]/[0.1] px-2 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
+                {formatClock(song.length)} clip
+              </span>
+              {background ? (
+                <span className="flex items-center gap-1 rounded-full bg-[#5E5CE6]/[0.1] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#5E5CE6]">
+                  <AudioLines size={9} aria-hidden /> Background
+                </span>
+              ) : null}
             </span>
           </div>
         );
@@ -395,6 +416,7 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     case "reward": {
       const kind = d?.rewardKind;
       const code = d?.code?.trim();
+      const domain = d?.url?.trim() ? urlDomain(d.url) : null;
       return (
         <div className="flex items-center gap-3 rounded-[14px] border border-dashed border-[#30D158]/40 bg-[#30D158]/[0.06] px-4 py-3">
           <Award size={20} className="shrink-0 text-[#1E9E4A]" aria-hidden />
@@ -409,6 +431,11 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
             ) : (
               <p className="text-[12px] text-[#AAAAAA]">Attach a coupon, gift card or download</p>
             )}
+            {domain ? (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[#1E9E4A]/70">
+                <ExternalLink size={10} aria-hidden /> Redeem at {domain}
+              </p>
+            ) : null}
           </div>
         </div>
       );
@@ -416,12 +443,24 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     case "cta": {
       const label = d?.label?.trim();
       const action = d?.action;
+      const domain = d?.url?.trim() ? urlDomain(d.url) : null;
       return (
         <div className="flex flex-col items-center py-1">
-          <span className="rounded-full bg-[#007AFF] px-7 py-2.5 text-[14px] font-semibold text-white pill-shadow">
+          <span className="flex items-center gap-1.5 rounded-full bg-[#007AFF] px-7 py-2.5 text-[14px] font-semibold text-white pill-shadow">
             {label || "Continue"}
+            {domain ? <ExternalLink size={12} aria-hidden className="opacity-80" /> : null}
           </span>
-          <p className="mt-2 text-[11px] font-medium text-[#AAAAAA]">{action ?? "Opens a link, claim or reply"}</p>
+          <p className="mt-2 text-[11px] font-medium text-[#AAAAAA]">
+            {domain ? (
+              <span className="inline-flex items-center gap-1">
+                <Link2 size={10} aria-hidden className="text-[#007AFF]" />
+                <span className="font-semibold text-[#007AFF]">{domain}</span>
+                <span>· opens in a new tab</span>
+              </span>
+            ) : (
+              action ?? "Opens a link, claim or reply"
+            )}
+          </p>
         </div>
       );
     }
@@ -1026,110 +1065,499 @@ function SongPickerContent({
 
       {/* Snippet picker — Instagram-Notes style “choose the part” */}
       {chosen ? (
-        <div className="mt-4 rounded-[20px] border border-[#007AFF]/25 bg-[#007AFF]/[0.04] p-4">
-          <div className="flex items-center gap-3">
-            {chosen.artwork ? (
-              <img src={chosen.artwork} alt="" aria-hidden className="h-12 w-12 shrink-0 rounded-[13px] object-cover" />
-            ) : null}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{chosen.title}</p>
-              <p className="mt-0.5 truncate text-[11.5px] text-[#AAAAAA]">Pick the part that plays</p>
-            </div>
-          </div>
-
-          {/* Waveform-ish scrubber */}
-          <div className="mt-3.5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Start</span>
-              <span className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F]">
-                {formatClock(start)} → {formatClock(start + length)}
-              </span>
-            </div>
-            <div aria-hidden className="flex h-8 items-center gap-[2px]">
-              {Array.from({ length: 40 }, (_, i) => {
-                const frac = i / 40;
-                const inSnippet = frac >= start / 30 && frac <= (start + length) / 30;
-                const h = 8 + ((i * 37) % 19);
-                return (
-                  <span
-                    key={i}
-                    className={cn("flex-1 rounded-full transition-colors", inSnippet ? "bg-[#007AFF]" : "bg-[#1D1D1F]/[0.12]")}
-                    style={{ height: `${h}px` }}
-                  />
-                );
-              })}
-            </div>
-            <Slider
-              value={[start]}
-              min={0}
-              max={Math.max(0, 30 - length)}
-              step={0.5}
-              onValueChange={(v) => setStart(v[0])}
-              aria-label="Snippet start time"
-              className="mt-1"
-            />
-          </div>
-
-          {/* Length chips */}
-          <div className="mt-3">
-            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Length</p>
-            <div className="flex gap-2">
-              {SNIPPET_LENGTHS.map((len) => (
-                <button
-                  key={len}
-                  type="button"
-                  aria-pressed={length === len}
-                  onClick={() => {
-                    setLength(len);
-                    setStart((s) => Math.min(s, Math.max(0, 30 - len)));
-                  }}
-                  className={cn(
-                    "flex-1 rounded-full border py-2 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
-                    length === len
-                      ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
-                      : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
-                  )}
-                >
-                  {formatClock(len)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                playingId === `snippet-${chosen.id}`
-                  ? stop()
-                  : play(`snippet-${chosen.id}`, chosen.previewUrl, start, length)
-              }
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97]"
-            >
-              {playingId === `snippet-${chosen.id}` ? (
-                <>
-                  <Pause size={13} aria-hidden /> Pause
-                </>
-              ) : (
-                <>
-                  <Play size={13} fill="currentColor" aria-hidden /> Preview
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={confirm}
-              className="flex-[1.6] rounded-full bg-[#007AFF] py-2.5 text-[14px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
-            >
-              Use this song
-            </button>
-          </div>
-        </div>
+        <SnippetPicker
+          title={chosen.title}
+          artwork={chosen.artwork}
+          previewUrl={chosen.previewUrl}
+          pickId={chosen.id}
+          maxSeconds={30}
+          start={start}
+          length={length}
+          lengthOptions={SNIPPET_LENGTHS}
+          onStart={setStart}
+          onLength={(len) => {
+            setLength(len);
+            setStart((s) => Math.min(s, Math.max(0, 30 - len)));
+          }}
+          playingId={playingId}
+          play={play}
+          stop={stop}
+          onConfirm={confirm}
+          confirmLabel="Use this song"
+        />
       ) : null}
 
       <p className="mt-3 px-1 text-center text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
         Previews are 30-second catalog clips — pick the exact part that plays, Instagram-style.
       </p>
+    </div>
+  );
+}
+
+/** Instagram-Notes-style “choose the part” picker — waveform scrubber,
+ *  length chips, snippet preview + confirm. Shared by the catalog search
+ *  and the audio-upload flow. */
+function SnippetPicker({
+  title,
+  artwork,
+  previewUrl,
+  pickId,
+  maxSeconds,
+  start,
+  length,
+  lengthOptions,
+  onStart,
+  onLength,
+  playingId,
+  play,
+  stop,
+  onConfirm,
+  confirmLabel,
+}: {
+  title: string;
+  artwork?: string;
+  previewUrl: string;
+  pickId: string;
+  maxSeconds: number;
+  start: number;
+  length: number;
+  lengthOptions: number[];
+  onStart: (v: number) => void;
+  onLength: (v: number) => void;
+  playingId: string | null;
+  play: (id: string, url: string, start: number, length: number) => void;
+  stop: () => void;
+  onConfirm: () => void;
+  confirmLabel: string;
+}) {
+  const cap = Math.max(1, maxSeconds);
+  const maxStart = Math.max(0, cap - length);
+  const previewing = playingId === `snippet-${pickId}`;
+  return (
+    <div className="mt-4 rounded-[20px] border border-[#007AFF]/25 bg-[#007AFF]/[0.04] p-4">
+      <div className="flex items-center gap-3">
+        {artwork ? (
+          <img src={artwork} alt="" aria-hidden className="h-12 w-12 shrink-0 rounded-[13px] object-cover" />
+        ) : (
+          <span
+            aria-hidden
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[13px] bg-gradient-to-br from-[#FF375F] to-[#5E5CE6] text-white"
+          >
+            <FileMusic size={18} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{title}</p>
+          <p className="mt-0.5 truncate text-[11.5px] text-[#AAAAAA]">Pick the part that plays</p>
+        </div>
+      </div>
+
+      {/* Waveform-ish scrubber */}
+      <div className="mt-3.5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Start</span>
+          <span className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F]">
+            {formatClock(start)} → {formatClock(start + length)}
+          </span>
+        </div>
+        <div aria-hidden className="flex h-8 items-center gap-[2px]">
+          {Array.from({ length: 40 }, (_, i) => {
+            const frac = i / 40;
+            const inSnippet = frac >= start / cap && frac <= (start + length) / cap;
+            const h = 8 + ((i * 37) % 19);
+            return (
+              <span
+                key={i}
+                className={cn("flex-1 rounded-full transition-colors", inSnippet ? "bg-[#007AFF]" : "bg-[#1D1D1F]/[0.12]")}
+                style={{ height: `${h}px` }}
+              />
+            );
+          })}
+        </div>
+        <Slider
+          value={[Math.min(start, maxStart)]}
+          min={0}
+          max={maxStart}
+          step={0.5}
+          onValueChange={(v) => onStart(v[0])}
+          aria-label="Snippet start time"
+          className="mt-1"
+        />
+      </div>
+
+      {/* Length chips */}
+      <div className="mt-3">
+        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Length</p>
+        <div className="flex gap-2">
+          {lengthOptions.map((len) => {
+            const isFull = len >= cap && cap > 30;
+            return (
+              <button
+                key={len}
+                type="button"
+                aria-pressed={length === len}
+                onClick={() => onLength(len)}
+                className={cn(
+                  "flex-1 rounded-full border py-2 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
+                  length === len
+                    ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                    : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+                )}
+              >
+                {isFull ? "Full" : formatClock(len)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => (previewing ? stop() : play(`snippet-${pickId}`, previewUrl, start, length))}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97]"
+        >
+          {previewing ? (
+            <>
+              <Pause size={13} aria-hidden /> Pause
+            </>
+          ) : (
+            <>
+              <Play size={13} fill="currentColor" aria-hidden /> Preview
+            </>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="flex-[1.6] rounded-full bg-[#007AFF] py-2.5 text-[14px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Audio upload — pick a file, choose the part, just like a song pick   */
+/* ------------------------------------------------------------------ */
+
+const AUDIO_LIMIT_MB = 16;
+
+/** Reads the real duration (seconds) of an audio URL via metadata. */
+function probeAudioDuration(url: string): Promise<number> {
+  return new Promise((resolve) => {
+    const probe = new Audio();
+    probe.preload = "metadata";
+    const settle = (v: number) => {
+      probe.onloadedmetadata = null;
+      probe.onerror = null;
+      resolve(v);
+    };
+    probe.onloadedmetadata = () =>
+      settle(Number.isFinite(probe.duration) && probe.duration > 0 ? probe.duration : 30);
+    probe.onerror = () => settle(30);
+    window.setTimeout(
+      () => settle(Number.isFinite(probe.duration) && probe.duration > 0 ? probe.duration : 30),
+      4000
+    );
+    probe.src = url;
+  });
+}
+
+function UploadAudioContent({
+  selected,
+  onConfirm,
+}: {
+  selected: SongPick | null;
+  onConfirm: (song: SongPick | null) => void;
+}) {
+  const { notify } = useMD();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  /** A freshly uploaded (or re-staged) file awaiting snippet confirmation */
+  const [staged, setStaged] = useState<{ url: string; name: string; duration: number } | null>(null);
+  const [start, setStart] = useState(0);
+  const [length, setLength] = useState(30);
+  const { playingId, play, stop } = usePreviewAudio();
+
+  const upload = async (file: File) => {
+    if (!file.type.startsWith("audio/")) {
+      notify("That file isn't audio");
+      return;
+    }
+    if (file.size > AUDIO_LIMIT_MB * 1024 * 1024) {
+      notify(`Too large — keep it under ${AUDIO_LIMIT_MB} MB`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const url = await apiUploadFile(file);
+      const secs = Math.max(1, Math.round(await probeAudioDuration(url)));
+      setStaged({ url, name: file.name.replace(/\.[^.]+$/, ""), duration: secs });
+      setStart(0);
+      setLength(Math.min(30, secs));
+      notify("Audio uploaded — pick the part that plays");
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Upload failed — try again");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Re-opens the snippet picker on the current pick (change part) */
+  const stageSelected = () => {
+    if (!selected || selected.source !== "upload") return;
+    setStaged({
+      url: selected.previewUrl,
+      name: selected.title,
+      duration: Math.max(1, Math.round(selected.durationMs / 1000)),
+    });
+    setStart(selected.start);
+    setLength(selected.length);
+  };
+
+  const confirmStaged = () => {
+    if (!staged) return;
+    stop();
+    onConfirm({
+      id: `up-${Date.now()}`,
+      title: staged.name,
+      artist: "Your upload",
+      artwork: "",
+      previewUrl: staged.url,
+      durationMs: staged.duration * 1000,
+      start,
+      length,
+      source: "upload",
+    });
+    setStaged(null);
+  };
+
+  const isUpload = selected?.source === "upload";
+  const selPlaying = isUpload && playingId === `sel-${selected.id}`;
+  const lengthOptions = staged
+    ? [...new Set([10, 15, 30, staged.duration].filter((s) => s <= staged.duration))].sort((a, b) => a - b)
+    : [];
+
+  return (
+    <div className="pb-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // allow re-picking the same file
+          if (file) void upload(file);
+        }}
+      />
+
+      {/* Current uploaded pick */}
+      {isUpload && !staged ? (
+        <div className="mb-3 space-y-2.5">
+          <div className="flex items-center gap-3 rounded-[18px] border-2 border-[#007AFF] bg-[#007AFF]/[0.04] p-3">
+            <span
+              aria-hidden
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-gradient-to-br from-[#FF375F] to-[#5E5CE6] text-white"
+            >
+              <FileMusic size={17} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{selected.title}</p>
+              <p className="mt-0.5 truncate text-[12px] text-[#AAAAAA]">
+                Your upload · {formatClock(selected.start)}–{formatClock(selected.start + selected.length)} clip
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                selPlaying
+                  ? stop()
+                  : play(`sel-${selected.id}`, selected.previewUrl, selected.start, selected.length)
+              }
+              aria-label={selPlaying ? "Pause preview" : "Preview clip"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#007AFF]/[0.12] text-[#007AFF] transition-transform active:scale-90"
+            >
+              {selPlaying ? <Pause size={15} aria-hidden /> : <Play size={15} fill="currentColor" className="ml-0.5" aria-hidden />}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={stageSelected}
+              className="flex-1 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97]"
+            >
+              Change part
+            </button>
+            <button
+              type="button"
+              onClick={() => onConfirm(null)}
+              aria-label="Remove uploaded audio"
+              className="flex-1 rounded-full bg-[#FF375F]/[0.08] py-2.5 text-[13px] font-semibold text-[#FF375F] transition-transform active:scale-[0.97]"
+            >
+              Remove
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            className="w-full rounded-full bg-[#1D1D1F]/[0.06] py-2.5 text-[13px] font-semibold text-[#1D1D1F]/75 transition-transform active:scale-[0.97] disabled:opacity-50"
+          >
+            {busy ? "Uploading…" : "Upload a different file"}
+          </button>
+        </div>
+      ) : null}
+
+      {/* Staged upload — snippet picker (big dropzone only when nothing is picked) */}
+      {staged ? (
+        <div>
+          <SnippetPicker
+            title={staged.name}
+            previewUrl={staged.url}
+            pickId="upload"
+            maxSeconds={staged.duration}
+            start={start}
+            length={length}
+            lengthOptions={lengthOptions}
+            onStart={setStart}
+            onLength={(len) => {
+              setLength(len);
+              setStart((s) => Math.min(s, Math.max(0, staged.duration - len)));
+            }}
+            playingId={playingId}
+            play={play}
+            stop={stop}
+            onConfirm={confirmStaged}
+            confirmLabel="Use this audio"
+          />
+          <button
+            type="button"
+            onClick={() => setStaged(null)}
+            className="mt-2 w-full rounded-full bg-[#1D1D1F]/[0.06] py-2 text-[12.5px] font-semibold text-[#1D1D1F]/70 transition-transform active:scale-[0.97]"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : isUpload ? null : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          className="flex w-full flex-col items-center rounded-[18px] border-2 border-dashed border-[#1D1D1F]/[0.14] bg-white px-6 py-8 transition-all hover:border-[#007AFF]/45 hover:bg-[#007AFF]/[0.03] active:scale-[0.98] disabled:opacity-60"
+        >
+          <span className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-full bg-[#FF375F]/[0.1] text-[#FF375F]">
+            {busy ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+            ) : (
+              <Upload size={19} aria-hidden />
+            )}
+          </span>
+          <span className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+            {busy ? "Uploading…" : "Upload an audio file"}
+          </span>
+          <span className="mt-1 text-center text-[11.5px] leading-relaxed text-[#AAAAAA]">
+            MP3, M4A, WAV or OGG · up to 16 MB — voice notes, demos, anything
+          </span>
+        </button>
+      )}
+
+      {isUpload ? null : (
+        <p className="mt-3 px-1 text-center text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+          Your file plays straight from the scene — no streaming, no catalog limits.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Audio block editor — catalog search | file upload + play mode        */
+/* ------------------------------------------------------------------ */
+
+function AudioBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const song = d.song ?? null;
+  const [tab, setTab] = useState<"search" | "upload">(song?.source === "upload" ? "upload" : "search");
+  const playMode = d.playMode ?? "scene";
+
+  return (
+    <div className="pb-2">
+      <SegmentedControl
+        id="md-audio-source"
+        options={[
+          { value: "search", label: "Search songs" },
+          { value: "upload", label: "Upload audio" },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      <div className="mt-4">
+        {tab === "search" ? (
+          <SongPickerContent
+            selected={song && song.source !== "upload" ? song : null}
+            onConfirm={(s) => set(s ? { song: s } : { song: undefined })}
+          />
+        ) : (
+          <UploadAudioContent
+            selected={song && song.source === "upload" ? song : null}
+            onConfirm={(s) => set(s ? { song: s } : { song: undefined })}
+          />
+        )}
+      </div>
+
+      {/* Play mode — visible card or unseen background music */}
+      {song ? (
+        <div className="mt-5 border-t border-[#1D1D1F]/[0.06] pt-4">
+          <FieldLabel>Where it plays</FieldLabel>
+          <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Where the audio plays">
+            {(
+              [
+                { value: "scene", icon: Music, title: "In scene", desc: "A song card appears — they tap play" },
+                { value: "background", icon: AudioLines, title: "Background", desc: "Plays softly behind this scene" },
+              ] as const
+            ).map((o) => {
+              const active = playMode === o.value;
+              const Icon = o.icon;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => set({ playMode: o.value })}
+                  className={cn(
+                    "flex flex-col items-start gap-1.5 rounded-[16px] border-2 p-3 text-left transition-all active:scale-[0.97]",
+                    active ? "border-[#007AFF] bg-[#007AFF]/[0.05]" : "border-[#1D1D1F]/[0.08] bg-white"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full",
+                      active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/[0.06] text-[#AAAAAA]"
+                    )}
+                  >
+                    <Icon size={15} aria-hidden />
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[13.5px] font-bold tracking-[-0.01em]",
+                      active ? "text-[#007AFF]" : "text-[#1D1D1F]"
+                    )}
+                  >
+                    {o.title}
+                  </span>
+                  <span className="text-[11px] font-medium leading-snug text-[#AAAAAA]">{o.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1243,15 +1671,7 @@ function BlockEditorContent({
         </div>
       );
     case "audio":
-      return (
-        <div className="pb-2">
-          <FieldLabel>Song — search, listen, pick the part</FieldLabel>
-          <SongPickerContent
-            selected={d.song ?? null}
-            onConfirm={(song) => set(song ? { song } : { song: undefined })}
-          />
-        </div>
-      );
+      return <AudioBlockEditor block={block} onChange={onChange} />;
     case "gift":
       return (
         <div className="space-y-4 pb-2">
@@ -1296,21 +1716,69 @@ function BlockEditorContent({
           </div>
         </div>
       );
-    case "countdown":
+    case "countdown": {
+      const isCustom = !!d.minutes && !COUNTDOWN_PRESETS.some((p) => p.minutes === d.minutes);
       return (
         <div className="pb-2">
           <FieldLabel>Unlocks after</FieldLabel>
-          <ChipGroup
-            options={COUNTDOWN_PRESETS.map((p) => ({ value: p.minutes, label: p.label }))}
-            value={d.minutes}
-            onChange={(v) => set({ minutes: v })}
-            groupLabel="Countdown duration"
-          />
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Countdown duration">
+            {COUNTDOWN_PRESETS.map((p) => {
+              const active = d.minutes === p.minutes;
+              return (
+                <button
+                  key={p.minutes}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => set({ minutes: p.minutes })}
+                  className={cn(
+                    "rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-[0.96]",
+                    active
+                      ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                      : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+                  )}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              aria-pressed={isCustom}
+              onClick={() => set({ minutes: isCustom ? d.minutes : 45 })}
+              className={cn(
+                "rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-[0.96]",
+                isCustom
+                  ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                  : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+              )}
+            >
+              {isCustom ? countdownLabel(d.minutes) ?? "Custom" : "Custom"}
+            </button>
+          </div>
+          {isCustom ? (
+            <div className="mt-3 flex items-center gap-2.5">
+              <input
+                type="number"
+                min={1}
+                max={10080}
+                value={d.minutes ?? 45}
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(10080, Number(e.target.value) || 1));
+                  set({ minutes: v });
+                }}
+                aria-label="Custom countdown minutes"
+                className={cn(fieldInput, "w-28 tabular-nums")}
+              />
+              <span className="text-[12.5px] font-semibold text-[#AAAAAA]">minutes</span>
+              <span className="ml-auto text-[12px] font-bold text-[#1D1D1F]/70">{countdownLabel(d.minutes)}</span>
+            </div>
+          ) : null}
           <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
             The scene stays sealed until the timer runs out — perfect for a timed reveal.
           </p>
         </div>
       );
+    }
     case "quiz": {
       const options = d.options?.length ? d.options : ["Option A", "Option B"];
       const answer = d.answer ?? 0;
@@ -1382,7 +1850,8 @@ function BlockEditorContent({
         </div>
       );
     }
-    case "reward":
+    case "reward": {
+      const domain = d.url?.trim() ? urlDomain(d.url) : null;
       return (
         <div className="space-y-4 pb-2">
           <div>
@@ -1396,7 +1865,7 @@ function BlockEditorContent({
           </div>
           <div>
             <label htmlFor="md-reward-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
-              Code or link
+              Code
             </label>
             <input
               id="md-reward-code"
@@ -1407,9 +1876,45 @@ function BlockEditorContent({
               className={cn(fieldInput, "font-mono tracking-[0.08em]")}
             />
           </div>
+          <div>
+            <label htmlFor="md-reward-url" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+              Redeem link · optional
+            </label>
+            <div className="relative">
+              <Link2
+                size={15}
+                aria-hidden
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
+              />
+              <input
+                id="md-reward-url"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                maxLength={200}
+                value={d.url ?? ""}
+                onChange={(e) => set({ url: e.target.value })}
+                placeholder="https://your-shop.com/redeem"
+                className={cn(fieldInput, "pl-9")}
+              />
+            </div>
+            {domain ? (
+              <p className="mt-2 flex items-center gap-1.5 rounded-full bg-[#1E9E4A]/[0.08] px-3 py-1.5 text-[12px] font-semibold text-[#1E9E4A]">
+                <ExternalLink size={12} aria-hidden />
+                Redeem at <span className="font-bold">{domain}</span>
+              </p>
+            ) : (
+              <p className="mt-1.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                Where they use the code — a button appears after the reveal.
+              </p>
+            )}
+          </div>
         </div>
       );
-    case "cta":
+    }
+    case "cta": {
+      const action = d.action ?? "Open link";
+      const domain = d.url?.trim() ? urlDomain(d.url) : null;
       return (
         <div className="space-y-4 pb-2">
           <div>
@@ -1429,13 +1934,53 @@ function BlockEditorContent({
             <FieldLabel>On tap</FieldLabel>
             <ChipGroup
               options={CTA_ACTIONS.map((a) => ({ value: a, label: a }))}
-              value={d.action}
+              value={action}
               onChange={(v) => set({ action: v })}
               groupLabel="Button action"
             />
           </div>
+          {action === "Reply" ? (
+            <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+              Reply taps show a toast — no link needed. Switch to “Open link” or “Claim” to paste a URL.
+            </p>
+          ) : (
+            <div>
+              <label htmlFor="md-cta-url" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+                Link — {action === "Claim" ? "where they claim it" : "opens in a new tab"}
+              </label>
+              <div className="relative">
+                <Link2
+                  size={15}
+                  aria-hidden
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
+                />
+                <input
+                  id="md-cta-url"
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  maxLength={200}
+                  value={d.url ?? ""}
+                  onChange={(e) => set({ url: e.target.value })}
+                  placeholder="https://memorableday.in"
+                  className={cn(fieldInput, "pl-9")}
+                />
+              </div>
+              {domain ? (
+                <p className="mt-2 flex items-center gap-1.5 rounded-full bg-[#007AFF]/[0.07] px-3 py-1.5 text-[12px] font-semibold text-[#007AFF]">
+                  <ExternalLink size={12} aria-hidden />
+                  Opens <span className="font-bold">{domain}</span> in a new tab
+                </p>
+              ) : (
+                <p className="mt-1.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                  Paste any link — Spotify, YouTube, your shop, a form, anything.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       );
+    }
     case "confetti":
       return (
         <div className="pb-2">

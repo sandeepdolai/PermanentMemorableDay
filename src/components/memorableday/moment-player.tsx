@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AudioLines,
   Award,
   Check,
   ChevronRight,
   Clock,
+  Copy,
+  ExternalLink,
   Heart,
   MousePointerClick,
   Music as MusicIcon,
@@ -21,7 +24,7 @@ import {
 } from "lucide-react";
 import type { PlayerPayload } from "./md-context";
 import type { BlockDoc, SongPick } from "@/lib/md-blocks";
-import { formatClock, photoFilterCss } from "@/lib/md-blocks";
+import { formatClock, normalizeUrl, photoFilterCss, urlDomain } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
@@ -442,12 +445,103 @@ function VideoBlockView({ block, index }: { block: BlockDoc; index: number }) {
 
 function AudioBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const song = block.data?.song;
+  const mode = block.data?.playMode ?? "scene";
+
+  if (!song) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.12 + index * 0.09 }}
+        className="flex w-full flex-col items-center gap-2 rounded-[22px] bg-white/[0.06] px-6 py-8 ring-1 ring-white/10"
+      >
+        <MusicIcon size={24} className="text-white/60" aria-hidden />
+        <p className="text-[14px] font-semibold text-white/80">A song plays here</p>
+      </motion.div>
+    );
+  }
+
+  // Background mode — no card, the snippet just loops under the scene.
+  if (mode === "background") {
+    return <BackgroundAudio song={song} />;
+  }
+
+  return <AudioSceneCard song={song} index={index} />;
+}
+
+/** Hidden scene-scope music — loops the picked snippet while the scene is
+ *  open and stops on exit. Falls back to a tap chip when autoplay is blocked. */
+function BackgroundAudio({ song }: { song: SongPick }) {
+  const [needsTap, setNeedsTap] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = new Audio(song.previewUrl);
+    audio.preload = "auto";
+    audioRef.current = audio;
+    const seek = () => {
+      try {
+        audio.currentTime = song.start;
+      } catch {
+        // seek before metadata — queued on most browsers
+      }
+    };
+    const onTime = () => {
+      if (audio.currentTime >= song.start + song.length - 0.05) {
+        seek(); // loop the snippet
+      }
+    };
+    const onMeta = () => seek();
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("loadedmetadata", onMeta, { once: true });
+    seek();
+    void audio
+      .play()
+      .then(() => setNeedsTap(false))
+      .catch(() => setNeedsTap(true));
+    if (audio.readyState >= 1) seek();
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onMeta);
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, [song.previewUrl, song.start, song.length]);
+
+  const tapPlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    try {
+      audio.currentTime = song.start;
+    } catch {
+      // ignore
+    }
+    void audio.play().then(() => setNeedsTap(false)).catch(() => {});
+  };
+
+  if (!needsTap) return null;
+  return (
+    <span className="pointer-events-none absolute inset-x-0 bottom-16 z-10 flex justify-center px-6">
+      <button
+        type="button"
+        onClick={tapPlay}
+        className="pointer-events-auto flex items-center gap-2 rounded-full bg-white/15 px-4 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md transition-transform active:scale-95"
+      >
+        <AudioLines size={14} aria-hidden className="text-[#64D2FF]" />
+        Tap to play the background music
+      </button>
+    </span>
+  );
+}
+
+/** Visible song card (scene mode) — uploads get a gradient tile instead of artwork. */
+function AudioSceneCard({ song, index }: { song: SongPick; index: number }) {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Plays the picked snippet once when the scene enters.
   useEffect(() => {
-    if (!song) return;
     const audio = new Audio(song.previewUrl);
     audioRef.current = audio;
     const onTime = () => {
@@ -473,7 +567,7 @@ function AudioBlockView({ block, index }: { block: BlockDoc; index: number }) {
       audio.pause();
       audioRef.current = null;
     };
-  }, [song?.previewUrl, song?.start, song?.length, song]);
+  }, [song.previewUrl, song.start, song.length]);
 
   const toggle = (e: React.MouseEvent) => {
     e.stopPropagation(); // don't advance the scene from a play/pause tap
@@ -481,7 +575,7 @@ function AudioBlockView({ block, index }: { block: BlockDoc; index: number }) {
     if (!audio) return;
     if (audio.paused) {
       try {
-        audio.currentTime = song?.start ?? 0;
+        audio.currentTime = song.start;
       } catch {
         // ignore
       }
@@ -491,20 +585,6 @@ function AudioBlockView({ block, index }: { block: BlockDoc; index: number }) {
       setPlaying(false);
     }
   };
-
-  if (!song) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.12 + index * 0.09 }}
-        className="flex w-full flex-col items-center gap-2 rounded-[22px] bg-white/[0.06] px-6 py-8 ring-1 ring-white/10"
-      >
-        <MusicIcon size={24} className="text-white/60" aria-hidden />
-        <p className="text-[14px] font-semibold text-white/80">A song plays here</p>
-      </motion.div>
-    );
-  }
 
   return (
     <motion.button
@@ -520,7 +600,12 @@ function AudioBlockView({ block, index }: { block: BlockDoc; index: number }) {
         {song.artwork ? (
           <img src={song.artwork} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
         ) : (
-          <span aria-hidden className="absolute inset-0 bg-[#FF375F]/40" />
+          <span
+            aria-hidden
+            className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#FF375F] to-[#5E5CE6] text-white"
+          >
+            <MusicIcon size={20} />
+          </span>
         )}
         <span aria-hidden className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
           {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" className="ml-0.5" />}
@@ -539,8 +624,15 @@ function AudioBlockView({ block, index }: { block: BlockDoc; index: number }) {
           <span className="truncate">{song.artist}</span>
         </span>
       </span>
-      <span className="shrink-0 rounded-full bg-[#FF375F]/25 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF9FB2]">
-        {formatClock(song.length)}
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <span className="rounded-full bg-[#FF375F]/25 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF9FB2]">
+          {formatClock(song.length)}
+        </span>
+        {song.source === "upload" ? (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-white/60">
+            Your file
+          </span>
+        ) : null}
       </span>
     </motion.button>
   );
@@ -763,10 +855,45 @@ function CountdownBlockView({
 }
 
 function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const { notify } = useMD();
   const d = block.data;
   const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
   const kind = d?.rewardKind ?? "Reward";
   const code = d?.code?.trim() || "MD-REWARD";
+  const url = d?.url?.trim();
+  const domain = url ? urlDomain(url) : null;
+
+  const copyCode = async () => {
+    const flashCopied = () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    };
+    try {
+      await navigator.clipboard.writeText(code);
+      flashCopied();
+    } catch {
+      // Async clipboard blocked (no gesture/permission) — try the legacy path.
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = code;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (ok) {
+          flashCopied();
+          return;
+        }
+      } catch {
+        // fall through to the toast
+      }
+      notify(`Code: ${code}`); // last resort — surface it for a manual copy
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -804,13 +931,66 @@ function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
         )}
         {revealed ? <ConfettiBurst /> : null}
       </button>
+
+      {/* Post-reveal actions — copy the code, open the redeem link */}
+      {revealed ? (
+        <span className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void copyCode();
+            }}
+            aria-label="Copy reward code"
+            className="flex items-center gap-1.5 rounded-full bg-white/12 px-4 py-2 text-[12.5px] font-semibold text-white backdrop-blur-md transition-transform active:scale-95"
+          >
+            {copied ? (
+              <>
+                <Check size={13} strokeWidth={3} aria-hidden /> Copied
+              </>
+            ) : (
+              <>
+                <Copy size={13} aria-hidden /> Copy code
+              </>
+            )}
+          </button>
+          {url && domain ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(normalizeUrl(url), "_blank", "noopener,noreferrer");
+                notify(`Opening ${domain}…`);
+              }}
+              aria-label={`Redeem at ${domain}`}
+              className="flex items-center gap-1.5 rounded-full bg-[#30D158]/25 px-4 py-2 text-[12.5px] font-semibold text-white backdrop-blur-md transition-transform active:scale-95"
+            >
+              <ExternalLink size={13} aria-hidden /> {domain}
+            </button>
+          ) : null}
+        </span>
+      ) : null}
     </motion.div>
   );
 }
 
 function CtaBlockView({ block, index, onAction }: { block: BlockDoc; index: number; onAction: (label: string, action?: string) => void }) {
+  const { notify } = useMD();
   const d = block.data;
   const label = d?.label?.trim() || "Continue";
+  // Reply taps stay in-experience; Open link / Claim open the pasted URL.
+  const url = d?.action === "Reply" ? "" : (d?.url?.trim() ?? "");
+  const domain = url ? urlDomain(url) : null;
+
+  const fire = () => {
+    if (url) {
+      window.open(normalizeUrl(url), "_blank", "noopener,noreferrer");
+      notify(`Opening ${domain ?? "your link"}…`);
+    } else {
+      onAction(label, d?.action);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -822,13 +1002,24 @@ function CtaBlockView({ block, index, onAction }: { block: BlockDoc; index: numb
         type="button"
         onClick={(e) => {
           e.stopPropagation(); // fire the action, not the scene advance
-          onAction(label, d?.action);
+          fire();
         }}
         className="flex items-center gap-2 rounded-full bg-[#007AFF] px-8 py-3.5 text-[16px] font-semibold text-white shadow-[0_14px_34px_-10px_rgba(0,122,255,0.7)] transition-transform active:scale-[0.97]"
       >
         <MousePointerClick size={16} aria-hidden /> {label}
+        {domain ? <ExternalLink size={13} aria-hidden className="opacity-75" /> : null}
       </button>
-      <p className="mt-2.5 text-[11.5px] font-medium text-white/55">{d?.action ?? "Opens a link, claim or reply"}</p>
+      <p className="mt-2.5 text-[11.5px] font-medium text-white/55">
+        {domain ? (
+          <span className="inline-flex items-center gap-1">
+            <ExternalLink size={10} aria-hidden className="text-[#64D2FF]" />
+            <span className="font-semibold text-[#64D2FF]">{domain}</span>
+            <span>· opens in a new tab</span>
+          </span>
+        ) : (
+          d?.action ?? "Opens a link, claim or reply"
+        )}
+      </p>
     </motion.div>
   );
 }

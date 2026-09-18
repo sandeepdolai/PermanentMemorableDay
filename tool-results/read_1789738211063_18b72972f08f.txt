@@ -1,0 +1,2002 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import { AnimatePresence, Reorder, motion, useDragControls } from "framer-motion";
+     5→import {
+     6→  Award,
+     7→  CalendarDays,
+     8→  Check,
+     9→  ChevronLeft,
+    10→  Clock,
+    11→  Gift,
+    12→  GripVertical,
+    13→  Images as ImagesIcon,
+    14→  ListChecks,
+    15→  MousePointerClick,
+    16→  Music,
+    17→  Pause,
+    18→  PartyPopper,
+    19→  Pencil,
+    20→  Play,
+    21→  Plus,
+    22→  Redo2,
+    23→  Search as SearchIcon,
+    24→  Share2,
+    25→  Sparkles,
+    26→  Trash2,
+    27→  Type,
+    28→  Undo2,
+    29→  Video,
+    30→  X,
+    31→} from "lucide-react";
+    32→import { Slider } from "@/components/ui/slider";
+    33→import { formatDuration } from "@/lib/mock-data";
+    34→import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
+    35→import {
+    36→  formatClock,
+    37→  photoFilterCss,
+    38→  PHOTO_FILTERS,
+    39→  type BlockData,
+    40→  type BlockDoc,
+    41→  type SceneDoc,
+    42→  type SongPick,
+    43→  type SongResult,
+    44→} from "@/lib/md-blocks";
+    45→import { CoverArt, COVER_NAMES } from "./cover-art";
+    46→import { BottomSheet } from "./bottom-sheet";
+    47→import { RenameDialog } from "./moment-menu";
+    48→import { useMD, type BuilderOptions } from "./md-context";
+    49→import { cn } from "@/lib/utils";
+    50→
+    51→/* ------------------------------------------------------------------ */
+    52→/* Block catalogue (PRD Experience Builder scene blocks)               */
+    53→/* ------------------------------------------------------------------ */
+    54→
+    55→type IconType = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+    56→
+    57→interface BlockDef {
+    58→  type: string;
+    59→  label: string;
+    60→  icon: IconType;
+    61→  tint: string;
+    62→}
+    63→
+    64→const BLOCKS: BlockDef[] = [
+    65→  { type: "text", label: "Text", icon: Type, tint: "#007AFF" },
+    66→  { type: "photo", label: "Photo", icon: ImagesIcon, tint: "#30D158" },
+    67→  { type: "video", label: "Video", icon: Video, tint: "#FF9F0A" },
+    68→  { type: "audio", label: "Audio", icon: Music, tint: "#FF375F" },
+    69→  { type: "gift", label: "3D Gift", icon: Gift, tint: "#5E5CE6" },
+    70→  { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
+    71→  { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
+    72→  { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
+    73→  { type: "cta", label: "Button", icon: MousePointerClick, tint: "#007AFF" },
+    74→  { type: "confetti", label: "Confetti", icon: PartyPopper, tint: "#FF375F" },
+    75→];
+    76→
+    77→const BLOCK_BY_TYPE = Object.fromEntries(BLOCKS.map((b) => [b.type, b]));
+    78→
+    79→type Block = BlockDoc;
+    80→type Scene = SceneDoc;
+    81→
+    82→/** Undo/redo snapshot of the whole draft */
+    83→interface Snapshot {
+    84→  label: string;
+    85→  title: string;
+    86→  scenes: Scene[];
+    87→  track: SongPick | null;
+    88→  cover: number;
+    89→}
+    90→
+    91→/* Block editor option catalogues (abstract, no themed content) */
+    92→const GIFT_WRAPS = ["#007AFF", "#FF375F", "#5E5CE6", "#30D158", "#FF9F0A"];
+    93→const COUNTDOWN_PRESETS = [
+    94→  { label: "1 min", minutes: 1 },
+    95→  { label: "10 min", minutes: 10 },
+    96→  { label: "1 hour", minutes: 60 },
+    97→  { label: "6 hours", minutes: 360 },
+    98→  { label: "24 hours", minutes: 1440 },
+    99→  { label: "3 days", minutes: 4320 },
+   100→];
+   101→const REWARD_KINDS = ["Coupon", "Gift card", "Download"];
+   102→const CTA_ACTIONS = ["Open link", "Claim", "Reply"];
+   103→const CONFETTI_STYLES = ["Burst", "Rain", "Hearts"];
+   104→const SCHEDULE_TIMES = ["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "9:00 PM", "12:00 AM"];
+   105→
+   106→/** Pretty countdown label from a minutes value */
+   107→function countdownLabel(minutes?: number): string | null {
+   108→  if (!minutes) return null;
+   109→  if (minutes < 60) return `${minutes} min`;
+   110→  if (minutes < 1440) {
+   111→    const h = minutes / 60;
+   112→    return `${h} hour${h > 1 ? "s" : ""}`;
+   113→  }
+   114→  const d = minutes / 1440;
+   115→  return `${d} day${d > 1 ? "s" : ""}`;
+   116→}
+   117→
+   118→const fieldInput =
+   119→  "w-full rounded-[14px] border border-[#1D1D1F]/[0.09] bg-white px-3.5 py-2.5 text-[14.5px] tracking-[-0.01em] text-[#1D1D1F] outline-none placeholder:text-[#AAAAAA]/70 focus:border-[#007AFF] focus:ring-2 focus:ring-[#007AFF]/25";
+   120→
+   121→const MAX_SCENES = 8;
+   122→const HISTORY_CAP = 30;
+   123→
+   124→/** Deterministic draft layouts — abstract, no themed content */
+   125→const DRAFT_PATTERNS: string[][] = [
+   126→  ["text", "photo"],
+   127→  ["video", "text"],
+   128→  ["gift", "confetti"],
+   129→  ["countdown", "cta"],
+   130→  ["quiz", "text"],
+   131→  ["audio", "photo"],
+   132→  ["text", "cta"],
+   133→  ["reward", "confetti"],
+   134→];
+   135→
+   136→function seedScenes(opts: BuilderOptions): Scene[] {
+   137→  // Edit-in-Builder restore — the full authored document wins over sketching.
+   138→  if (opts.doc && opts.doc.scenes.length > 0) {
+   139→    return opts.doc.scenes.map((s) => ({ ...s, blocks: s.blocks.map((b) => ({ ...b })) }));
+   140→  }
+   141→  if (opts.ai) {
+   142→    const scenes: Scene[] = [
+   143→      { id: "s1", blocks: [{ id: "b1", type: "text" }, { id: "b2", type: "photo" }] },
+   144→      { id: "s2", blocks: [{ id: "b3", type: "gift" }, { id: "b4", type: "confetti" }] },
+   145→      { id: "s3", blocks: [{ id: "b5", type: "text" }, { id: "b6", type: "cta" }] },
+   146→    ];
+   147→    if (opts.seedText) {
+   148→      scenes[0].blocks = [{ id: "bAi0", type: "text", text: opts.seedText }, ...scenes[0].blocks];
+   149→    }
+   150→    return scenes;
+   151→  }
+   152→  const count = Math.max(1, Math.min(opts.scenes ?? 1, MAX_SCENES));
+   153→  const scenes: Scene[] = [];
+   154→  for (let i = 0; i < count; i++) {
+   155→    const pattern = DRAFT_PATTERNS[(i + (opts.cover ?? 0)) % DRAFT_PATTERNS.length];
+   156→    scenes.push({
+   157→      id: `s${i + 1}`,
+   158→      blocks: pattern.map((t, j) => ({ id: `b${i * 4 + j + 1}`, type: t })),
+   159→    });
+   160→  }
+   161→  if (opts.initialBlock && BLOCK_BY_TYPE[opts.initialBlock]) {
+   162→    scenes[0].blocks.push({ id: "bSeed", type: opts.initialBlock });
+   163→  }
+   164→  if (opts.seedText) {
+   165→    scenes[0].blocks = [{ id: "bAi0", type: "text", text: opts.seedText }, ...scenes[0].blocks];
+   166→  }
+   167→  return scenes;
+   168→}
+   169→
+   170→/* ------------------------------------------------------------------ */
+   171→/* Block visual previews                                               */
+   172→/* ------------------------------------------------------------------ */
+   173→
+   174→function BlockPreview({ block, cover }: { block: Block; cover: number }) {
+   175→  const type = block.type;
+   176→  const d = block.data;
+   177→  switch (type) {
+   178→    case "text": {
+   179→      const body = d?.body?.trim();
+   180→      return (
+   181→        <div className="flex items-start gap-3">
+   182→          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#007AFF]/[0.1] text-[#007AFF]">
+   183→            <Type size={16} strokeWidth={2.2} aria-hidden />
+   184→          </span>
+   185→          {block.text ? (
+   186→            <div className="min-w-0 flex-1">
+   187→              <p className="text-[14px] font-medium italic leading-relaxed tracking-[-0.01em] text-[#1D1D1F]">
+   188→                “{block.text}”
+   189→              </p>
+   190→              <p className="mt-1.5 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#5E5CE6]">
+   191→                <Sparkles size={10} aria-hidden /> AI composed
+   192→              </p>
+   193→            </div>
+   194→          ) : (
+   195→            <div className="min-w-0 flex-1">
+   196→              {body ? (
+   197→                <>
+   198→                  <p className="text-[14px] font-semibold leading-relaxed tracking-[-0.01em] text-[#1D1D1F]">
+   199→                    {body}
+   200→                  </p>
+   201→                  <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[#AAAAAA]">
+   202→                    {body.length} characters
+   203→                  </p>
+   204→                </>
+   205→              ) : (
+   206→                <>
+   207→                  <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F]">
+   208→                    A few words that land.
+   209→                  </p>
+   210→                  <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
+   211→                    Your message renders here — big type, generous spacing, one idea per scene.
+   212→                  </p>
+   213→                </>
+   214→              )}
+   215→            </div>
+   216→          )}
+   217→        </div>
+   218→      );
+   219→    }
+   220→    case "photo": {
+   221→      const filtered = d?.filter && d.filter !== "Original" ? d.filter : null;
+   222→      const src = d?.image;
+   223→      return (
+   224→        <div className="flex items-center gap-3">
+   225→          <span className="relative block shrink-0">
+   226→            {src ? (
+   227→              <img src={src} alt={d?.caption?.trim() || "Uploaded photo"} style={photoFilterCss(d?.filter)} className="h-16 w-24 rounded-[12px] object-cover" />
+   228→            ) : (
+   229→              <CoverArt variant={filtered ? (cover + 1) % 10 : cover} className="h-16 w-24 rounded-[12px]" />
+   230→            )}
+   231→            {filtered ? (
+   232→              <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[#1D1D1F]/45 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur-md">
+   233→                {filtered}
+   234→              </span>
+   235→            ) : null}
+   236→          </span>
+   237→          <div className="min-w-0 flex-1">
+   238→            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+   239→              {src ? "Your photo" : "Photo block"}
+   240→            </p>
+   241→            {d?.caption?.trim() ? (
+   242→              <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{d.caption.trim()}”</p>
+   243→            ) : (
+   244→              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">
+   245→                {src ? "Uploaded — tap Edit to adjust" : "Full-bleed image with a soft caption"}
+   246→              </p>
+   247→            )}
+   248→          </div>
+   249→        </div>
+   250→      );
+   251→    }
+   252→    case "video": {
+   253→      const src = d?.video;
+   254→      return (
+   255→        <div className="relative overflow-hidden rounded-[14px]">
+   256→          {src ? (
+   257→            <video
+   258→              src={src}
+   259→              muted
+   260→              playsInline
+   261→              preload="metadata"
+   262→              aria-label="Uploaded video"
+   263→              className="h-24 w-full bg-[#1D1D1F] object-cover"
+   264→            />
+   265→          ) : (
+   266→            <CoverArt variant={(cover + 3) % 10} className="h-24 w-full" />
+   267→          )}
+   268→          <span className="absolute inset-0 flex items-center justify-center">
+   269→            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/25 backdrop-blur-md">
+   270→              <Play size={18} className="ml-0.5 text-white" fill="white" aria-hidden />
+   271→            </span>
+   272→          </span>
+   273→          <span className="absolute bottom-2 right-2 rounded-full bg-[#1D1D1F]/45 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur-md">
+   274→            {formatDuration(d?.duration ?? 12)}
+   275→          </span>
+   276→        </div>
+   277→      );
+   278→    }
+   279→    case "audio": {
+   280→      const song = d?.song;
+   281→      if (song) {
+   282→        return (
+   283→          <div className="flex items-center gap-3">
+   284→            {song.artwork ? (
+   285→              <img src={song.artwork} alt="" aria-hidden className="h-10 w-10 shrink-0 rounded-[12px] object-cover" />
+   286→            ) : (
+   287→              <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#FF375F]/15 text-[#FF375F]">
+   288→                <Music size={15} />
+   289→              </span>
+   290→            )}
+   291→            <div className="min-w-0 flex-1">
+   292→              <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+   293→                {song.title}
+   294→              </p>
+   295→              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">{song.artist}</p>
+   296→            </div>
+   297→            <span className="shrink-0 rounded-full bg-[#FF375F]/[0.1] px-2 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
+   298→              {formatClock(song.length)} clip
+   299→            </span>
+   300→          </div>
+   301→        );
+   302→      }
+   303→      return (
+   304→        <div className="flex items-center gap-3">
+   305→          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.12] text-[#FF375F]">
+   306→            <Play size={16} fill="currentColor" aria-hidden />
+   307→          </span>
+   308→          <div className="flex h-10 flex-1 items-center gap-[3px]" aria-hidden>
+   309→            {[10, 18, 26, 14, 30, 22, 12, 28, 16, 24, 11, 20, 15, 27, 13, 25, 17, 9, 21, 14].map((h, i) => (
+   310→              <span
+   311→                key={i}
+   312→                className="w-[3px] shrink-0 rounded-full bg-[#FF375F]/45"
+   313→                style={{ height: `${h}px` }}
+   314→              />
+   315→            ))}
+   316→          </div>
+   317→          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#AAAAAA]">0:34</span>
+   318→        </div>
+   319→      );
+   320→    }
+   321→    case "gift": {
+   322→      const wrap = d?.wrap ?? "#5E5CE6";
+   323→      const message = d?.message?.trim();
+   324→      return (
+   325→        <div className="flex items-center gap-3">
+   326→          <span
+   327→            aria-hidden
+   328→            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] text-white"
+   329→            style={{ background: `linear-gradient(135deg, ${wrap} 0%, ${wrap}C4 60%, ${wrap}8C 100%)` }}
+   330→          >
+   331→            <Gift size={22} strokeWidth={2} />
+   332→          </span>
+   333→          <div className="min-w-0 flex-1">
+   334→            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D gift box</p>
+   335→            {message ? (
+   336→              <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{message}”</p>
+   337→            ) : (
+   338→              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Recipient taps to open — confetti included</p>
+   339→            )}
+   340→          </div>
+   341→          <span className="flex shrink-0 items-center gap-1.5">
+   342→            {d?.wrap ? (
+   343→              <span aria-hidden className="h-3.5 w-3.5 rounded-full ring-2 ring-white" style={{ backgroundColor: wrap }} />
+   344→            ) : null}
+   345→            <span className="rounded-full bg-[#5E5CE6]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#5E5CE6]">
+   346→              Reveal
+   347→            </span>
+   348→          </span>
+   349→        </div>
+   350→      );
+   351→    }
+   352→    case "countdown": {
+   353→      const label = countdownLabel(d?.minutes);
+   354→      return (
+   355→        <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[#FF9F0A]/[0.08] px-4 py-3">
+   356→          <div className="flex items-center gap-2.5">
+   357→            <Clock size={16} className="text-[#B26A00]" aria-hidden />
+   358→            <p className="text-[13px] font-semibold text-[#B26A00]">Unlocks in</p>
+   359→          </div>
+   360→          <p className="text-[17px] font-bold tabular-nums tracking-wide text-[#1D1D1F]">
+   361→            {label ?? "03 : 12 : 45"}
+   362→          </p>
+   363→        </div>
+   364→      );
+   365→    }
+   366→    case "quiz": {
+   367→      const question = d?.question?.trim() || "Pick the answer that fits —";
+   368→      const options = d?.options?.length ? d.options : ["Option A", "Option B"];
+   369→      const answer = d?.answer ?? -1;
+   370→      return (
+   371→        <div>
+   372→          <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">{question}</p>
+   373→          <div className="mt-2.5 flex flex-wrap gap-2">
+   374→            {options.map((o, i) => {
+   375→              const correct = i === answer;
+   376→              return (
+   377→                <span
+   378→                  key={i}
+   379→                  className={cn(
+   380→                    "flex items-center gap-1 rounded-full border py-2 pl-3 pr-2.5 text-center text-[12.5px] font-semibold",
+   381→                    correct
+   382→                      ? "border-[#30D158]/45 bg-[#30D158]/[0.1] text-[#1E9E4A]"
+   383→                      : "border-[#1D1D1F]/[0.08] bg-white text-[#1D1D1F]/70"
+   384→                  )}
+   385→                >
+   386→                  {o}
+   387→                  {correct ? <Check size={12} strokeWidth={3} aria-hidden /> : null}
+   388→                </span>
+   389→              );
+   390→            })}
+   391→          </div>
+   392→        </div>
+   393→      );
+   394→    }
+   395→    case "reward": {
+   396→      const kind = d?.rewardKind;
+   397→      const code = d?.code?.trim();
+   398→      return (
+   399→        <div className="flex items-center gap-3 rounded-[14px] border border-dashed border-[#30D158]/40 bg-[#30D158]/[0.06] px-4 py-3">
+   400→          <Award size={20} className="shrink-0 text-[#1E9E4A]" aria-hidden />
+   401→          <div className="min-w-0 flex-1">
+   402→            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1E9E4A]">
+   403→              {kind ? `${kind} reveal` : "Reward reveal"}
+   404→            </p>
+   405→            {code ? (
+   406→              <p className="mt-0.5 font-mono text-[12px] font-semibold tracking-[0.08em] text-[#1E9E4A]/80">
+   407→                {code}
+   408→              </p>
+   409→            ) : (
+   410→              <p className="text-[12px] text-[#AAAAAA]">Attach a coupon, gift card or download</p>
+   411→            )}
+   412→          </div>
+   413→        </div>
+   414→      );
+   415→    }
+   416→    case "cta": {
+   417→      const label = d?.label?.trim();
+   418→      const action = d?.action;
+   419→      return (
+   420→        <div className="flex flex-col items-center py-1">
+   421→          <span className="rounded-full bg-[#007AFF] px-7 py-2.5 text-[14px] font-semibold text-white pill-shadow">
+   422→            {label || "Continue"}
+   423→          </span>
+   424→          <p className="mt-2 text-[11px] font-medium text-[#AAAAAA]">{action ?? "Opens a link, claim or reply"}</p>
+   425→        </div>
+   426→      );
+   427→    }
+   428→    case "confetti": {
+   429→      const style = d?.style;
+   430→      return (
+   431→        <div className="flex items-center gap-3">
+   432→          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#FF375F]/[0.1] text-[#FF375F]">
+   433→            <PartyPopper size={16} strokeWidth={2.2} aria-hidden />
+   434→          </span>
+   435→          <p className="flex-1 text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+   436→            {style ? `${style} celebration` : "Celebration burst"}
+   437→          </p>
+   438→          <span className="flex shrink-0 items-center gap-1" aria-hidden>
+   439→            {[
+   440→              style === "Hearts" ? "#FF375F" : "#FF375F",
+   441→              style === "Rain" ? "#64D2FF" : "#FF9F0A",
+   442→              "#30D158",
+   443→              "#007AFF",
+   444→              "#5E5CE6",
+   445→            ].map((c, i) => (
+   446→              <span key={i} className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+   447→            ))}
+   448→          </span>
+   449→        </div>
+   450→      );
+   451→    }
+   452→    default:
+   453→      return null;
+   454→  }
+   455→}
+   456→
+   457→/* ------------------------------------------------------------------ */
+   458→/* Draggable block card (grip handle initiates drag)                    */
+   459→/* ------------------------------------------------------------------ */
+   460→
+   461→function BlockCard({
+   462→  block,
+   463→  cover,
+   464→  scenePos,
+   465→  active,
+   466→  onSelect,
+   467→  onRemove,
+   468→  onEdit,
+   469→  onGripDown,
+   470→}: {
+   471→  block: Block;
+   472→  cover: number;
+   473→  scenePos: number;
+   474→  active: boolean;
+   475→  onSelect: () => void;
+   476→  onRemove: () => void;
+   477→  onEdit: () => void;
+   478→  onGripDown: (e: React.PointerEvent) => void;
+   479→}) {
+   480→  const controls = useDragControls();
+   481→  const def = BLOCK_BY_TYPE[block.type];
+   482→  return (
+   483→    <Reorder.Item
+   484→      value={block}
+   485→      dragListener={false}
+   486→      dragControls={controls}
+   487→      initial={{ opacity: 0, y: 14, scale: 0.97 }}
+   488→      animate={{ opacity: 1, y: 0, scale: 1 }}
+   489→      exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.15 } }}
+   490→      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+   491→      role="button"
+   492→      tabIndex={0}
+   493→      aria-pressed={active}
+   494→      aria-label={`${def?.label ?? "Block"} in scene ${scenePos}. ${active ? "Selected" : "Tap to select"}. Drag the handle to reorder.`}
+   495→      onClick={onSelect}
+   496→      onKeyDown={(e) => {
+   497→        if (e.key === "Enter" || e.key === " ") {
+   498→          e.preventDefault();
+   499→          onSelect();
+   500→        }
+   501→      }}
+   502→      className={cn(
+   503→        "relative cursor-pointer rounded-[18px] border bg-white p-3.5 outline-none transition-shadow",
+   504→        "focus-visible:ring-2 focus-visible:ring-[#007AFF]",
+   505→        active
+   506→          ? "border-[#007AFF] shadow-[0_0_0_3px_rgba(0,122,255,0.12),0_12px_28px_-14px_rgba(0,122,255,0.35)]"
+   507→          : "border-[#1D1D1F]/[0.07] card-shadow"
+   508→      )}
+   509→    >
+   510→      <div className="flex items-start gap-2.5">
+   511→        <button
+   512→          type="button"
+   513→          aria-label={`Reorder ${def?.label ?? "block"} in scene ${scenePos}`}
+   514→          onPointerDown={(e) => {
+   515→            onGripDown(e);
+   516→            controls.start(e);
+   517→          }}
+   518→          onClick={(e) => e.stopPropagation()}
+   519→          className={cn(
+   520→            "mt-0.5 shrink-0 cursor-grab touch-none rounded-md p-0.5 text-[#C7C7CC] transition-colors active:cursor-grabbing hover:text-[#1D1D1F]/50",
+   521→            active && "text-[#007AFF]"
+   522→          )}
+   523→        >
+   524→          <GripVertical size={15} strokeWidth={2.2} aria-hidden />
+   525→        </button>
+   526→        <div className="min-w-0 flex-1">
+   527→          <BlockPreview block={block} cover={cover} />
+   528→        </div>
+   529→      </div>
+   530→
+   531→      {/* Block meta + edit / delete */}
+   532→      <div className="mt-3 flex items-center justify-between border-t border-[#1D1D1F]/[0.05] pt-2.5">
+   533→        <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+   534→          {def ? (
+   535→            <def.icon size={11} strokeWidth={2.4} aria-hidden style={{ color: def.tint }} />
+   536→          ) : null}
+   537→          {def?.label ?? block.type}
+   538→        </span>
+   539→        {active ? (
+   540→          <span className="relative z-10 flex items-center gap-1.5">
+   541→            <button
+   542→              type="button"
+   543→              onClick={(e) => {
+   544→                e.stopPropagation();
+   545→                onEdit();
+   546→              }}
+   547→              onKeyDown={(e) => e.stopPropagation()}
+   548→              aria-label={`Edit ${def?.label ?? "block"} content`}
+   549→              className="flex items-center gap-1 rounded-full bg-[#007AFF]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#007AFF] transition-transform active:scale-90"
+   550→            >
+   551→              <Pencil size={11} strokeWidth={2.4} aria-hidden /> Edit
+   552→            </button>
+   553→            <button
+   554→              type="button"
+   555→              onClick={(e) => {
+   556→                e.stopPropagation();
+   557→                onRemove();
+   558→              }}
+   559→              onKeyDown={(e) => e.stopPropagation()}
+   560→              aria-label={`Remove ${def?.label ?? "block"}`}
+   561→              className="flex items-center gap-1 rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#FF375F] transition-transform active:scale-90"
+   562→            >
+   563→              <Trash2 size={11} strokeWidth={2.4} aria-hidden /> Remove
+   564→            </button>
+   565→          </span>
+   566→        ) : null}
+   567→      </div>
+   568→    </Reorder.Item>
+   569→  );
+   570→}
+   571→
+   572→/* ------------------------------------------------------------------ */
+   573→/* Block editor — per-type configuration (sheet content)               */
+   574→/* ------------------------------------------------------------------ */
+   575→
+   576→function FieldLabel({ children }: { children: React.ReactNode }) {
+   577→  return <p className="mb-2 px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">{children}</p>;
+   578→}
+   579→
+   580→function ChipGroup<T extends string | number>({
+   581→  options,
+   582→  value,
+   583→  onChange,
+   584→  groupLabel,
+   585→}: {
+   586→  options: Array<{ value: T; label: string }>;
+   587→  value: T | undefined;
+   588→  onChange: (v: T) => void;
+   589→  groupLabel: string;
+   590→}) {
+   591→  return (
+   592→    <div className="flex flex-wrap gap-2" role="group" aria-label={groupLabel}>
+   593→      {options.map((o) => {
+   594→        const active = value === o.value;
+   595→        return (
+   596→          <button
+   597→            key={String(o.value)}
+   598→            type="button"
+   599→            aria-pressed={active}
+   600→            onClick={() => onChange(o.value)}
+   601→            className={cn(
+   602→              "rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-[0.96]",
+   603→              active
+   604→                ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+   605→                : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+   606→            )}
+   607→          >
+   608→            {o.label}
+   609→          </button>
+   610→        );
+   611→      })}
+   612→    </div>
+   613→  );
+   614→}
+   615→
+   616→/* ------------------------------------------------------------------ */
+   617→/* Media upload field (photo / video blocks)                           */
+   618→/* ------------------------------------------------------------------ */
+   619→
+   620→const UPLOAD_LIMIT_MB = 16;
+   621→
+   622→function MediaUploadField({
+   623→  kind,
+   624→  value,
+   625→  onUploaded,
+   626→  onRemove,
+   627→}: {
+   628→  kind: "photo" | "video";
+   629→  value?: string;
+   630→  onUploaded: (url: string) => void;
+   631→  onRemove: () => void;
+   632→}) {
+   633→  const { notify } = useMD();
+   634→  const inputRef = useRef<HTMLInputElement | null>(null);
+   635→  const [busy, setBusy] = useState(false);
+   636→  const isPhoto = kind === "photo";
+   637→
+   638→  const pick = () => inputRef.current?.click();
+   639→
+   640→  const upload = async (file: File) => {
+   641→    const expected = isPhoto ? "image/" : "video/";
+   642→    if (!file.type.startsWith(expected)) {
+   643→      notify(isPhoto ? "That file isn't a photo" : "That file isn't a video");
+   644→      return;
+   645→    }
+   646→    if (file.size > UPLOAD_LIMIT_MB * 1024 * 1024) {
+   647→      notify(`Too large — keep it under ${UPLOAD_LIMIT_MB} MB`);
+   648→      return;
+   649→    }
+   650→    setBusy(true);
+   651→    try {
+   652→      const url = await apiUploadFile(file);
+   653→      onUploaded(url);
+   654→      notify(isPhoto ? "Photo uploaded" : "Video uploaded");
+   655→    } catch (e) {
+   656→      notify(e instanceof Error ? e.message : "Upload failed — try again");
+   657→    } finally {
+   658→      setBusy(false);
+   659→    }
+   660→  };
+   661→
+   662→  return (
+   663→    <div>
+   664→      <input
+   665→        ref={inputRef}
+   666→        type="file"
+   667→        accept={isPhoto ? "image/*" : "video/*"}
+   668→        className="hidden"
+   669→        onChange={(e) => {
+   670→          const file = e.target.files?.[0];
+   671→          e.target.value = ""; // allow re-picking the same file
+   672→          if (file) void upload(file);
+   673→        }}
+   674→      />
+   675→      {value ? (
+   676→        <div className="space-y-2.5">
+   677→          <div className="relative overflow-hidden rounded-[16px] border border-[#1D1D1F]/[0.07]">
+   678→            {isPhoto ? (
+   679→              <img src={value} alt="Uploaded photo preview" className="max-h-[220px] w-full object-cover" />
+   680→            ) : (
+   681→              <video src={value} controls muted playsInline preload="metadata" className="max-h-[220px] w-full bg-[#1D1D1F] object-cover" />
+   682→            )}
+   683→          </div>
+   684→          <div className="flex gap-2">
+   685→            <button
+   686→              type="button"
+   687→              onClick={pick}
+   688→              disabled={busy}
+   689→              className="flex-1 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97] disabled:opacity-50"
+   690→            >
+   691→              {busy ? "Uploading…" : "Replace"}
+   692→            </button>
+   693→            <button
+   694→              type="button"
+   695→              onClick={onRemove}
+   696→              disabled={busy}
+   697→              className="flex-1 rounded-full bg-[#FF375F]/[0.08] py-2.5 text-[13px] font-semibold text-[#FF375F] transition-transform active:scale-[0.97] disabled:opacity-50"
+   698→            >
+   699→              Remove
+   700→            </button>
+   701→          </div>
+   702→        </div>
+   703→      ) : (
+   704→        <button
+   705→          type="button"
+   706→          onClick={pick}
+   707→          disabled={busy}
+   708→          className="flex w-full flex-col items-center rounded-[18px] border-2 border-dashed border-[#1D1D1F]/[0.14] bg-white px-6 py-8 transition-all hover:border-[#007AFF]/45 hover:bg-[#007AFF]/[0.03] active:scale-[0.98] disabled:opacity-60"
+   709→        >
+   710→          <span className={cn(
+   711→            "mb-2.5 flex h-11 w-11 items-center justify-center rounded-full",
+   712→            isPhoto ? "bg-[#30D158]/[0.1] text-[#1E9E4A]" : "bg-[#FF9F0A]/[0.12] text-[#B26A00]"
+   713→          )}>
+   714→            {busy ? (
+   715→              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+   716→            ) : isPhoto ? (
+   717→              <ImagesIcon size={19} aria-hidden />
+   718→            ) : (
+   719→              <Video size={19} aria-hidden />
+   720→            )}
+   721→          </span>
+   722→          <span className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+   723→            {busy ? "Uploading…" : isPhoto ? "Upload a photo" : "Upload a video"}
+   724→          </span>
+   725→          <span className="mt-1 text-[11.5px] text-[#AAAAAA]">
+   726→            {isPhoto ? "JPG, PNG, WebP or GIF · up to 16 MB" : "MP4 or WebM · up to 16 MB"}
+   727→          </span>
+   728→        </button>
+   729→      )}
+   730→    </div>
+   731→  );
+   732→}
+   733→
+   734→/* ------------------------------------------------------------------ */
+   735→/* Song picker — Instagram-Notes-style search + snippet selection      */
+   736→/* ------------------------------------------------------------------ */
+   737→
+   738→const SNIPPET_LENGTHS = [10, 15, 30];
+   739→
+   740→/** Row preview + snippet playback state machine for one shared <audio>. */
+   741→function usePreviewAudio() {
+   742→  const audioRef = useRef<HTMLAudioElement | null>(null);
+   743→  const [playingId, setPlayingId] = useState<string | null>(null);
+   744→  const stopRef = useRef<(() => void) | null>(null);
+   745→
+   746→  const stop = useCallback(() => {
+   747→    stopRef.current?.();
+   748→    stopRef.current = null;
+   749→    if (audioRef.current) {
+   750→      audioRef.current.pause();
+   751→      audioRef.current = null;
+   752→    }
+   753→    setPlayingId(null);
+   754→  }, []);
+   755→
+   756→  /** Plays a clip — from `start` for `length` seconds (preview clips are ~30s). */
+   757→  const play = useCallback(
+   758→    (id: string, url: string, start: number, length: number) => {
+   759→      stop();
+   760→      const audio = new Audio(url);
+   761→      audioRef.current = audio;
+   762→      setPlayingId(id);
+   763→      const onTime = () => {
+   764→        if (audio.currentTime >= start + length) {
+   765→          stop();
+   766→        }
+   767→      };
+   768→      const onReady = () => {
+   769→        try {
+   770→          audio.currentTime = Math.min(start, Math.max(0, (audio.duration || 30) - 0.5));
+   771→        } catch {
+   772→          // seek before metadata — the assignment still queues on most browsers
+   773→        }
+   774→        void audio.play().catch(() => stop());
+   775→      };
+   776→      const onEnd = () => stop();
+   777→      audio.addEventListener("loadedmetadata", onReady, { once: true });
+   778→      audio.addEventListener("timeupdate", onTime);
+   779→      audio.addEventListener("ended", onEnd);
+   780→      audio.addEventListener("error", onEnd);
+   781→      // If metadata is already available (cached), loadedmetadata may not fire.
+   782→      if (audio.readyState >= 1) onReady();
+   783→      stopRef.current = () => {
+   784→        audio.removeEventListener("timeupdate", onTime);
+   785→        audio.removeEventListener("loadedmetadata", onReady);
+   786→        audio.removeEventListener("ended", onEnd);
+   787→        audio.removeEventListener("error", onEnd);
+   788→      };
+   789→    },
+   790→    [stop]
+   791→  );
+   792→
+   793→  // Stop on unmount (sheet close)
+   794→  useEffect(() => () => stop(), [stop]);
+   795→
+   796→  return { playingId, play, stop };
+   797→}
+   798→
+   799→/**
+   800→ * SongPickerContent — search any song, preview it, pick the exact part.
+   801→ * Used for both the audio block editor and the experience soundtrack.
+   802→ */
+   803→function SongPickerContent({
+   804→  selected,
+   805→  onConfirm,
+   806→}: {
+   807→  selected: SongPick | null;
+   808→  onConfirm: (song: SongPick | null) => void;
+   809→}) {
+   810→  const [query, setQuery] = useState("");
+   811→  /** Last settled search result — {q} ties it to the query it answers. */
+   812→  const [results, setResults] = useState<{ q: string; songs: SongResult[]; error: boolean } | null>(null);
+   813→  const [chosen, setChosen] = useState<SongResult | null>(null);
+   814→  const [start, setStart] = useState(0);
+   815→  const [length, setLength] = useState(15);
+   816→  const { playingId, play, stop } = usePreviewAudio();
+   817→
+   818→  // Debounced search — fires when the query settles (≥2 chars).
+   819→  // Spinner / results / empty states are all DERIVED from (query, results),
+   820→  // so nothing needs a synchronous reset when the query changes.
+   821→  useEffect(() => {
+   822→    const q = query.trim();
+   823→    if (q.length < 2) return;
+   824→    const t = window.setTimeout(() => {
+   825→      apiSearchMusic(q)
+   826→        .then((songs) => setResults({ q, songs, error: false }))
+   827→        .catch(() => setResults({ q, songs: [], error: true }));
+   828→    }, 400);
+   829→    return () => window.clearTimeout(t);
+   830→  }, [query]);
+   831→
+   832→  const q = query.trim();
+   833→  const active = q.length >= 2;
+   834→  const settled = active && results?.q === q;
+   835→  const searching = active && !settled; // includes the debounce window
+   836→  const songs = settled ? results.songs : [];
+   837→  const searched = settled && !results.error;
+   838→  const error = settled && results.error;
+   839→
+   840→  const choose = (s: SongResult) => {
+   841→    stop();
+   842→    if (chosen?.id === s.id) {
+   843→      setChosen(null);
+   844→      return;
+   845→    }
+   846→    setChosen(s);
+   847→    // Sensible default: drop the needle 5s in, 15s clip.
+   848→    setStart(Math.min(5, Math.max(0, 30 - 15)));
+   849→    setLength(15);
+   850→  };
+   851→
+   852→  const confirm = () => {
+   853→    if (!chosen) return;
+   854→    stop();
+   855→    onConfirm({
+   856→      id: chosen.id,
+   857→      title: chosen.title,
+   858→      artist: chosen.artist,
+   859→      album: chosen.album,
+   860→      artwork: chosen.artwork,
+   861→      previewUrl: chosen.previewUrl,
+   862→      durationMs: chosen.durationMs,
+   863→      start,
+   864→      length,
+   865→      source: chosen.source,
+   866→    });
+   867→  };
+   868→
+   869→  return (
+   870→    <div className="pb-2">
+   871→      {/* Current selection */}
+   872→      {selected && !chosen ? (
+   873→        <div className="mb-3 flex items-center gap-3 rounded-[18px] border-2 border-[#007AFF] bg-[#007AFF]/[0.04] p-3">
+   874→          {selected.artwork ? (
+   875→            <img src={selected.artwork} alt="" aria-hidden className="h-11 w-11 shrink-0 rounded-[12px] object-cover" />
+   876→          ) : (
+   877→            <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-[#FF375F]/15 text-[#FF375F]">
+   878→              <Music size={16} />
+   879→            </span>
+   880→          )}
+   881→          <div className="min-w-0 flex-1">
+   882→            <p className="truncate text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{selected.title}</p>
+   883→            <p className="mt-0.5 truncate text-[12px] text-[#AAAAAA]">
+   884→              {selected.artist} · {formatClock(selected.start)}–{formatClock(selected.start + selected.length)} clip
+   885→            </p>
+   886→          </div>
+   887→          <button
+   888→            type="button"
+   889→            onClick={() => onConfirm(null)}
+   890→            aria-label="Remove song"
+   891→            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.09] text-[#FF375F] transition-transform active:scale-90"
+   892→          >
+   893→            <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+   894→          </button>
+   895→        </div>
+   896→      ) : null}
+   897→
+   898→      {/* Search field */}
+   899→      <div className="relative">
+   900→        <SearchIcon
+   901→          size={15}
+   902→          aria-hidden
+   903→          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
+   904→        />
+   905→        <input
+   906→          value={query}
+   907→          onChange={(e) => setQuery(e.target.value)}
+   908→          placeholder="Search songs, artists…"
+   909→          aria-label="Search songs"
+   910→          autoComplete="off"
+   911→          className={cn(fieldInput, "pl-9")}
+   912→        />
+   913→        {query ? (
+   914→          <button
+   915→            type="button"
+   916→            onClick={() => {
+   917→              setQuery("");
+   918→              setChosen(null);
+   919→            }}
+   920→            aria-label="Clear search"
+   921→            className="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[#1D1D1F]/[0.08] text-[#AAAAAA] transition-colors hover:text-[#1D1D1F]"
+   922→          >
+   923→            <X size={11} strokeWidth={2.6} aria-hidden />
+   924→          </button>
+   925→        ) : null}
+   926→      </div>
+   927→
+   928→      {/* Results */}
+   929→      <div className="mt-3 space-y-2">
+   930→        {searching ? (
+   931→          <div className="flex flex-col gap-2.5 py-4" aria-live="polite">
+   932→            {[0, 1, 2, 3].map((i) => (
+   933→              <div key={i} className="flex items-center gap-3">
+   934→                <span className="h-11 w-11 shrink-0 animate-pulse rounded-[12px] bg-[#1D1D1F]/[0.06]" />
+   935→                <span className="flex-1 space-y-1.5">
+   936→                  <span className="block h-3 w-2/3 animate-pulse rounded-full bg-[#1D1D1F]/[0.06]" />
+   937→                  <span className="block h-2.5 w-1/3 animate-pulse rounded-full bg-[#1D1D1F]/[0.06]" />
+   938→                </span>
+   939→              </div>
+   940→            ))}
+   941→          </div>
+   942→        ) : error ? (
+   943→          <p className="py-6 text-center text-[13px] font-medium text-[#FF375F]">
+   944→            Search is unavailable right now — try again
+   945→          </p>
+   946→        ) : songs.length === 0 ? (
+   947→          <div className="py-8 text-center">
+   948→            <span className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-[#FF375F]/[0.08] text-[#FF375F]">
+   949→              <Music size={17} aria-hidden />
+   950→            </span>
+   951→            <p className="text-[13px] font-semibold text-[#1D1D1F]">
+   952→              {searched ? "Nothing found — try another search" : "Find the song that sets the mood"}
+   953→            </p>
+   954→            <p className="mt-1 px-6 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+   955→              {searched
+   956→                ? "Check the spelling or try the artist's name."
+   957→                : "Search any artist or track, listen to the preview, then pick the exact part that plays."}
+   958→            </p>
+   959→          </div>
+   960→        ) : (
+   961→          songs.map((s) => {
+   962→            const isChosen = chosen?.id === s.id;
+   963→            const playing = playingId === s.id;
+   964→            return (
+   965→              <div
+   966→                key={s.id}
+   967→                className={cn(
+   968→                  "flex items-center gap-3 rounded-[16px] border-2 bg-white p-2.5 transition-all",
+   969→                  isChosen ? "border-[#007AFF] bg-[#007AFF]/[0.04]" : "border-[#1D1D1F]/[0.07]"
+   970→                )}
+   971→              >
+   972→                <button
+   973→                  type="button"
+   974→                  onClick={() =>
+   975→                    playing
+   976→                      ? stop()
+   977→                      : play(s.id, s.previewUrl, 0, 30)
+   978→                  }
+   979→                  aria-label={playing ? `Pause preview of ${s.title}` : `Preview ${s.title}`}
+   980→                  className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[12px]"
+   981→                >
+   982→                  {s.artwork ? (
+   983→                    <img src={s.artwork} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+   984→                  ) : (
+   985→                    <span aria-hidden className="absolute inset-0 bg-[#1D1D1F]/[0.08]" />
+   986→                  )}
+   987→                  <span
+   988→                    aria-hidden
+   989→                    className={cn(
+   990→                      "absolute inset-0 flex items-center justify-center bg-black/35 text-white transition-opacity",
+   991→                      playing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+   992→                    )}
+   993→                  >
+   994→                    {playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
+   995→                  </span>
+   996→                </button>
+   997→                <button type="button" onClick={() => choose(s)} className="min-w-0 flex-1 text-left">
+   998→                  <p className={cn("truncate text-[14px] font-bold tracking-[-0.01em]", isChosen ? "text-[#007AFF]" : "text-[#1D1D1F]")}>
+   999→                    {s.title}
+  1000→                  </p>
+  1001→                  <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-[#AAAAAA]">
+  1002→                    {playing ? <EqBars className="h-3 w-4 text-[#007AFF]" /> : null}
+  1003→                    <span className="truncate">{s.artist}</span>
+  1004→                  </p>
+  1005→                </button>
+  1006→                <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#AAAAAA]">
+  1007→                  {formatClock(s.durationMs / 1000)}
+  1008→                </span>
+  1009→                <button
+  1010→                  type="button"
+  1011→                  onClick={() => choose(s)}
+  1012→                  aria-label={isChosen ? `Unselect ${s.title}` : `Select ${s.title}`}
+  1013→                  aria-pressed={isChosen}
+  1014→                  className={cn(
+  1015→                    "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+  1016→                    isChosen ? "border-[#007AFF] bg-[#007AFF]" : "border-[#D1D1D6]"
+  1017→                  )}
+  1018→                >
+  1019→                  {isChosen ? <Check size={13} strokeWidth={3} className="text-white" aria-hidden /> : null}
+  1020→                </button>
+  1021→              </div>
+  1022→            );
+  1023→          })
+  1024→        )}
+  1025→      </div>
+  1026→
+  1027→      {/* Snippet picker — Instagram-Notes style “choose the part” */}
+  1028→      {chosen ? (
+  1029→        <div className="mt-4 rounded-[20px] border border-[#007AFF]/25 bg-[#007AFF]/[0.04] p-4">
+  1030→          <div className="flex items-center gap-3">
+  1031→            {chosen.artwork ? (
+  1032→              <img src={chosen.artwork} alt="" aria-hidden className="h-12 w-12 shrink-0 rounded-[13px] object-cover" />
+  1033→            ) : null}
+  1034→            <div className="min-w-0 flex-1">
+  1035→              <p className="truncate text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{chosen.title}</p>
+  1036→              <p className="mt-0.5 truncate text-[11.5px] text-[#AAAAAA]">Pick the part that plays</p>
+  1037→            </div>
+  1038→          </div>
+  1039→
+  1040→          {/* Waveform-ish scrubber */}
+  1041→          <div className="mt-3.5">
+  1042→            <div className="mb-2 flex items-center justify-between">
+  1043→              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Start</span>
+  1044→              <span className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F]">
+  1045→                {formatClock(start)} → {formatClock(start + length)}
+  1046→              </span>
+  1047→            </div>
+  1048→            <div aria-hidden className="flex h-8 items-center gap-[2px]">
+  1049→              {Array.from({ length: 40 }, (_, i) => {
+  1050→                const frac = i / 40;
+  1051→                const inSnippet = frac >= start / 30 && frac <= (start + length) / 30;
+  1052→                const h = 8 + ((i * 37) % 19);
+  1053→                return (
+  1054→                  <span
+  1055→                    key={i}
+  1056→                    className={cn("flex-1 rounded-full transition-colors", inSnippet ? "bg-[#007AFF]" : "bg-[#1D1D1F]/[0.12]")}
+  1057→                    style={{ height: `${h}px` }}
+  1058→                  />
+  1059→                );
+  1060→              })}
+  1061→            </div>
+  1062→            <Slider
+  1063→              value={[start]}
+  1064→              min={0}
+  1065→              max={Math.max(0, 30 - length)}
+  1066→              step={0.5}
+  1067→              onValueChange={(v) => setStart(v[0])}
+  1068→              aria-label="Snippet start time"
+  1069→              className="mt-1"
+  1070→            />
+  1071→          </div>
+  1072→
+  1073→          {/* Length chips */}
+  1074→          <div className="mt-3">
+  1075→            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Length</p>
+  1076→            <div className="flex gap-2">
+  1077→              {SNIPPET_LENGTHS.map((len) => (
+  1078→                <button
+  1079→                  key={len}
+  1080→                  type="button"
+  1081→                  aria-pressed={length === len}
+  1082→                  onClick={() => {
+  1083→                    setLength(len);
+  1084→                    setStart((s) => Math.min(s, Math.max(0, 30 - len)));
+  1085→                  }}
+  1086→                  className={cn(
+  1087→                    "flex-1 rounded-full border py-2 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
+  1088→                    length === len
+  1089→                      ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+  1090→                      : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+  1091→                  )}
+  1092→                >
+  1093→                  {formatClock(len)}
+  1094→                </button>
+  1095→              ))}
+  1096→            </div>
+  1097→          </div>
+  1098→
+  1099→          <div className="mt-4 flex gap-2">
+  1100→            <button
+  1101→              type="button"
+  1102→              onClick={() =>
+  1103→                playingId === `snippet-${chosen.id}`
+  1104→                  ? stop()
+  1105→                  : play(`snippet-${chosen.id}`, chosen.previewUrl, start, length)
+  1106→              }
+  1107→              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97]"
+  1108→            >
+  1109→              {playingId === `snippet-${chosen.id}` ? (
+  1110→                <>
+  1111→                  <Pause size={13} aria-hidden /> Pause
+  1112→                </>
+  1113→              ) : (
+  1114→                <>
+  1115→                  <Play size={13} fill="currentColor" aria-hidden /> Preview
+  1116→                </>
+  1117→              )}
+  1118→            </button>
+  1119→            <button
+  1120→              type="button"
+  1121→              onClick={confirm}
+  1122→              className="flex-[1.6] rounded-full bg-[#007AFF] py-2.5 text-[14px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+  1123→            >
+  1124→              Use this song
+  1125→            </button>
+  1126→          </div>
+  1127→        </div>
+  1128→      ) : null}
+  1129→
+  1130→      <p className="mt-3 px-1 text-center text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+  1131→        Previews are 30-second catalog clips — pick the exact part that plays, Instagram-style.
+  1132→      </p>
+  1133→    </div>
+  1134→  );
+  1135→}
+  1136→
+  1137→function BlockEditorContent({
+  1138→  block,
+  1139→  onChange,
+  1140→}: {
+  1141→  block: Block;
+  1142→  onChange: (data: BlockData) => void;
+  1143→}) {
+  1144→  const d: BlockData = block.data ?? {};
+  1145→  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  1146→
+  1147→  switch (block.type) {
+  1148→    case "text":
+  1149→      return (
+  1150→        <div className="pb-2">
+  1151→          <label htmlFor="md-block-text" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1152→            Message
+  1153→          </label>
+  1154→          <textarea
+  1155→            id="md-block-text"
+  1156→            rows={4}
+  1157→            maxLength={240}
+  1158→            value={d.body ?? ""}
+  1159→            onChange={(e) => set({ body: e.target.value })}
+  1160→            placeholder="Type the words your recipient will land on…"
+  1161→            className={cn(fieldInput, "resize-none leading-relaxed")}
+  1162→          />
+  1163→          <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">
+  1164→            {(d.body ?? "").length}/240
+  1165→          </p>
+  1166→          <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1167→            One idea per scene keeps recipients tapping through.
+  1168→          </p>
+  1169→        </div>
+  1170→      );
+  1171→    case "photo":
+  1172→      return (
+  1173→        <div className="space-y-4 pb-2">
+  1174→          <div>
+  1175→            <FieldLabel>Photo</FieldLabel>
+  1176→            <MediaUploadField
+  1177→              kind="photo"
+  1178→              value={d.image}
+  1179→              onUploaded={(url) => set({ image: url })}
+  1180→              onRemove={() => set({ image: undefined })}
+  1181→            />
+  1182→          </div>
+  1183→          <div>
+  1184→            <FieldLabel>Filter</FieldLabel>
+  1185→            <ChipGroup
+  1186→              options={PHOTO_FILTERS.map((f) => ({ value: f as string, label: f }))}
+  1187→              value={d.filter ?? "Original"}
+  1188→              onChange={(v) => set({ filter: v })}
+  1189→              groupLabel="Photo filter"
+  1190→            />
+  1191→          </div>
+  1192→          <div>
+  1193→            <label htmlFor="md-photo-caption" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1194→              Caption
+  1195→            </label>
+  1196→            <input
+  1197→              id="md-photo-caption"
+  1198→              maxLength={60}
+  1199→              value={d.caption ?? ""}
+  1200→              onChange={(e) => set({ caption: e.target.value })}
+  1201→              placeholder="A soft line under the photo"
+  1202→              className={fieldInput}
+  1203→            />
+  1204→          </div>
+  1205→        </div>
+  1206→      );
+  1207→    case "video":
+  1208→      return (
+  1209→        <div className="space-y-4 pb-2">
+  1210→          <div>
+  1211→            <FieldLabel>Video</FieldLabel>
+  1212→            <MediaUploadField
+  1213→              kind="video"
+  1214→              value={d.video}
+  1215→              onUploaded={(url) => set({ video: url })}
+  1216→              onRemove={() => set({ video: undefined, duration: undefined })}
+  1217→            />
+  1218→          </div>
+  1219→          {d.video ? (
+  1220→            <div>
+  1221→              <div className="flex items-baseline justify-between">
+  1222→                <FieldLabel>Play length</FieldLabel>
+  1223→                <span className="text-[13px] font-bold tabular-nums text-[#1D1D1F]">{formatDuration(d.duration ?? 12)}</span>
+  1224→              </div>
+  1225→              <Slider
+  1226→                value={[d.duration ?? 12]}
+  1227→                min={5}
+  1228→                max={60}
+  1229→                step={1}
+  1230→                onValueChange={(v) => set({ duration: v[0] })}
+  1231→                aria-label="Clip length in seconds"
+  1232→                className="mt-1"
+  1233→              />
+  1234→              <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1235→                The clip plays for this long in the experience.
+  1236→              </p>
+  1237→            </div>
+  1238→          ) : (
+  1239→            <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1240→              Upload a clip — short videos hold attention best.
+  1241→            </p>
+  1242→          )}
+  1243→        </div>
+  1244→      );
+  1245→    case "audio":
+  1246→      return (
+  1247→        <div className="pb-2">
+  1248→          <FieldLabel>Song — search, listen, pick the part</FieldLabel>
+  1249→          <SongPickerContent
+  1250→            selected={d.song ?? null}
+  1251→            onConfirm={(song) => set(song ? { song } : { song: undefined })}
+  1252→          />
+  1253→        </div>
+  1254→      );
+  1255→    case "gift":
+  1256→      return (
+  1257→        <div className="space-y-4 pb-2">
+  1258→          <div>
+  1259→            <label htmlFor="md-gift-note" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1260→              Note inside the gift
+  1261→            </label>
+  1262→            <textarea
+  1263→              id="md-gift-note"
+  1264→              rows={2}
+  1265→              maxLength={90}
+  1266→              value={d.message ?? ""}
+  1267→              onChange={(e) => set({ message: e.target.value })}
+  1268→              placeholder="Shown when the box opens"
+  1269→              className={cn(fieldInput, "resize-none leading-relaxed")}
+  1270→            />
+  1271→          </div>
+  1272→          <div>
+  1273→            <FieldLabel>Wrap</FieldLabel>
+  1274→            <div className="flex gap-2.5" role="radiogroup" aria-label="Gift wrap color">
+  1275→              {GIFT_WRAPS.map((c) => {
+  1276→                const active = (d.wrap ?? "#5E5CE6") === c;
+  1277→                return (
+  1278→                  <button
+  1279→                    key={c}
+  1280→                    type="button"
+  1281→                    role="radio"
+  1282→                    aria-checked={active}
+  1283→                    aria-label={`Wrap color ${c}`}
+  1284→                    onClick={() => set({ wrap: c })}
+  1285→                    className={cn(
+  1286→                      "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+  1287→                      active && "ring-2 ring-[#1D1D1F] ring-offset-2 ring-offset-white"
+  1288→                    )}
+  1289→                    style={{ backgroundColor: c }}
+  1290→                  >
+  1291→                    {active ? <Check size={15} strokeWidth={3} className="text-white drop-shadow" aria-hidden /> : null}
+  1292→                  </button>
+  1293→                );
+  1294→              })}
+  1295→            </div>
+  1296→          </div>
+  1297→        </div>
+  1298→      );
+  1299→    case "countdown":
+  1300→      return (
+  1301→        <div className="pb-2">
+  1302→          <FieldLabel>Unlocks after</FieldLabel>
+  1303→          <ChipGroup
+  1304→            options={COUNTDOWN_PRESETS.map((p) => ({ value: p.minutes, label: p.label }))}
+  1305→            value={d.minutes}
+  1306→            onChange={(v) => set({ minutes: v })}
+  1307→            groupLabel="Countdown duration"
+  1308→          />
+  1309→          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1310→            The scene stays sealed until the timer runs out — perfect for a timed reveal.
+  1311→          </p>
+  1312→        </div>
+  1313→      );
+  1314→    case "quiz": {
+  1315→      const options = d.options?.length ? d.options : ["Option A", "Option B"];
+  1316→      const answer = d.answer ?? 0;
+  1317→      const setOptions = (next: string[]) =>
+  1318→        set({ options: next, answer: Math.min(answer, next.length - 1) });
+  1319→      return (
+  1320→        <div className="space-y-4 pb-2">
+  1321→          <div>
+  1322→            <label htmlFor="md-quiz-q" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1323→              Question
+  1324→            </label>
+  1325→            <input
+  1326→              id="md-quiz-q"
+  1327→              maxLength={80}
+  1328→              value={d.question ?? ""}
+  1329→              onChange={(e) => set({ question: e.target.value })}
+  1330→              placeholder="Ask something only they'd know"
+  1331→              className={fieldInput}
+  1332→            />
+  1333→          </div>
+  1334→          <div>
+  1335→            <FieldLabel>Answers — tap the circle to mark the right one</FieldLabel>
+  1336→            <div className="space-y-2">
+  1337→              {options.map((o, i) => (
+  1338→                <div key={i} className="flex items-center gap-2.5">
+  1339→                  <button
+  1340→                    type="button"
+  1341→                    onClick={() => set({ answer: i })}
+  1342→                    aria-pressed={answer === i}
+  1343→                    aria-label={`Mark option ${i + 1} as correct`}
+  1344→                    className={cn(
+  1345→                      "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+  1346→                      answer === i ? "border-[#30D158] bg-[#30D158]" : "border-[#D1D1D6]"
+  1347→                    )}
+  1348→                  >
+  1349→                    {answer === i ? <Check size={13} strokeWidth={3} className="text-white" aria-hidden /> : null}
+  1350→                  </button>
+  1351→                  <input
+  1352→                    value={o}
+  1353→                    maxLength={30}
+  1354→                    aria-label={`Option ${i + 1}`}
+  1355→                    onChange={(e) => setOptions(options.map((x, j) => (j === i ? e.target.value : x)))}
+  1356→                    className={cn(fieldInput, "flex-1 py-2")}
+  1357→                    placeholder={`Option ${i + 1}`}
+  1358→                  />
+  1359→                  {options.length > 2 ? (
+  1360→                    <button
+  1361→                      type="button"
+  1362→                      onClick={() => setOptions(options.filter((_, j) => j !== i))}
+  1363→                      aria-label={`Remove option ${i + 1}`}
+  1364→                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.08] text-[#FF375F] transition-transform active:scale-90"
+  1365→                    >
+  1366→                      <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+  1367→                    </button>
+  1368→                  ) : null}
+  1369→                </div>
+  1370→              ))}
+  1371→            </div>
+  1372→            {options.length < 4 ? (
+  1373→              <button
+  1374→                type="button"
+  1375→                onClick={() => setOptions([...options, `Option ${String.fromCharCode(65 + options.length)}`])}
+  1376→                className="mt-2.5 flex items-center gap-1.5 rounded-full bg-[#007AFF]/[0.08] px-3.5 py-1.5 text-[12.5px] font-semibold text-[#007AFF] transition-transform active:scale-95"
+  1377→              >
+  1378→                <Plus size={13} strokeWidth={2.4} aria-hidden /> Add option
+  1379→              </button>
+  1380→            ) : null}
+  1381→          </div>
+  1382→        </div>
+  1383→      );
+  1384→    }
+  1385→    case "reward":
+  1386→      return (
+  1387→        <div className="space-y-4 pb-2">
+  1388→          <div>
+  1389→            <FieldLabel>Reward type</FieldLabel>
+  1390→            <ChipGroup
+  1391→              options={REWARD_KINDS.map((k) => ({ value: k, label: k }))}
+  1392→              value={d.rewardKind}
+  1393→              onChange={(v) => set({ rewardKind: v })}
+  1394→              groupLabel="Reward type"
+  1395→            />
+  1396→          </div>
+  1397→          <div>
+  1398→            <label htmlFor="md-reward-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1399→              Code or link
+  1400→            </label>
+  1401→            <input
+  1402→              id="md-reward-code"
+  1403→              maxLength={24}
+  1404→              value={d.code ?? ""}
+  1405→              onChange={(e) => set({ code: e.target.value.toUpperCase() })}
+  1406→              placeholder="SPRING24"
+  1407→              className={cn(fieldInput, "font-mono tracking-[0.08em]")}
+  1408→            />
+  1409→          </div>
+  1410→        </div>
+  1411→      );
+  1412→    case "cta":
+  1413→      return (
+  1414→        <div className="space-y-4 pb-2">
+  1415→          <div>
+  1416→            <label htmlFor="md-cta-label" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+  1417→              Button label
+  1418→            </label>
+  1419→            <input
+  1420→              id="md-cta-label"
+  1421→              maxLength={24}
+  1422→              value={d.label ?? ""}
+  1423→              onChange={(e) => set({ label: e.target.value })}
+  1424→              placeholder="Continue"
+  1425→              className={fieldInput}
+  1426→            />
+  1427→          </div>
+  1428→          <div>
+  1429→            <FieldLabel>On tap</FieldLabel>
+  1430→            <ChipGroup
+  1431→              options={CTA_ACTIONS.map((a) => ({ value: a, label: a }))}
+  1432→              value={d.action}
+  1433→              onChange={(v) => set({ action: v })}
+  1434→              groupLabel="Button action"
+  1435→            />
+  1436→          </div>
+  1437→        </div>
+  1438→      );
+  1439→    case "confetti":
+  1440→      return (
+  1441→        <div className="pb-2">
+  1442→          <FieldLabel>Celebration style</FieldLabel>
+  1443→          <ChipGroup
+  1444→            options={CONFETTI_STYLES.map((s) => ({ value: s, label: s }))}
+  1445→            value={d.style}
+  1446→            onChange={(v) => set({ style: v })}
+  1447→            groupLabel="Confetti style"
+  1448→          />
+  1449→          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1450→            Fires the moment this scene opens.
+  1451→          </p>
+  1452→        </div>
+  1453→      );
+  1454→    default:
+  1455→      return null;
+  1456→  }
+  1457→}
+  1458→
+  1459→/* ------------------------------------------------------------------ */
+  1460→/* Soundtrack picker (experience-level music) — shared equalizer bars   */
+  1461→/* ------------------------------------------------------------------ */
+  1462→
+  1463→/** Mini animated equalizer bars (playing state) */
+  1464→function EqBars({ className }: { className?: string }) {
+  1465→  return (
+  1466→    <span aria-hidden className={cn("md-eq", className)}>
+  1467→      <span />
+  1468→      <span />
+  1469→      <span />
+  1470→    </span>
+  1471→  );
+  1472→}
+  1473→
+  1474→/* ------------------------------------------------------------------ */
+  1475→/* Cover art picker (palette grid, sheet content)                       */
+  1476→/* ------------------------------------------------------------------ */
+  1477→
+  1478→function CoverArtContent({
+  1479→  selected,
+  1480→  onSelect,
+  1481→}: {
+  1482→  selected: number;
+  1483→  onSelect: (variant: number) => void;
+  1484→}) {
+  1485→  return (
+  1486→    <div className="pb-2">
+  1487→      <div className="grid grid-cols-2 gap-3">
+  1488→        {COVER_NAMES.map((name, v) => {
+  1489→          const selectedTile = selected === v;
+  1490→          return (
+  1491→            <button
+  1492→              key={v}
+  1493→              type="button"
+  1494→              aria-pressed={selectedTile}
+  1495→              onClick={() => onSelect(v)}
+  1496→              className={cn(
+  1497→                "group relative overflow-hidden rounded-[18px] border-2 bg-white p-1.5 text-left transition-transform active:scale-[0.97]",
+  1498→                selectedTile ? "border-[#007AFF]" : "border-transparent"
+  1499→              )}
+  1500→            >
+  1501→              <span className="relative block">
+  1502→                <CoverArt variant={v} className="aspect-[4/3] w-full rounded-[13px]" />
+  1503→                <AnimatePresence>
+  1504→                  {selectedTile ? (
+  1505→                    <motion.span
+  1506→                      initial={{ scale: 0 }}
+  1507→                      animate={{ scale: 1 }}
+  1508→                      exit={{ scale: 0 }}
+  1509→                      transition={{ type: "spring", stiffness: 500, damping: 22 }}
+  1510→                      className="absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-[#007AFF] text-white shadow-[0_4px_12px_-2px_rgba(0,122,255,0.6)] ring-2 ring-white"
+  1511→                    >
+  1512→                      <Check size={14} strokeWidth={3.2} aria-hidden />
+  1513→                    </motion.span>
+  1514→                  ) : null}
+  1515→                </AnimatePresence>
+  1516→              </span>
+  1517→              <span className="block truncate px-1.5 pb-1 pt-2 text-[12.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+  1518→                {name}
+  1519→              </span>
+  1520→            </button>
+  1521→          );
+  1522→        })}
+  1523→      </div>
+  1524→      <p className="mt-3 px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1525→        The palette colors every scene. Changes apply instantly — undo with ⌘Z.
+  1526→      </p>
+  1527→    </div>
+  1528→  );
+  1529→}
+  1530→
+  1531→/* ------------------------------------------------------------------ */
+  1532→/* Schedule send (date + time picker, sheet content)                  */
+  1533→/* ------------------------------------------------------------------ */
+  1534→
+  1535→function ScheduleContent({ onConfirm }: { onConfirm: (label: string, iso: string) => void }) {
+  1536→  const [dayIdx, setDayIdx] = useState(0);
+  1537→  const [time, setTime] = useState(SCHEDULE_TIMES[0]);
+  1538→
+  1539→  const days = useMemo(() => {
+  1540→    const out: Array<{ label: string; sub: string; full: string; date: Date }> = [];
+  1541→    const now = new Date();
+  1542→    for (let i = 0; i < 7; i++) {
+  1543→      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+  1544→      out.push({
+  1545→        label: i === 0 ? "Today" : i === 1 ? "Tmrw" : new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(d),
+  1546→        sub: new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(d),
+  1547→        full: new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(d),
+  1548→        date: d,
+  1549→      });
+  1550→    }
+  1551→    return out;
+  1552→  }, []);
+  1553→
+  1554→  /** Combines the picked day + time chip into a real Date */
+  1555→  const scheduledDate = useMemo(() => {
+  1556→    const d = new Date(days[dayIdx].date);
+  1557→    const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(time);
+  1558→    if (m) {
+  1559→      let h = Number(m[1]);
+  1560→      const min = Number(m[2]);
+  1561→      const mer = m[3];
+  1562→      if (mer === "PM" && h < 12) h += 12;
+  1563→      if (mer === "AM" && h === 12) h = 0;
+  1564→      d.setHours(h, min, 0, 0);
+  1565→    }
+  1566→    return d;
+  1567→  }, [days, dayIdx, time]);
+  1568→
+  1569→  return (
+  1570→    <div className="pb-2">
+  1571→      {/* Live summary */}
+  1572→      <div className="mb-4 rounded-[18px] bg-[#007AFF]/[0.07] px-4 py-3 text-center">
+  1573→        <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#007AFF]">Sends</p>
+  1574→        <p className="mt-0.5 text-[16px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+  1575→          {days[dayIdx].full} · {time}
+  1576→        </p>
+  1577→      </div>
+  1578→
+  1579→      <FieldLabel>Day</FieldLabel>
+  1580→      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+  1581→        {days.map((d, i) => {
+  1582→          const active = i === dayIdx;
+  1583→          return (
+  1584→            <button
+  1585→              key={i}
+  1586→              type="button"
+  1587→              aria-pressed={active}
+  1588→              onClick={() => setDayIdx(i)}
+  1589→              className={cn(
+  1590→                "flex w-[72px] shrink-0 flex-col items-center rounded-[16px] border-2 py-2.5 transition-all active:scale-[0.96]",
+  1591→                active ? "border-[#007AFF] bg-[#007AFF]/[0.06]" : "border-[#1D1D1F]/[0.07] bg-white"
+  1592→              )}
+  1593→            >
+  1594→              <span className={cn("text-[10.5px] font-bold uppercase tracking-wide", active ? "text-[#007AFF]" : "text-[#AAAAAA]")}>
+  1595→                {d.label}
+  1596→              </span>
+  1597→              <span className={cn("mt-0.5 text-[15px] font-bold tabular-nums", active ? "text-[#1D1D1F]" : "text-[#1D1D1F]/70")}>
+  1598→                {d.sub}
+  1599→              </span>
+  1600→            </button>
+  1601→          );
+  1602→        })}
+  1603→      </div>
+  1604→
+  1605→      <div className="mt-4">
+  1606→        <FieldLabel>Time</FieldLabel>
+  1607→        <div className="grid grid-cols-3 gap-2">
+  1608→          {SCHEDULE_TIMES.map((t) => {
+  1609→            const active = time === t;
+  1610→            return (
+  1611→              <button
+  1612→                key={t}
+  1613→                type="button"
+  1614→                aria-pressed={active}
+  1615→                onClick={() => setTime(t)}
+  1616→                className={cn(
+  1617→                  "rounded-full border py-2.5 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
+  1618→                  active
+  1619→                    ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+  1620→                    : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+  1621→                )}
+  1622→              >
+  1623→                {t}
+  1624→              </button>
+  1625→            );
+  1626→          })}
+  1627→        </div>
+  1628→      </div>
+  1629→
+  1630→      <p className="mt-3.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+  1631→        Times shown in your local timezone. You can cancel anytime before it sends.
+  1632→      </p>
+  1633→      <button
+  1634→        type="button"
+  1635→        onClick={() => onConfirm(`${days[dayIdx].full} · ${time}`, scheduledDate.toISOString())}
+  1636→        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+  1637→      >
+  1638→        <CalendarDays size={16} aria-hidden /> Schedule send
+  1639→      </button>
+  1640→    </div>
+  1641→  );
+  1642→}
+  1643→
+  1644→/* ------------------------------------------------------------------ */
+  1645→/* Draggable scene row (reorder mode)                                  */
+  1646→/* ------------------------------------------------------------------ */
+  1647→
+  1648→function SceneRow({
+  1649→  scene,
+  1650→  index,
+  1651→  cover,
+  1652→  active,
+  1653→  onSelect,
+  1654→  onRemove,
+  1655→  onGripDown,
+  1656→}: {
+  1657→  scene: Scene;
+  1658→  index: number;
+  1659→  cover: number;
+  1660→  active: boolean;
+  1661→  onSelect: () => void;
+  1662→  onRemove: () => void;
+  1663→  onGripDown: (e: React.PointerEvent) => void;
+  1664→}) {
+  1665→  const controls = useDragControls();
+  1666→  return (
+  1667→    <Reorder.Item
+  1668→      value={scene}
+  1669→      dragListener={false}
+  1670→      dragControls={controls}
+  1671→      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+  1672→      className={cn(
+  1673→        "card-shadow hairline flex items-center gap-3 rounded-[18px] bg-white p-2.5",
+  1674→        active && "ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
+  1675→      )}
+  1676→    >
+  1677→      <button
+  1678→        type="button"
+  1679→        onClick={onSelect}
+  1680→        aria-label={`Select scene ${index + 1}`}
+  1681→        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+  1682→      >
+  1683→        <span
+  1684→          className={cn(
+  1685→            "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold",
+  1686→            active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/[0.08] text-[#1D1D1F]/70"
+  1687→          )}
+  1688→        >
+  1689→          {index + 1}
+  1690→        </span>
+  1691→        <CoverArt variant={(cover + index) % 10} className="h-[44px] w-[64px] shrink-0 rounded-[10px]" />
+  1692→        <span className="min-w-0 flex-1">
+  1693→          <span className="block text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+  1694→            Scene {index + 1}
+  1695→          </span>
+  1696→          <span className="mt-0.5 block text-[11.5px] font-medium text-[#AAAAAA]">
+  1697→            {scene.blocks.length} {scene.blocks.length === 1 ? "block" : "blocks"}
+  1698→          </span>
+  1699→        </span>
+  1700→      </button>
+  1701→      <button
+  1702→        type="button"
+  1703→        onClick={onRemove}
+  1704→        aria-label={`Remove scene ${index + 1}`}
+  1705→        className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.09] text-[#FF375F] transition-transform active:scale-90"
+  1706→      >
+  1707→        <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+  1708→      </button>
+  1709→      <button
+  1710→        type="button"
+  1711→        aria-label={`Reorder scene ${index + 1}`}
+  1712→        onPointerDown={(e) => {
+  1713→          onGripDown(e);
+  1714→          controls.start(e);
+  1715→        }}
+  1716→        className="shrink-0 cursor-grab touch-none rounded-md p-1 text-[#C7C7CC] transition-colors active:cursor-grabbing hover:text-[#1D1D1F]/50"
+  1717→      >
+  1718→        <GripVertical size={18} strokeWidth={2.2} aria-hidden />
+  1719→      </button>
+  1720→    </Reorder.Item>
+  1721→  );
+  1722→}
+  1723→
+  1724→/* ------------------------------------------------------------------ */
+  1725→/* Experience Builder                                                  */
+  1726→/* ------------------------------------------------------------------ */
+  1727→
+  1728→export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onClose: () => void }) {
+  1729→  const { notify, openMoment, openShare, sheet, player, aiInsertRef, openComposer, saveDraft, sendMoment } = useMD();
+  1730→  const [title, setTitle] = useState(opts.title ?? "Untitled Experience");
+  1731→  const [editing, setEditing] = useState(false);
+  1732→  const [scenes, setScenes] = useState<Scene[]>(() => seedScenes(opts));
+  1733→  const [sceneIdx, setSceneIdx] = useState(0);
+  1734→  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
+  1735→  const [reorderMode, setReorderMode] = useState(false);
+  1736→  const [past, setPast] = useState<Snapshot[]>([]);
+  1737→  const [future, setFuture] = useState<Snapshot[]>([]);
+  1738→  const [track, setTrack] = useState<SongPick | null>(opts.doc?.track ?? null);
+  1739→  const [editBlockId, setEditBlockId] = useState<string | null>(null);
+  1740→  const [musicOpen, setMusicOpen] = useState(false);
+  1741→  const [scheduleOpen, setScheduleOpen] = useState(false);
+  1742→  const [coverOpen, setCoverOpen] = useState(false);
+  1743→  /** Send-flow recipient prompt (iOS alert) + in-flight flag */
+  1744→  const [sendPromptOpen, setSendPromptOpen] = useState(false);
+  1745→  const [sending, setSending] = useState(false);
+  1746→  const idRef = useRef(100);
+  1747→  const blocksEndRef = useRef<HTMLDivElement>(null);
+  1748→  const blockDragStarted = useRef(false);
+  1749→  const sceneDragStarted = useRef(false);
+  1750→  const [cover, setCover] = useState(opts.cover ?? 5);
+  1751→
+  1752→  const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
+  1753→  const scenePos = sceneIdx + 1;
+  1754→  const editBlock = editBlockId ? (scenes.flatMap((s) => s.blocks).find((b) => b.id === editBlockId) ?? null) : null;
+  1755→  /** Any builder-local sheet open? (Escape / ⌘Z defer to it) */
+  1756→  const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen || sendPromptOpen;
+  1757→
+  1758→  /* ---------- Undo / redo ---------- */
+  1759→
+  1760→  const snapshot = useCallback(
+  1761→    (label: string): Snapshot => ({ label, title, scenes, track, cover }),
+  1762→    [title, scenes, track, cover]
+  1763→  );
+  1764→
+  1765→  /** Push the CURRENT state onto the past stack (call before every mutation) */
+  1766→  const pushHistory = useCallback(
+  1767→    (label: string) => {
+  1768→      setPast((p) => [...p.slice(-(HISTORY_CAP - 1)), snapshot(label)]);
+  1769→      setFuture([]);
+  1770→    },
+  1771→    [snapshot]
+  1772→  );
+  1773→
+  1774→  const applySnapshot = useCallback((s: Snapshot) => {
+  1775→    setTitle(s.title);
+  1776→    setScenes(s.scenes);
+  1777→    setTrack(s.track);
+  1778→    setCover(s.cover);
+  1779→    setSceneIdx((i) => Math.min(i, s.scenes.length - 1));
+  1780→    setSelectedBlock(null);
+  1781→  }, []);
+  1782→
+  1783→  const undo = useCallback(() => {
+  1784→    if (past.length === 0) return;
+  1785→    const prev = past[past.length - 1];
+  1786→    setPast((p) => p.slice(0, -1));
+  1787→    setFuture((f) => [snapshot("redo"), ...f]);
+  1788→    applySnapshot(prev);
+  1789→    notify(`Undo — ${prev.label}`);
+  1790→  }, [past, snapshot, applySnapshot, notify]);
+  1791→
+  1792→  const redo = useCallback(() => {
+  1793→    if (future.length === 0) return;
+  1794→    const next = future[0];
+  1795→    setFuture((f) => f.slice(1));
+  1796→    setPast((p) => [...p, snapshot(next.label)]);
+  1797→    applySnapshot(next);
+  1798→    notify(`Redo — ${next.label}`);
+  1799→  }, [future, snapshot, applySnapshot, notify]);
+  1800→
+  1801→  /* ---------- Mutations (each pushes history) ---------- */
+  1802→
+  1803→  const addBlock = (type: string, text?: string) => {
+  1804→    const id = `b${idRef.current++}`;
+  1805→    pushHistory(text ? "AI message added" : `${BLOCK_BY_TYPE[type]?.label ?? "Block"} added`);
+  1806→    setScenes((prev) =>
+  1807→      prev.map((s, i) =>
+  1808→        i === sceneIdx ? { ...s, blocks: [...s.blocks, { id, type, text }] } : s
+  1809→      )
+  1810→    );
+  1811→    setSelectedBlock(id);
+  1812→    notify(`${BLOCK_BY_TYPE[type]?.label ?? "Block"} added to Scene ${scenePos}`);
+  1813→    requestAnimationFrame(() => {
+  1814→      blocksEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  1815→    });
+  1816→  };
+  1817→
+  1818→  const removeBlock = (id: string) => {
+  1819→    const b = scene.blocks.find((x) => x.id === id);
+  1820→    pushHistory(`${BLOCK_BY_TYPE[b?.type ?? ""]?.label ?? "Block"} removed`);
+  1821→    setScenes((prev) =>
+  1822→      prev.map((s, i) => (i === sceneIdx ? { ...s, blocks: s.blocks.filter((b2) => b2.id !== id) } : s))
+  1823→    );
+  1824→    if (selectedBlock === id) setSelectedBlock(null);
+  1825→    notify("Block removed");
+  1826→  };
+  1827→
+  1828→  const addScene = () => {
+  1829→    if (scenes.length >= MAX_SCENES) {
+  1830→      notify(`Scene limit reached (${MAX_SCENES}) in this preview`);
+  1831→      return;
+  1832→    }
+  1833→    const id = `s${Date.now()}`;
+  1834→    pushHistory("Scene added");
+  1835→    setScenes((prev) => [...prev, { id, blocks: [] }]);
+  1836→    setSceneIdx(scenes.length);
+  1837→    setSelectedBlock(null);
+  1838→    notify(`Scene ${scenes.length + 1} added`);
+  1839→  };
+  1840→
+  1841→  const removeScene = (id: string) => {
+  1842→    if (scenes.length <= 1) {
+  1843→      notify("Keep at least one scene");
+  1844→      return;
+  1845→    }
+  1846→    const idx = scenes.findIndex((s) => s.id === id);
+  1847→    pushHistory(`Scene ${idx + 1} removed`);
+  1848→    setScenes((prev) => prev.filter((s) => s.id !== id));
+  1849→    if (idx === sceneIdx) setSceneIdx(Math.max(0, idx - 1));
+  1850→    else if (idx < sceneIdx) setSceneIdx((i) => Math.max(0, i - 1));
+  1851→    setSelectedBlock(null);
+  1852→    notify(`Scene ${idx + 1} removed`);
+  1853→  };
+  1854→
+  1855→  const commitTitle = () => {
+  1856→    setEditing(false);
+  1857→    const t = title.trim();
+  1858→    if (t && t !== (opts.title ?? "Untitled Experience")) notify("Title updated");
+  1859→    if (!t) setTitle(opts.title ?? "Untitled Experience");
+  1860→  };
+  1861→
+  1862→  /* ---------- Block editing (sheet + live apply, history at open) ---------- */
+  1863→
+  1864→  /** Live-applies block config changes from the editor sheet */
+  1865→  const updateBlockData = (id: string, data: BlockData) => {
+  1866→    setScenes((prev) =>
+  1867→      prev.map((s) => ({
+  1868→        ...s,
+  1869→        blocks: s.blocks.map((b) => (b.id === id ? { ...b, data } : b)),
+  1870→      }))
+  1871→    );
+  1872→  };
+  1873→
+  1874→  /** Opens the block editor (records the pre-edit state once for undo) */
+  1875→  const openBlockEditor = (id: string) => {
+  1876→    const b = scenes.flatMap((s) => s.blocks).find((x) => x.id === id);
+  1877→    pushHistory(`${BLOCK_BY_TYPE[b?.type ?? ""]?.label ?? "Block"} edited`);
+  1878→    setEditBlockId(id);
+  1879→  };
+  1880→
+  1881→  /* ---------- Soundtrack ---------- */
+  1882→
+  1883→  const selectTrack = (song: SongPick | null) => {
+  1884→    if ((track?.id ?? null) === (song?.id ?? null) && !!track === !!song) return;
+  1885→    pushHistory(song ? "Soundtrack changed" : "Soundtrack removed");
+  1886→    setTrack(song);
+  1887→    notify(song ? `“${song.title}” set as soundtrack` : "Soundtrack removed");
+  1888→  };
+  1889→
+  1890→  /* ---------- Cover art ---------- */
+  1891→
+  1892→  const selectCover = (variant: number) => {
+  1893→    if (cover === variant) return;
+  1894→    pushHistory("Cover art changed");
+  1895→    setCover(variant);
+  1896→    notify(`“${COVER_NAMES[variant]}” cover applied`);
+  1897→  };
+  1898→
+  1899→  /** Record the pre-edit title once, at edit start */
+  1900→  const beginEditTitle = () => {
+  1901→    pushHistory("Title renamed");
+  1902→    setEditing(true);
+  1903→  };
+  1904→
+  1905→  /* ---------- Reorder handlers (history pushed once per drag) ---------- */
+  1906→
+  1907→  const reorderBlocks = (next: Block[]) => {
+  1908→    const sameOrder =
+  1909→      next.length === scene.blocks.length &&
+  1910→      next.every((b, i) => b.id === scene.blocks[i].id);
+  1911→    if (sameOrder) return;
+  1912→    if (blockDragStarted.current) {
+  1913→      pushHistory("Blocks reordered");
+  1914→      blockDragStarted.current = false;
+  1915→    }
+  1916→    setScenes((prev) =>
+  1917→      prev.map((s, i) => (i === sceneIdx ? { ...s, blocks: next } : s))
+  1918→    );
+  1919→  };
+  1920→
+  1921→  const reorderScenes = (next: Scene[]) => {
+  1922→    const sameOrder =
+  1923→      next.length === scenes.length && next.every((s, i) => s.id === scenes[i].id);
+  1924→    if (sameOrder) return;
+  1925→    if (sceneDragStarted.current) {
+  1926→      pushHistory("Scenes reordered");
+  1927→      sceneDragStarted.current = false;
+  1928→    }
+  1929→    const currentId = scene.id;
+  1930→    setScenes(next);
+  1931→    const newIdx = next.findIndex((s) => s.id === currentId);
+  1932→    if (newIdx >= 0) setSceneIdx(newIdx);
+  1933→  };
+  1934→
+  1935→  /* ---------- AI message insertion (registered as an event handler via context ref) ---------- */
+  1936→
+  1937→  /** Inserts a composed message into the current scene (called from the composer sheet) */
+  1938→  const insertAiMessage = (message: string) => {
+  1939→    const id = `b${idRef.current++}`;
+  1940→    pushHistory("AI message added");
+  1941→    setScenes((prev) =>
+  1942→      prev.map((s, i) =>
+  1943→        i === sceneIdx ? { ...s, blocks: [...s.blocks, { id, type: "text", text: message }] } : s
+  1944→      )
+  1945→    );
+  1946→    setSelectedBlock(id);
+  1947→    notify(`AI message added to Scene ${sceneIdx + 1}`);
+  1948→    requestAnimationFrame(() => {
+  1949→      blocksEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  1950→    });
+  1951→  };
+  1952→
+  1953→  // Keep the context ref pointing at the latest handler (assigning a ref in an effect is cheap + lint-safe)
+  1954→  useEffect(() => {
+  1955→    aiInsertRef.current = insertAiMessage;
+  1956→    return () => {
+  1957→      if (aiInsertRef.current === insertAiMessage) aiInsertRef.current = null;
+  1958→    };
+  1959→  });
+  1960→
+  1961→  /* ---------- Keyboard: Escape closes (deferred), ⌘Z / ⇧⌘Z undo-redo ---------- */
+  1962→
+  1963→  useEffect(() => {
+  1964→    const onKey = (e: KeyboardEvent) => {
+  1965→      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+  1966→        if (sheet || player || editing || localSheet) return;
+  1967→        e.preventDefault();
+  1968→        if (e.shiftKey) redo();
+  1969→        else undo();
+  1970→        return;
+  1971→      }
+  1972→      if (e.key === "Escape" && !sheet && !player && !localSheet) onClose();
+  1973→    };
+  1974→    window.addEventListener("keydown", onKey);
+  1975→    return () => window.removeEventListener("keydown", onKey);
+  1976→  }, [sheet, player, editing, localSheet, onClose, undo, redo]);
+  1977→
+  1978→  const canUndo = past.length > 0;
+  1979→  const canRedo = future.length > 0;
+  1980→
+  1981→  return (
+  1982→    <motion.div
+  1983→      initial={{ x: "100%" }}
+  1984→      animate={{ x: 0 }}
+  1985→      exit={{ x: "100%" }}
+  1986→      transition={{ type: "spring", stiffness: 380, damping: 40 }}
+  1987→      className="absolute inset-0 z-[60] flex flex-col bg-[#F5F5F7]"
+  1988→      role="dialog"
+  1989→      aria-modal="true"
+  1990→      aria-label="Experience builder"
+  1991→    >
+  1992→      {/* ---------- Top chrome ---------- */}
+  1993→      <header className="relative z-10 flex items-center gap-3 border-b border-[#1D1D1F]/[0.07] bg-white/85 px-4 pb-3 pt-4 shadow-[0_10px_30px_-18px_rgba(29,29,31,0.25)] backdrop-blur-xl">
+  1994→        <button
+  1995→          type="button"
+  1996→          onClick={onClose}
+  1997→          aria-label="Back to app"
+  1998→          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#007AFF]/[0.1] text-[#007AFF] transition-transform active:scale-90"
+  1999→        >
+  2000→          <ChevronLeft size={20} strokeWidth={2.4} aria-hidden />
+
+[showing lines 1-2000 of 2544; use offset=2001 with limit to continue reading]
