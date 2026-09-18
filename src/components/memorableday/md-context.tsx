@@ -128,6 +128,12 @@ export interface MDContextValue {
   drafts: UserDraft[];
   /** Creates or updates a draft (deduped by id, newest first) */
   saveDraft: (draft: UserDraft) => void;
+  /** Spotlight-style command palette (⌘K) visibility */
+  paletteOpen: boolean;
+  /** Opens the command palette */
+  openPalette: () => void;
+  /** Closes the command palette */
+  closePalette: () => void;
 }
 
 export const MDContext = createContext<MDContextValue | null>(null);

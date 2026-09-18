@@ -22,6 +22,7 @@ import { SearchBar } from "./search-bar";
 import { SideNav } from "./side-nav";
 import { BottomNav } from "./bottom-nav";
 import { BottomSheet } from "./bottom-sheet";
+import { CommandPalette } from "./command-palette";
 import { MomentPlayer } from "./moment-player";
 import { ExperienceBuilder } from "./builder";
 import { WelcomeTour } from "./welcome-tour";
@@ -234,6 +235,7 @@ export function AppShell() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [theme, setThemeState] = useState<ThemeMode>("system");
   const [drafts, setDrafts] = useState<UserDraft[]>([]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const aiInsertRef = useRef<AiInsertFn | null>(null);
   const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -306,6 +308,9 @@ export function AppShell() {
   }, []);
 
   const openTour = useCallback(() => setTourOpen(true), []);
+
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
 
   const openAuth = useCallback((mode?: AuthMode) => {
     setAuthMode(mode ?? "signin");
@@ -456,6 +461,9 @@ export function AppShell() {
           setTheme,
           drafts,
           saveDraft,
+          paletteOpen,
+          openPalette,
+          closePalette,
         }}
       >
       {/*
@@ -472,6 +480,7 @@ export function AppShell() {
           onNotifications={() => openSheet("notifications")}
           onAccount={() => openSettings("account")}
           onNewMoment={() => openSheet("create")}
+          onPalette={openPalette}
         />
 
         <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
@@ -682,6 +691,9 @@ export function AppShell() {
             window.setTimeout(() => openAuth("signin"), 300);
           }}
         />
+
+        {/* Spotlight command palette (⌘K) — desktop power layer */}
+        <CommandPalette />
         </div>
       </div>
       </MDContext.Provider>

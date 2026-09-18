@@ -535,3 +535,47 @@
     cursor: pointer;
   }
 }
+
+/* ================================================================== */
+/* KEYBOARD ACCESSIBILITY — visible focus ring (keyboard only)        */
+/* Only appears for :focus-visible, so pointer users never see it.    */
+/* ================================================================== */
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="option"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgba(0, 122, 255, 0.55);
+  outline-offset: 2px;
+}
+.dark button:focus-visible,
+.dark [role="button"]:focus-visible,
+.dark [role="tab"]:focus-visible,
+.dark [role="option"]:focus-visible,
+.dark a:focus-visible,
+.dark input:focus-visible,
+.dark textarea:focus-visible,
+.dark select:focus-visible,
+.dark [tabindex]:focus-visible {
+  outline: 2px solid rgba(100, 210, 255, 0.65);
+}
+
+/* ================================================================== */
+/* REDUCED MOTION — honor the OS setting for CSS animations/transitions */
+/* (framer-motion is already gated by MotionConfig reducedMotion="user") */
+/* ================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

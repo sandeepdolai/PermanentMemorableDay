@@ -406,3 +406,46 @@ Stage Summary:
 - Responsive numbers reference: sidebar 248px (md-lg) / 264px (xl+); frame max-w 1560 (lg+); content containers: home 1040, explore/gallery 1120, create 900, profile 880, builder 720; sheet 440px centered (md+); grids: explore/gallery 2→3(lg)→4(xl), scene blocks 3→4(sm)→5(lg), recent moments 2(lg), settings 2(lg).
 - Next-phase candidates: Prisma models + real CRUD (UI feature-complete at every breakpoint), recipient route /e/[slug] (blocked — single-route constraint), desktop keyboard shortcuts beyond "/" (e.g. g+h navigation, ⌘K palette), sidebar collapse/expand on md, print/export styles.
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+---
+Task ID: 10
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 10)
+Task: Assess project status, QA via agent-browser, then continue development — focus: desktop power layer (⌘K command palette), sidebar collapse, a11y/motion polish, per the round mandate (more features + more styling detail).
+
+Work Log:
+- Status assessment: dev server healthy (all GET / 200), lint clean. The 500-error trace in dev.log pointed at search-bar.tsx's "/" effect but was a transient HMR artifact — full smoke QA (5 tabs, create sheet → builder → player preview → Escape chains, desktop layout, "/" shortcut) found ZERO real errors. No bugs → feature work per the worklog's top next-phase candidate ("⌘K palette" desktop keyboard shortcuts).
+- NEW FEATURE — Spotlight-style Command Palette (new file command-palette.tsx, ~640 lines):
+  - Opens with ⌘K / Ctrl+K from anywhere (tour-safe), via a new "Search & commands ⌘K" trigger pill in the sidebar rail, or via the palette command itself. Rendered INSIDE the content-area overlay container (z-96) so the rail stays live beside it — consistent with every other overlay (verified: centers at content-area center 508px at 768w, exactly like the sheets).
+  - Command surface (grouped, iOS Settings-style tinted icon tiles): Navigate (5 tabs, kbd hints G H/E/C/G/P) · Create (New moment, Blank canvas, AI-assisted, AI Composer) · Actions (Notifications w/ live unread count, Insights, Account, Pricing, theme toggle w/ resolved-dark detection, Replay tour, Keyboard shortcuts, Sign in) · Moments (all 8 MOMENTS → open in player) · Drafts (context drafts → "Continue 'title'" → builder w/ draftId) · Templates (all 8 EXPLORE_ITEMS → preview sheet).
+  - Search: case-insensitive scoring (startsWith 5 > includes 4 > subtitle 3 > keywords 2), stable-sorted; grouped sections when empty, flat ranked list when searching, "Search for 'query'" fallback row LAST (Spotlight ordering — matches outrank the fallback; initial fallback-first order was corrected after QA), full search hand-off via submitSearch. Empty state w/ SearchX icon.
+  - Keyboard: ↑↓ wrap-around navigation (rows kept in view via scrollIntoView block:nearest), ↵ runs, Esc closes ONLY the palette (capture-phase listener + stopPropagation — verified over an open notifications sheet: palette closes, sheet survives). onMouseDown preventDefault keeps focus on the input while clicking rows. Reset-on-open via the previous-render pattern (lint-clean, no setState-in-effect).
+  - Visual: ink scrim + 3px blur, floating 560px panel at max(72px,10vh), glass border/hairline, 54px input row w/ esc-kbd chip ↔ clear button, 30px tinted icon tiles, active row = solid #007AFF with white text (Spotlight signature), kbd hints on rows, footer hints bar (↑↓ Navigate · ↵ Run · ⌘K Toggle · MemorableDay). Full dark-mode styling inline.
+- NEW FEATURE — Keyboard shortcuts help ("?" from anywhere):
+  - Third overlay in command-palette.tsx (z-97, above the palette): 3 groups × 12 rows (Global: ⌘K, /, N, ? — Navigation: G+H/C/E/G/P — In the palette: ↑↓, ↵, esc) with real kbd key chips (bordered, #F5F5F7, 1px bottom shadow), esc-kbd in the header, "Press ? anytime" footer. Toggled by "?" (typing-guarded, tour-guarded), opened by the palette's "Keyboard shortcuts" command, Escape closes only it (help wins over palette in the capture chain).
+- NEW FEATURE — Global single-key shortcuts (documented in help):
+  - "n" → New moment sheet; "g" then h/e/c/g/p → tab navigation (800ms window, mail-app style); "/" already existed (search pill). All guarded: not typing, no modal/dialog open, not in palette.
+- NEW FEATURE — Sidebar rail collapse (macOS pattern):
+  - side-nav.tsx gains a Collapse toggle (PanelLeftClose/Open) above the notifications card; rail animates 248px ↔ 76px (264px at xl when expanded) with Apple cubic-bezier(0.32,0.72,0,1) width transition. Collapsed: icon-only brand/search/new-moment/nav/notifications/account rows (all centered, title-attr tooltips, aria-labels preserved), layoutId active highlight still slides. State persists in localStorage "md-rail", hydrated post-paint (rAF — SSR-safe, verified persisted across reload).
+- STYLING / A11Y (globals.css):
+  - Global :focus-visible ring (2px rgba(0,122,255,0.55), offset 2px — light; #64D2FF variant in dark) on buttons/[role]/inputs/links/[tabindex] — keyboard users now get visible focus everywhere (pointer users never see it).
+  - prefers-reduced-motion: all CSS animations/transitions clamp to 0.01ms (framer already gated by MotionConfig reducedMotion="user") — vestibular-safe.
+- CONTEXT: md-context.tsx + app-shell.tsx — paletteOpen/openPalette/closePalette added to MDContext; CommandPalette renders inside the content area after WelcomeTour; SideNav gains onPalette prop.
+
+- VERIFICATION (agent-browser at 390×844, 768×1024, 1440×900 + VLM):
+  - Palette: ⌘K opens (input auto-focused) w/ sections Navigate/Create/Actions/Moments/Templates (Drafts empty — no drafts in profile, correct); arrows move active (Home→Create→Explore), Enter switches view + closes; "gold" filters to Golden Hour + fallback LAST; Enter on fallback → Explore + "Showing results for 'gold'" toast; theme command flips dark class; sidebar trigger opens; Escape/scrim closes. Over a sheet: Escape closes only the palette.
+  - Shortcuts: "?" opens (12 rows, 3 groups), Escape closes (earlier "not closing" reading was an exit-animation timing artifact — re-verified with 1s wait), palette command "shortcut" ranks first and opens help.
+  - Rail: collapse → 76px + icon-only + storage "collapsed"; survives reload; expand → 264px @1440 + storage "expanded".
+  - Shortcuts in the wild: g→h lands Home; n opens create sheet; ⌘K toggle works on phone too (panel fits 390px).
+  - Phone regression: sidebar hidden, bottom nav live, 5 tabs cycle, New moment → Start Creating → builder → Preview (aria-label "Preview experience", icon-only) → player → double-Escape chain — zero errors. NOTE: matching the builder's Preview button requires the aria-label (textContent is empty) — earlier "nopreview" was a script artifact, not a bug.
+  - Tablet 768: rail 248 + search trigger; palette centers in content area (508=508) and fits viewport.
+  - VLM visual QA: palette empty state PASS (centered, readable, active row clear, no defects); shortcuts help PASS (kbd chips aligned); collapsed rail PASS (icons even, no label remnants). Known VLM phantom-cut-off quirk: none observed this round.
+  - dev.log: only 200s post-changes; lint exit 0; zero page errors, zero console errors.
+
+Stage Summary:
+- Round 10 complete — the desktop power layer: a genuine Spotlight-style ⌘K palette reaching every corner of the app, a "?" shortcuts guide, single-key navigation (n, g-chains), a collapsible macOS sidebar rail, and keyboard/reduced-motion accessibility polish. The responsive desktop experience from round 9 now has the interaction depth to match.
+- Still UI-only with mock data per the user's standing instruction. localStorage keys now: md-onboarded, md-saved, md-drafts, md-theme, md-rail.
+- Files: NEW command-palette.tsx (palette + ShortcutsHelp + global key layer); MODIFIED side-nav.tsx (search trigger + collapse + removed redundant focus-visible ring now covered globally), app-shell.tsx (palette state/wiring + onPalette), md-context.tsx (palette APIs), globals.css (focus-visible + reduced-motion).
+- Layer stack: content z-10 < chrome z-50 < builder z-60 < player z-70 < app sheets z-80/81 < toast z-90 < tour z-95 < palette z-96 < shortcuts help z-97.
+- Keyboard map: ⌘K palette · / search · N new moment · ? help · G+letter tab nav · ↑↓/↵ palette · esc closes topmost layer.
+- Known tooling quirks (not app bugs): agent-browser `errors` prints empty ✗ marks; eval variable redeclaration across calls needs IIFEs; exit animations need ~1s before absent-checks; Preview button is icon-only (aria-label match required).
+- Next-phase candidates: Prisma models + real CRUD (UI is feature-complete at every breakpoint incl. power layer), scene-level cover art picker in builder, insights export/share card, e2e harness, print styles.
+- Reminder: user should rotate the GitHub token shared earlier in chat.
