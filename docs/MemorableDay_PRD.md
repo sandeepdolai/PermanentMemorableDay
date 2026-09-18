@@ -52,7 +52,7 @@ MemorableDay monetizes through subscription plans:
 
 Secondary revenue streams include AI credit top-ups, premium 3D asset packs, and white-label licensing.
 
-Lemon Squeezy handles all billing and subscription management.
+Dodo Payments handles all billing and subscription management.
 
 ### Infrastructure Philosophy
 
@@ -1298,7 +1298,7 @@ The recipient experience is the most important UX in the entire platform. It is 
 Every experience has a unique URL:
 
 ```
-memorableday.online/e/[unique-id]
+memorableday.in/e/[unique-id]
 ```
 
 Where `[unique-id]` is a short, URL-safe, non-guessable identifier (e.g., `abc123xyz`).
@@ -1473,8 +1473,8 @@ Each experience has configurable settings:
 ### 16.5 Experience URL Architecture
 
 ```
-memorableday.online/e/[experience-id]     — Standard experience URL
-memorableday.online/e/[experience-id]/preview  — Creator preview (authenticated)
+memorableday.in/e/[experience-id]     — Standard experience URL
+memorableday.in/e/[experience-id]/preview  — Creator preview (authenticated)
 gift.brand.com/e/[experience-id]          — Custom domain experience (business)
 ```
 
@@ -3006,7 +3006,7 @@ Every experience has a unique URL. Sharing must be frictionless — one tap to s
 ### 25.2 Experience URL
 
 ```
-memorableday.online/e/[experience-id]
+memorableday.in/e/[experience-id]
 ```
 
 **URL requirements:**
@@ -4510,7 +4510,7 @@ Agencies can offer MemorableDay as their own product to clients:
 # 16 — API
 
 **Section:** §35 API  
-**PRD Index:** [← Account & Team](15-account-team-agency-white-label.md) | [Next: Payments →](17-payments-lemon-squeezy-entitlements.md)
+**PRD Index:** [← Account & Team](15-account-team-agency-white-label.md) | [Next: Payments →](17-payments-dodo-payments-entitlements.md)
 
 ---
 
@@ -4720,7 +4720,7 @@ X-RateLimit-Reset: 1234567890
 ### 35.9 API Documentation
 
 **Requirements:**
-- `PRD-API-020`: API documentation must be publicly available at `memorableday.online/docs/api`
+- `PRD-API-020`: API documentation must be publicly available at `memorableday.in/docs/api`
 - `PRD-API-021`: Documentation must include: endpoint reference, authentication guide, code examples, error reference
 - `PRD-API-022`: Documentation must include interactive API explorer (e.g., Swagger UI or Redoc)
 - `PRD-API-023`: Code examples must be available in at least: JavaScript, Python, PHP, Ruby
@@ -4778,11 +4778,11 @@ MemorableDay sends webhook notifications to registered endpoints when events occ
 
 ---
 
-*Next: [Payments, Lemon Squeezy & Entitlements →](17-payments-lemon-squeezy-entitlements.md)*
+*Next: [Payments, Dodo Payments & Entitlements →](17-payments-dodo-payments-entitlements.md)*
 
-# 17 — Payments, Lemon Squeezy Integration & Subscription Entitlements
+# 17 — Payments, Dodo Payments Integration & Subscription Entitlements
 
-**Sections:** §36 Payments · §37 Lemon Squeezy Integration Requirements · §38 Subscription Entitlements  
+**Sections:** §36 Payments · §37 Dodo Payments Integration Requirements · §38 Subscription Entitlements  
 **PRD Index:** [← API](16-api.md) | [Next: Pricing Strategy →](18-pricing-strategy-free-plan.md)
 
 ---
@@ -4802,16 +4802,16 @@ Billing must be transparent, reliable, and frictionless. Users should never be s
 
 ### 36.2 Payment Provider
 
-**Primary payment provider:** Lemon Squeezy
+**Primary payment provider:** Dodo Payments
 
-Lemon Squeezy is selected because:
+Dodo Payments is selected because:
 - It is a Merchant of Record (MoR) — handles sales tax, VAT, and compliance globally
 - It supports subscription billing with all required lifecycle events
 - It provides a hosted checkout that is PCI-compliant
 - It has a developer-friendly API and webhook system
 - It is cost-effective for early-stage SaaS
 
-**What Lemon Squeezy handles:**
+**What Dodo Payments handles:**
 - Payment processing (credit card, PayPal, etc.)
 - Subscription management (create, upgrade, downgrade, cancel)
 - Tax calculation and remittance (as Merchant of Record)
@@ -4828,16 +4828,18 @@ Lemon Squeezy is selected because:
 
 ### 36.3 Supported Payment Methods
 
-Lemon Squeezy supports:
+Dodo Payments supports:
 - Credit/debit cards (Visa, Mastercard, American Express, Discover)
 - PayPal
 - Apple Pay (where supported)
 - Google Pay (where supported)
+- UPI (Unified Payments Interface — important for the Indian market)
+- Additional local payment methods depending on customer region
 
 **Requirements:**
-- `PRD-PAY-001`: All payment processing must go through Lemon Squeezy
+- `PRD-PAY-001`: All payment processing must go through Dodo Payments
 - `PRD-PAY-002`: MemorableDay must never store raw payment card data
-- `PRD-PAY-003`: Payment forms must be hosted by Lemon Squeezy (not embedded in MemorableDay)
+- `PRD-PAY-003`: Payment forms must be hosted by Dodo Payments (not embedded in MemorableDay)
 
 ### 36.4 Subscription Types
 
@@ -4851,32 +4853,32 @@ Lemon Squeezy supports:
 
 **Primary currency:** USD (United States Dollar)
 
-All prices are displayed and charged in USD. Lemon Squeezy handles currency conversion for international customers.
+All prices are displayed and charged in USD, with INR (Indian Rupee) supported as a secondary currency for the Indian market (memorableday.in). Dodo Payments' adaptive currency support handles currency conversion for international customers.
 
 ---
 
-## §37 Lemon Squeezy Integration Requirements
+## §37 Dodo Payments Integration Requirements
 
-### 37.1 Lemon Squeezy Concepts
+### 37.1 Dodo Payments Concepts
 
-Understanding Lemon Squeezy's data model is essential for correct integration:
+Understanding Dodo Payments's data model is essential for correct integration:
 
 | Concept | Description |
 |---|---|
-| **Store** | The MemorableDay Lemon Squeezy store |
+| **Business** | The MemorableDay Dodo Payments business account |
 | **Product** | A plan (e.g., "Personal Plan") |
-| **Variant** | A billing period for a product (e.g., "Personal Monthly", "Personal Annual") |
-| **Customer** | A Lemon Squeezy customer record (linked to MemorableDay user) |
-| **Subscription** | An active subscription to a variant |
-| **Order** | A completed purchase (subscription or one-time) |
-| **Checkout** | The hosted checkout page for a variant |
-| **Webhook** | Event notification from Lemon Squeezy to MemorableDay |
+| **Price** | A billing period for a product (e.g., "Personal Monthly", "Personal Annual") |
+| **Customer** | A Dodo Payments customer record (linked to MemorableDay user) |
+| **Subscription** | An active subscription to a price |
+| **Payment** | A completed purchase (subscription or one-time) |
+| **Payment Link / Checkout** | The hosted checkout page for a price |
+| **Webhook** | Event notification from Dodo Payments to MemorableDay |
 
-### 37.2 Product and Variant Structure
+### 37.2 Product and Price Structure
 
-Each MemorableDay plan is a Lemon Squeezy Product with two Variants (monthly and annual):
+Each MemorableDay plan is a Dodo Payments Product with two Prices (monthly and annual):
 
-| Plan | Product | Variants |
+| Plan | Product | Prices |
 |---|---|---|
 | Personal | Personal Plan | Personal Monthly, Personal Annual |
 | Pro | Pro Plan | Pro Monthly, Pro Annual |
@@ -4886,49 +4888,54 @@ Each MemorableDay plan is a Lemon Squeezy Product with two Variants (monthly and
 | Enterprise | Enterprise Plan | Enterprise Annual (custom) |
 
 **Requirements:**
-- `PRD-PAY-004`: Each plan must have a corresponding Lemon Squeezy Product
-- `PRD-PAY-005`: Each billing period must be a separate Lemon Squeezy Variant
-- `PRD-PAY-006`: Variant IDs must be stored in MemorableDay's configuration for entitlement mapping
+- `PRD-PAY-004`: Each plan must have a corresponding Dodo Payments Product
+- `PRD-PAY-005`: Each billing period must be a separate Dodo Payments Price
+- `PRD-PAY-006`: Product and Price IDs must be stored in MemorableDay's configuration for entitlement mapping
 
 ### 37.3 Checkout Flow
 
 **Checkout flow:**
 
 1. User selects a plan in MemorableDay
-2. MemorableDay generates a Lemon Squeezy checkout URL for the selected variant
-3. User is redirected to Lemon Squeezy's hosted checkout
-4. User completes payment on Lemon Squeezy
-5. Lemon Squeezy sends `order_created` and `subscription_created` webhooks to MemorableDay
+2. MemorableDay generates a Dodo Payments checkout URL (payment link) for the selected price
+3. User is redirected to Dodo Payments's hosted checkout
+4. User completes payment on Dodo Payments
+5. Dodo Payments sends `payment.succeeded` and `subscription.active` webhooks to MemorableDay
 6. MemorableDay updates the user's subscription status and entitlements
 7. User is redirected back to MemorableDay with a success message
 
 **Requirements:**
 - `PRD-PAY-007`: Checkout URL must include the user's email (pre-filled) and a custom redirect URL
-- `PRD-PAY-008`: Checkout must include a `custom_data` parameter with the MemorableDay user ID for webhook correlation
+- `PRD-PAY-008`: Checkout must include a `metadata` parameter with the MemorableDay user ID for webhook correlation
 - `PRD-PAY-009`: Checkout redirect must return the user to the correct page after payment
 - `PRD-PAY-010`: Checkout must support discount codes (for promotions)
 
 ### 37.4 Webhook Events
 
-MemorableDay must handle the following Lemon Squeezy webhook events:
+MemorableDay must handle the following Dodo Payments webhook events:
 
 | Event | Description | MemorableDay Action |
 |---|---|---|
-| `order_created` | New order placed | Record order, update subscription status |
-| `subscription_created` | New subscription created | Activate plan, grant entitlements |
-| `subscription_updated` | Subscription changed (upgrade/downgrade) | Update plan, adjust entitlements |
-| `subscription_cancelled` | Subscription cancelled | Schedule plan downgrade at period end |
-| `subscription_resumed` | Cancelled subscription resumed | Reactivate plan |
-| `subscription_expired` | Subscription expired (after cancellation) | Downgrade to free plan |
-| `subscription_paused` | Subscription paused | Restrict access (maintain data) |
-| `subscription_unpaused` | Subscription unpaused | Restore access |
-| `subscription_payment_success` | Renewal payment succeeded | Update renewal date |
-| `subscription_payment_failed` | Renewal payment failed | Send dunning email, restrict access after grace period |
-| `subscription_payment_recovered` | Failed payment recovered | Restore full access |
-| `subscription_payment_refunded` | Payment refunded | Adjust subscription status |
+| `payment.succeeded` | Payment completed (subscription or one-time) | Record payment, update subscription status |
+| `payment.failed` | Payment failed | Trigger dunning flow, notify user |
+| `subscription.active` | New subscription activated | Activate plan, grant entitlements |
+| `subscription.updated` | Subscription details changed | Update subscription data |
+| `subscription.plan_changed` | Subscription changed (upgrade/downgrade) | Update plan, adjust entitlements |
+| `subscription.cancelled` | Subscription cancelled | Schedule plan downgrade at period end |
+| `subscription.paused` | Subscription paused | Restrict access (maintain data) |
+| `subscription.unpaused` | Paused subscription resumed | Restore access |
+| `subscription.expired` | Subscription expired (after cancellation or failed payments) | Downgrade to free plan |
+| `subscription.renewed` | Renewal payment succeeded | Update renewal date |
+| `subscription.past_due` | Subscription payment overdue | Notify user, restrict access after grace period |
+| `subscription.on_hold` | Subscription on hold (billing issue) | Restrict access (maintain data) |
+| `subscription.update_payment_method` | Payment method needs updating | Email user a payment-method update link |
+| `dunning.started` | Failed payment dunning started | Send dunning email |
+| `dunning.recovered` | Failed payment recovered | Restore full access |
+| `refund.succeeded` | Payment refunded | Adjust subscription status |
+| `dispute.opened` | Chargeback dispute opened | Flag payment, respond via Dodo Payments dashboard |
 
 **Requirements:**
-- `PRD-PAY-011`: All Lemon Squeezy webhooks must be verified using the webhook signature
+- `PRD-PAY-011`: All Dodo Payments webhooks must be verified using the webhook signature (Standard Webhooks format via the `standardwebhooks` SDK)
 - `PRD-PAY-012`: Webhook processing must be idempotent (duplicate events must not cause duplicate actions)
 - `PRD-PAY-013`: Webhook processing must be asynchronous (respond 200 immediately, process in background)
 - `PRD-PAY-014`: Failed webhook processing must be retried with exponential backoff
@@ -4938,43 +4945,43 @@ MemorableDay must handle the following Lemon Squeezy webhook events:
 
 **Upgrade flow:**
 1. User selects a higher plan
-2. MemorableDay redirects to Lemon Squeezy checkout for the new variant
-3. Lemon Squeezy handles proration (charges the difference)
-4. `subscription_updated` webhook received
+2. MemorableDay redirects to Dodo Payments checkout for the new price (or calls the Change Plan API)
+3. Dodo Payments handles proration (charges the difference)
+4. `subscription.plan_changed` webhook received
 5. MemorableDay immediately grants new entitlements
 
 **Downgrade flow:**
 1. User selects a lower plan
-2. MemorableDay redirects to Lemon Squeezy checkout or customer portal
-3. Lemon Squeezy schedules the downgrade at the end of the current period
-4. `subscription_updated` webhook received (with `ends_at` date)
-5. MemorableDay maintains current entitlements until `ends_at`
-6. At `ends_at`: `subscription_expired` or `subscription_updated` webhook received
+2. MemorableDay redirects to Dodo Payments checkout or customer portal
+3. Dodo Payments schedules the downgrade at the end of the current period
+4. `subscription.updated` webhook received (with the scheduled change date)
+5. MemorableDay maintains current entitlements until the scheduled date
+6. At the scheduled date: `subscription.expired` or `subscription.plan_changed` webhook received
 7. MemorableDay applies new (lower) entitlements
 
 **Cancellation flow:**
-1. User cancels via Lemon Squeezy customer portal or MemorableDay UI
-2. `subscription_cancelled` webhook received
+1. User cancels via Dodo Payments customer portal or MemorableDay UI
+2. `subscription.cancelled` webhook received
 3. MemorableDay maintains current entitlements until end of billing period
-4. At period end: `subscription_expired` webhook received
+4. At period end: `subscription.expired` webhook received
 5. MemorableDay downgrades to free plan
 
 **Failed payment flow:**
 1. Renewal payment fails
-2. `subscription_payment_failed` webhook received
+2. `payment.failed` (or `subscription.past_due` / `dunning.started`) webhook received
 3. MemorableDay sends dunning email to user
-4. Lemon Squeezy retries payment (per its dunning schedule)
-5. If payment recovered: `subscription_payment_recovered` webhook → restore access
-6. If payment not recovered after grace period: `subscription_expired` webhook → downgrade to free
+4. Dodo Payments retries payment (per its dunning schedule)
+5. If payment recovered: `dunning.recovered` webhook → restore access
+6. If payment not recovered after grace period: `subscription.expired` webhook → downgrade to free
 
 **Requirements:**
 - `PRD-PAY-016`: Users must not lose access immediately on payment failure (grace period of at least 3 days)
 - `PRD-PAY-017`: Users must receive email notifications for: payment failure, upcoming renewal, cancellation confirmation
-- `PRD-PAY-018`: Users must be able to update payment method via Lemon Squeezy customer portal
+- `PRD-PAY-018`: Users must be able to update payment method via Dodo Payments customer portal
 
 ### 37.6 Customer Portal
 
-Lemon Squeezy provides a hosted customer portal where users can:
+Dodo Payments provides a hosted customer portal where users can:
 - View subscription details
 - Update payment method
 - Download invoices
@@ -4988,16 +4995,16 @@ Lemon Squeezy provides a hosted customer portal where users can:
 ### 37.7 Free Trials
 
 **Requirements:**
-- `PRD-PAY-021`: Free trials must be supported via Lemon Squeezy's trial period feature
+- `PRD-PAY-021`: Free trials must be supported via Dodo Payments's trial period feature
 - `PRD-PAY-022`: Trial period must be configurable per plan (recommended: 14 days for Business plans)
 - `PRD-PAY-023`: Trial users must have full access to plan features during trial
-- `PRD-PAY-024`: Trial expiration must trigger `subscription_expired` webhook → downgrade to free
-- `PRD-PAY-025`: Credit card must be required at trial start (Lemon Squeezy standard behavior)
+- `PRD-PAY-024`: Trial expiration must trigger `subscription.expired` webhook → downgrade to free
+- `PRD-PAY-025`: Credit card must be required at trial start (Dodo Payments standard behavior)
 
 ### 37.8 Promotional Pricing and Coupons
 
 **Requirements:**
-- `PRD-PAY-026`: Promotional discount codes must be created in Lemon Squeezy
+- `PRD-PAY-026`: Promotional discount codes must be created in Dodo Payments
 - `PRD-PAY-027`: Discount codes must be applicable at checkout
 - `PRD-PAY-028`: Discount codes must support: percentage off, fixed amount off, one-time or recurring
 - `PRD-PAY-029`: Discount codes must have configurable expiration and usage limits
@@ -5010,8 +5017,8 @@ In addition to subscriptions, MemorableDay may offer one-time purchases:
 - Additional storage
 
 **Requirements:**
-- `PRD-PAY-030`: One-time purchases must use Lemon Squeezy's one-time product type
-- `PRD-PAY-031`: One-time purchase fulfillment must be triggered by `order_created` webhook
+- `PRD-PAY-030`: One-time purchases must use Dodo Payments' one-time payment links (one-time product type)
+- `PRD-PAY-031`: One-time purchase fulfillment must be triggered by `payment.succeeded` webhook
 - `PRD-PAY-032`: One-time purchases must be reflected in the user's account immediately after payment
 
 ---
@@ -5127,7 +5134,7 @@ User
 # 18 — Pricing Strategy & Free Plan
 
 **Sections:** §39 Pricing Strategy · §40 Free Plan  
-**PRD Index:** [← Payments & Entitlements](17-payments-lemon-squeezy-entitlements.md) | [Next: SEO →](19-seo-content-programmatic-seo.md)
+**PRD Index:** [← Payments & Entitlements](17-payments-dodo-payments-entitlements.md) | [Next: SEO →](19-seo-content-programmatic-seo.md)
 
 ---
 
@@ -5252,7 +5259,7 @@ MemorableDay has two pricing tracks: **Personal** and **Business**.
 ### 39.6 Pricing Page Requirements
 
 **Requirements:**
-- `PRD-SEO-005`: Pricing page must be publicly accessible at `memorableday.online/pricing`
+- `PRD-SEO-005`: Pricing page must be publicly accessible at `memorableday.in/pricing`
 - `PRD-UX-024`: Pricing page must clearly show the difference between personal and business tracks
 - `PRD-UX-025`: Pricing page must include a plan comparison table
 - `PRD-UX-026`: Pricing page must include a FAQ section addressing common objections
@@ -5419,7 +5426,7 @@ SEO is not a marketing afterthought for MemorableDay — it is a primary acquisi
 
 ### 41.2 Public Website Architecture for SEO
 
-The public website (`memorableday.online`) must be built for maximum SEO performance.
+The public website (`memorableday.in`) must be built for maximum SEO performance.
 
 **Technical requirements:**
 
@@ -5511,48 +5518,48 @@ The public website is designed with an Astro-based approach in mind — a framew
 **Public website URL structure:**
 
 ```
-memorableday.online/                          — Homepage
-memorableday.online/pricing                   — Pricing
-memorableday.online/features                  — Features overview
-memorableday.online/business                  — Business landing page
-memorableday.online/personal                  — Personal landing page
+memorableday.in/                          — Homepage
+memorableday.in/pricing                   — Pricing
+memorableday.in/features                  — Features overview
+memorableday.in/business                  — Business landing page
+memorableday.in/personal                  — Personal landing page
 
-memorableday.online/occasions/                — Occasion hub
-memorableday.online/occasions/birthday        — Birthday page
-memorableday.online/occasions/anniversary     — Anniversary page
-memorableday.online/occasions/valentines-day  — Valentine's Day page
-memorableday.online/occasions/[occasion]      — Any occasion
+memorableday.in/occasions/                — Occasion hub
+memorableday.in/occasions/birthday        — Birthday page
+memorableday.in/occasions/anniversary     — Anniversary page
+memorableday.in/occasions/valentines-day  — Valentine's Day page
+memorableday.in/occasions/[occasion]      — Any occasion
 
-memorableday.online/for/                      — Recipient hub
-memorableday.online/for/girlfriend            — Gift for girlfriend
-memorableday.online/for/boyfriend             — Gift for boyfriend
-memorableday.online/for/wife                  — Gift for wife
-memorableday.online/for/[recipient]           — Any recipient
+memorableday.in/for/                      — Recipient hub
+memorableday.in/for/girlfriend            — Gift for girlfriend
+memorableday.in/for/boyfriend             — Gift for boyfriend
+memorableday.in/for/wife                  — Gift for wife
+memorableday.in/for/[recipient]           — Any recipient
 
-memorableday.online/business/                 — Business use case hub
-memorableday.online/business/post-purchase    — Post-purchase experience
-memorableday.online/business/shipping         — Shipping experience
-memorableday.online/business/delivery         — Delivery experience
-memorableday.online/business/apology          — Apology experience
-memorableday.online/business/vip              — VIP experience
-memorableday.online/business/[use-case]       — Any use case
+memorableday.in/business/                 — Business use case hub
+memorableday.in/business/post-purchase    — Post-purchase experience
+memorableday.in/business/shipping         — Shipping experience
+memorableday.in/business/delivery         — Delivery experience
+memorableday.in/business/apology          — Apology experience
+memorableday.in/business/vip              — VIP experience
+memorableday.in/business/[use-case]       — Any use case
 
-memorableday.online/templates/                — Template hub
-memorableday.online/templates/birthday        — Birthday templates
-memorableday.online/templates/[occasion]      — Any occasion templates
+memorableday.in/templates/                — Template hub
+memorableday.in/templates/birthday        — Birthday templates
+memorableday.in/templates/[occasion]      — Any occasion templates
 
-memorableday.online/blog/                     — Blog hub
-memorableday.online/blog/[slug]               — Blog post
+memorableday.in/blog/                     — Blog hub
+memorableday.in/blog/[slug]               — Blog post
 
-memorableday.online/guides/                   — Guides hub
-memorableday.online/guides/[slug]             — Guide
+memorableday.in/guides/                   — Guides hub
+memorableday.in/guides/[slug]             — Guide
 
-memorableday.online/compare/                  — Comparison hub
-memorableday.online/compare/[competitor]      — Competitor comparison
+memorableday.in/compare/                  — Comparison hub
+memorableday.in/compare/[competitor]      — Competitor comparison
 
-memorableday.online/integrations/             — Integration hub
-memorableday.online/integrations/shopify      — Shopify integration page
-memorableday.online/integrations/[platform]   — Any integration
+memorableday.in/integrations/             — Integration hub
+memorableday.in/integrations/shopify      — Shopify integration page
+memorableday.in/integrations/[platform]   — Any integration
 ```
 
 ### 41.5 Structured Data
@@ -5704,15 +5711,15 @@ Programmatic SEO generates pages at scale from structured data. Done well, it cr
 
 Generate pages for every combination of occasion and recipient relationship:
 
-**Template:** `memorableday.online/[occasion]/for/[recipient]`
+**Template:** `memorableday.in/[occasion]/for/[recipient]`
 
 **Examples:**
-- `memorableday.online/birthday/for/girlfriend`
-- `memorableday.online/birthday/for/boyfriend`
-- `memorableday.online/anniversary/for/wife`
-- `memorableday.online/anniversary/for/husband`
-- `memorableday.online/graduation/for/daughter`
-- `memorableday.online/graduation/for/son`
+- `memorableday.in/birthday/for/girlfriend`
+- `memorableday.in/birthday/for/boyfriend`
+- `memorableday.in/anniversary/for/wife`
+- `memorableday.in/anniversary/for/husband`
+- `memorableday.in/graduation/for/daughter`
+- `memorableday.in/graduation/for/son`
 
 **Scale:** 20 occasions × 20 recipients = 400 pages
 
@@ -5733,13 +5740,13 @@ Generate pages for every combination of occasion and recipient relationship:
 
 Generate pages for every combination of industry and business use case:
 
-**Template:** `memorableday.online/business/[industry]/[use-case]`
+**Template:** `memorableday.in/business/[industry]/[use-case]`
 
 **Examples:**
-- `memorableday.online/business/shopify/post-purchase-experience`
-- `memorableday.online/business/woocommerce/shipping-notification`
-- `memorableday.online/business/fashion/customer-appreciation`
-- `memorableday.online/business/beauty/vip-experience`
+- `memorableday.in/business/shopify/post-purchase-experience`
+- `memorableday.in/business/woocommerce/shipping-notification`
+- `memorableday.in/business/fashion/customer-appreciation`
+- `memorableday.in/business/beauty/vip-experience`
 
 **Scale:** 20 industries × 10 use cases = 200 pages
 
@@ -5747,12 +5754,12 @@ Generate pages for every combination of industry and business use case:
 
 Each template gets its own SEO-optimized page:
 
-**Template:** `memorableday.online/templates/[template-slug]`
+**Template:** `memorableday.in/templates/[template-slug]`
 
 **Examples:**
-- `memorableday.online/templates/rose-bloom-anniversary`
-- `memorableday.online/templates/birthday-surprise-box`
-- `memorableday.online/templates/shopify-post-purchase-thank-you`
+- `memorableday.in/templates/rose-bloom-anniversary`
+- `memorableday.in/templates/birthday-surprise-box`
+- `memorableday.in/templates/shopify-post-purchase-thank-you`
 
 **Content per page:**
 - Template preview (interactive or video)
@@ -5768,13 +5775,13 @@ Each template gets its own SEO-optimized page:
 
 Compare MemorableDay to alternatives:
 
-**Template:** `memorableday.online/compare/[competitor]`
+**Template:** `memorableday.in/compare/[competitor]`
 
 **Examples:**
-- `memorableday.online/compare/hallmark`
-- `memorableday.online/compare/moonpig`
-- `memorableday.online/compare/evite`
-- `memorableday.online/compare/wonderment`
+- `memorableday.in/compare/hallmark`
+- `memorableday.in/compare/moonpig`
+- `memorableday.in/compare/evite`
+- `memorableday.in/compare/wonderment`
 
 **Content per page:**
 - Honest comparison table
@@ -5787,12 +5794,12 @@ Compare MemorableDay to alternatives:
 
 Each integration gets its own SEO-optimized page:
 
-**Template:** `memorableday.online/integrations/[platform]`
+**Template:** `memorableday.in/integrations/[platform]`
 
 **Examples:**
-- `memorableday.online/integrations/shopify`
-- `memorableday.online/integrations/klaviyo`
-- `memorableday.online/integrations/woocommerce`
+- `memorableday.in/integrations/shopify`
+- `memorableday.in/integrations/klaviyo`
+- `memorableday.in/integrations/woocommerce`
 
 ### 43.3 Programmatic SEO Quality Controls
 
@@ -5882,7 +5889,7 @@ MemorableDay is fundamentally a PLG product. The product itself is the primary g
 
 **Requirements:**
 - `PRD-CORE-168`: Referral links must be unique per user
-- `PRD-CORE-169`: Referral rewards must be applied automatically via Lemon Squeezy
+- `PRD-CORE-169`: Referral rewards must be applied automatically via Dodo Payments
 - `PRD-CORE-170`: Referral tracking must be fraud-resistant (no self-referral, no fake accounts)
 - `PRD-CORE-171`: Referral dashboard must show: referrals sent, referrals converted, rewards earned
 
@@ -6181,7 +6188,7 @@ Step 6: Success state
 ### 46.6 Demo Experiences
 
 **Requirements:**
-- `PRD-CORE-181`: A demo experience must be available at `memorableday.online/demo` (no login required)
+- `PRD-CORE-181`: A demo experience must be available at `memorableday.in/demo` (no login required)
 - `PRD-CORE-182`: Demo experience must showcase the best of the platform (3D, AI, interactivity)
 - `PRD-CORE-183`: Demo experience must end with a CTA to create an account
 - `PRD-CORE-184`: Multiple demo experiences must be available (personal and business)
@@ -6216,7 +6223,7 @@ MemorableDay's UX must serve two very different users — the personal user who 
 **Public website IA:**
 
 ```
-memorableday.online
+memorableday.in
 ├── Home
 ├── Personal
 │   ├── Occasions (hub)
@@ -6245,7 +6252,7 @@ memorableday.online
 **Personal app IA:**
 
 ```
-app.memorableday.online (personal)
+app.memorableday.in (personal)
 ├── Home / Dashboard
 ├── Create (experience builder)
 ├── My Experiences
@@ -6264,7 +6271,7 @@ app.memorableday.online (personal)
 **Business app IA:**
 
 ```
-app.memorableday.online (business)
+app.memorableday.in (business)
 ├── Overview / Dashboard
 ├── Experiences
 ├── Templates
@@ -6396,17 +6403,52 @@ MemorableDay must NOT feel like:
 - A Canva clone (template-heavy, design-tool aesthetic)
 - An email marketing platform (data-heavy, conversion-focused)
 
+### 48.1.1 Reference UI (Approved Design Direction)
+
+The main product UI must follow the approved reference design — a clean, modern, Apple-style minimal interface. The reference is a mobile-first, app-like layout on an Off-White (#F5F5F7) canvas with white elevated surfaces and System Blue (#007AFF) accents.
+
+**Key reference elements (must be recreated):**
+
+| Element | Specification |
+|---|---|
+| **Theme search bar** | Floating pill-shaped white search bar at the top with the placeholder "What's the theme?", a gray magnifying-glass icon on the left, and a solid System Blue (#007AFF) circular submit button (white arrow/upload icon) on the right; fully rounded (border-radius ≈ 9999px) with a soft diffuse shadow |
+| **Theme hero content** | Two-column hero: a large theme image card (rounded corners ≈ 24px, soft floating shadow, object-fit cover) beside a bold, uppercase headline in Jet Black (#1D1D1F) |
+| **Floating bottom navigation** | Fixed pill-shaped white floating navigation bar, centered at the bottom with side/bottom margins, containing 5 items: **Home, Create, Explore, Gallery, Profile** — each with icon + label; the active item is highlighted with a System Blue (#007AFF) rounded background and white icon/text; inactive items use Cool Gray (#AAAAAA) |
+| **Elevation style** | Soft, large-blur shadows (`box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1)`) create a layered "floating card" effect over the #F5F5F7 canvas |
+| **Typography style** | Clean geometric sans-serif (Inter / SF Pro style); bold uppercase headlines; generous whitespace |
+| **Overall aesthetic** | Minimal, premium, Apple-modern — content-forward, chrome-light, generous padding (multiples of 8px) |
+
+**Requirements:**
+- `PRD-UX-106`: The main app UI (Home/Create/Explore/Gallery/Profile) must follow the reference design: floating pill search bar, theme hero cards, and floating pill bottom navigation with the 5 sections listed above
+- `PRD-UX-107`: The bottom navigation must be a floating pill (not edge-to-edge), with the active item rendered as a System Blue (#007AFF) rounded highlight and white icon/label
+- `PRD-UX-108`: The theme search experience ("What's the theme?") must let users type or pick a theme (e.g., Halloween, Birthday, Anniversary) and surface matching hero imagery and templates
+
 ### 48.2 Color System
 
-**Primary palette:**
+**Primary palette (exact codes — must match the approved palette reference):**
 
 | Color | Role | Usage |
 |---|---|---|
-| **Deep Violet** (#4A1D96) | Primary brand color | CTAs, key UI elements |
-| **Warm Rose** (#F43F5E) | Accent, emotional moments | Hearts, love, celebration |
-| **Golden Amber** (#F59E0B) | Reward, achievement | Rewards, VIP, stars |
-| **Soft Cream** (#FFF8F0) | Background | Page backgrounds |
-| **Deep Charcoal** (#1A1A2E) | Text | Primary text |
+| **System Blue** (#007AFF) | Primary brand color | CTAs, key UI elements, active states, links, primary buttons |
+| **Jet Black** (#1D1D1F) | Primary text | Headings, body text, icons |
+| **Cool Gray** (#AAAAAA) | Secondary / muted | Secondary text, placeholders, inactive states, dividers, captions |
+| **Off-White** (#F5F5F7) | Background | Page backgrounds, app canvas |
+
+**Supporting surface color:**
+
+| Color | Role | Usage |
+|---|---|---|
+| **White** (#FFFFFF) | Elevated surface | Cards, search bar, floating navigation, modals, inputs |
+
+**Design tokens (exact values):**
+
+```
+--color-primary: #007AFF
+--color-foreground: #1D1D1F
+--color-muted: #AAAAAA
+--color-background: #F5F5F7
+--color-surface: #FFFFFF
+```
 
 **Semantic colors:**
 
@@ -6415,12 +6457,14 @@ MemorableDay must NOT feel like:
 | **Success Green** (#10B981) | Success states, confirmations |
 | **Warning Amber** (#F59E0B) | Warnings, cautions |
 | **Error Red** (#EF4444) | Errors, destructive actions |
-| **Info Blue** (#3B82F6) | Information, links |
+| **Info** (#007AFF) | Information, links (aligned with primary System Blue) |
 
 **Requirements:**
 - `PRD-UX-078`: All color combinations must meet WCAG 2.1 AA contrast requirements
 - `PRD-UX-079`: Color must not be the only way to convey information (icons + color)
 - `PRD-UX-080`: Dark mode must be supported (Phase 2)
+- `PRD-UX-104`: The product UI must use the exact approved palette: #007AFF (primary), #1D1D1F (text), #AAAAAA (muted), #F5F5F7 (background) — no other brand colors may be introduced
+- `PRD-UX-105`: White (#FFFFFF) is the only elevated-surface color; all cards, search bars, and floating navigation must render on white with soft shadows over the #F5F5F7 canvas
 
 ### 48.3 Typography
 
@@ -6428,7 +6472,7 @@ MemorableDay must NOT feel like:
 
 | Role | Font | Weight | Size |
 |---|---|---|---|
-| **Display** | Playfair Display or similar serif | 700 | 48–72px |
+| **Display** | Inter, SF Pro Display, or similar modern sans-serif | 700 | 48–72px |
 | **Heading** | Inter or similar sans-serif | 600–700 | 24–40px |
 | **Body** | Inter | 400 | 16px |
 | **Caption** | Inter | 400 | 14px |
@@ -6805,7 +6849,7 @@ MemorableDay is about making people feel celebrated. That mission fails if the p
 - `PRD-CORE-216`: Manual accessibility testing must be performed with screen readers (NVDA, VoiceOver)
 - `PRD-CORE-217`: Accessibility testing must include keyboard-only navigation
 - `PRD-CORE-218`: Accessibility issues must be tracked and prioritized in the product backlog
-- `PRD-CORE-219`: Accessibility statement must be published at `memorableday.online/accessibility`
+- `PRD-CORE-219`: Accessibility statement must be published at `memorableday.in/accessibility`
 
 ---
 
@@ -6959,7 +7003,7 @@ MemorableDay handles deeply personal content — love letters, family photos, ap
 | Created experiences | Product functionality | Until deleted by user |
 | Uploaded media | Experience content | Until deleted by user |
 | Usage data | Product improvement, billing | 12 months |
-| Payment data | Billing (via Lemon Squeezy) | Per Lemon Squeezy policy |
+| Payment data | Billing (via Dodo Payments) | Per Dodo Payments policy |
 
 **Business user data:**
 
@@ -7321,7 +7365,7 @@ Media (photos, videos, audio) is the largest storage cost driver.
 ### 56.5 Background Processing
 
 **Cloudflare Queues + Workers:**
-- Webhook processing (Shopify, Lemon Squeezy, etc.)
+- Webhook processing (Shopify, Dodo Payments, etc.)
 - Email sending
 - SMS sending
 - Analytics aggregation
@@ -7356,28 +7400,28 @@ Media (photos, videos, audio) is the largest storage cost driver.
 
 ### 57.1 Primary Domain
 
-**Primary domain:** `memorableday.online`
+**Primary domain:** `memorableday.in`
 
 This domain is the primary brand domain. All public-facing URLs use this domain.
 
 ### 57.2 Recommended URL Architecture
 
 ```
-memorableday.online                    — Public website (homepage, SEO, marketing)
-memorableday.online/e/[id]             — Recipient experience URLs
-memorableday.online/pricing            — Pricing page
-memorableday.online/blog/[slug]        — Blog
-memorableday.online/templates/[slug]   — Template pages
-memorableday.online/occasions/[slug]   — Occasion pages
-memorableday.online/business/[slug]    — Business pages
-memorableday.online/docs/              — Documentation
-memorableday.online/api/               — API documentation
+memorableday.in                    — Public website (homepage, SEO, marketing)
+memorableday.in/e/[id]             — Recipient experience URLs
+memorableday.in/pricing            — Pricing page
+memorableday.in/blog/[slug]        — Blog
+memorableday.in/templates/[slug]   — Template pages
+memorableday.in/occasions/[slug]   — Occasion pages
+memorableday.in/business/[slug]    — Business pages
+memorableday.in/docs/              — Documentation
+memorableday.in/api/               — API documentation
 
-app.memorableday.online                — SaaS application (dashboard, builder)
-app.memorableday.online/login          — Login
-app.memorableday.online/signup         — Signup
-app.memorableday.online/dashboard      — Dashboard
-app.memorableday.online/builder/[id]   — Experience builder
+app.memorableday.in                — SaaS application (dashboard, builder)
+app.memorableday.in/login          — Login
+app.memorableday.in/signup         — Signup
+app.memorableday.in/dashboard      — Dashboard
+app.memorableday.in/builder/[id]   — Experience builder
 ```
 
 **Why this architecture:**
@@ -7391,12 +7435,12 @@ app.memorableday.online/builder/[id]   — Experience builder
 
 ### 57.3 Alternative Architecture Considered
 
-**Alternative: `app.memorableday.online` for experiences**
+**Alternative: `app.memorableday.in` for experiences**
 
 ```
-memorableday.online                    — Public website
-app.memorableday.online/e/[id]         — Recipient experiences
-app.memorableday.online/dashboard      — Dashboard
+memorableday.in                    — Public website
+app.memorableday.in/e/[id]         — Recipient experiences
+app.memorableday.in/dashboard      — Dashboard
 ```
 
 **Why not recommended:**
@@ -7404,7 +7448,7 @@ app.memorableday.online/dashboard      — Dashboard
 - SEO value of experience pages is lost on `app.` subdomain
 - Recipients may be confused by `app.` in the URL
 
-**Recommendation:** Keep experience URLs on the main domain (`memorableday.online/e/[id]`).
+**Recommendation:** Keep experience URLs on the main domain (`memorableday.in/e/[id]`).
 
 ### 57.4 DNS Configuration
 
@@ -7545,7 +7589,7 @@ Support is a product feature, not a cost center. Every support interaction is an
 
 #### Help Center
 
-A comprehensive self-service knowledge base at `memorableday.online/help`.
+A comprehensive self-service knowledge base at `memorableday.in/help`.
 
 **Help center structure:**
 
@@ -7586,7 +7630,7 @@ An AI-powered chat widget that answers common questions using the help center co
 #### Email Support
 
 **Requirements:**
-- `PRD-CORE-229`: Email support must be available at `support@memorableday.online`
+- `PRD-CORE-229`: Email support must be available at `support@memorableday.in`
 - `PRD-CORE-230`: Email responses must include a ticket number for tracking
 - `PRD-CORE-231`: Email support must use a ticketing system (Intercom, Zendesk, or similar)
 - `PRD-CORE-232`: Support tickets must be categorized (billing, technical, product, abuse)
@@ -7604,11 +7648,11 @@ An AI-powered chat widget that answers common questions using the help center co
 
 | Scenario | Resolution |
 |---|---|
-| Failed payment | Guide to update payment method via Lemon Squeezy portal |
+| Failed payment | Guide to update payment method via Dodo Payments portal |
 | Unexpected charge | Explain billing cycle; offer refund if appropriate |
 | Downgrade request | Guide through downgrade process; explain data retention |
 | Cancellation | Process cancellation; offer pause option; collect feedback |
-| Refund request | Evaluate per refund policy; process via Lemon Squeezy |
+| Refund request | Evaluate per refund policy; process via Dodo Payments |
 
 #### Technical Support
 
@@ -7683,7 +7727,7 @@ The admin panel is the internal tool for MemorableDay's team to manage the platf
 | **Delete user** | Permanently delete account and data |
 | **Change plan** | Manually change user's plan |
 | **Add credits** | Add AI credits or storage |
-| **View billing** | View Lemon Squeezy subscription details |
+| **View billing** | View Dodo Payments subscription details |
 
 #### Business Management
 
@@ -7753,7 +7797,7 @@ The admin panel is the internal tool for MemorableDay's team to manage the platf
 | **Revenue overview** | MRR, ARR, churn |
 | **Subscription list** | All active subscriptions |
 | **Failed payments** | Subscriptions with failed payments |
-| **Refund management** | Process refunds via Lemon Squeezy |
+| **Refund management** | Process refunds via Dodo Payments |
 | **Coupon management** | Create and manage promotional coupons |
 
 #### Abuse Reports
@@ -8124,7 +8168,7 @@ MemorableDay has four revenue streams, ordered by priority:
 | Infrastructure (Cloudflare) | $0–$100 | $500–$5,000 |
 | AI API costs | $100–$500 | $2,000–$20,000 |
 | Email/SMS sending | $50–$200 | $500–$5,000 |
-| Lemon Squeezy fees | 5% + $0.50/transaction | Same |
+| Dodo Payments fees | 4% + $0.40/transaction (+1.5% international, +0.5% subscriptions) | Same |
 | Team (founder only initially) | $0 | Growing |
 | Tools and software | $200–$500 | $1,000–$3,000 |
 
@@ -8177,7 +8221,7 @@ This is achievable within 6–12 months of launch with focused execution.
 | Low conversion from free | Optimize conversion triggers; improve onboarding |
 | High churn | Improve product value; better onboarding; retention features |
 | Shopify App Store dependency | Diversify acquisition channels |
-| Lemon Squeezy dependency | Maintain clean billing abstraction layer |
+| Dodo Payments dependency | Maintain clean billing abstraction layer |
 
 ---
 
@@ -8329,7 +8373,7 @@ This is achievable within 6–12 months of launch with focused execution.
 | **High churn from personal users** | Medium | Medium | Improve retention features; occasion reminders; engagement |
 | **Business users don't see ROI** | Medium | High | Better analytics; case studies; ROI calculator |
 | **Competitor copies 3D experience** | Medium | Medium | Build moat through content, SEO, and network effects |
-| **Lemon Squeezy pricing changes** | Low | Medium | Maintain billing abstraction; evaluate alternatives |
+| **Dodo Payments pricing changes** | Low | Medium | Maintain billing abstraction; evaluate alternatives |
 | **Cloudflare pricing changes** | Low | Medium | Monitor costs; maintain portability |
 | **Shopify changes App Store policies** | Low | High | Diversify acquisition channels |
 | **Economic downturn reduces SaaS spending** | Low | Medium | Focus on ROI-positive use cases; flexible pricing |
@@ -8435,10 +8479,10 @@ This is achievable within 6–12 months of launch with focused execution.
 | **Subscription cancelled mid-period** | Maintain access until period end; downgrade at period end |
 | **Downgrade with data over new limit** | Maintain data; restrict access to over-limit data; prompt to delete |
 | **Upgrade during trial** | Apply upgrade immediately; adjust billing |
-| **Refund requested** | Evaluate per policy; process via Lemon Squeezy |
+| **Refund requested** | Evaluate per policy; process via Dodo Payments |
 | **Duplicate payment** | Detect and refund duplicate; log |
 | **Webhook not received** | Retry mechanism; manual reconciliation if needed |
-| **Lemon Squeezy outage** | Maintain current entitlements; queue webhook processing |
+| **Dodo Payments outage** | Maintain current entitlements; queue webhook processing |
 
 ### 65.7 Sharing Edge Cases
 
@@ -8494,7 +8538,7 @@ This is achievable within 6–12 months of launch with focused execution.
 | Service | Purpose | Risk Level | Mitigation |
 |---|---|---|---|
 | **Cloudflare** | Infrastructure, CDN, DNS, storage | High | No easy alternative; monitor status; have contingency plan |
-| **Lemon Squeezy** | Billing and subscriptions | High | Maintain billing abstraction layer; evaluate alternatives |
+| **Dodo Payments** | Billing and subscriptions | High | Maintain billing abstraction layer; evaluate alternatives |
 | **AI API provider** | AI features | Medium | Graceful degradation; multiple provider support |
 | **Email provider (Postmark/Resend)** | Transactional email | Medium | Multiple provider support; fallback |
 | **SMS provider (Twilio)** | SMS delivery | Medium | Multiple provider support; fallback |
@@ -8577,7 +8621,7 @@ All features are categorized:
 
 **Infrastructure:**
 - [ ] Cloudflare account setup (Pages, Workers, R2, D1)
-- [ ] Domain configuration (`memorableday.online`, `app.memorableday.online`)
+- [ ] Domain configuration (`memorableday.in`, `app.memorableday.in`)
 - [ ] SSL/TLS configuration
 - [ ] DNS configuration
 - [ ] CI/CD pipeline
@@ -8597,8 +8641,8 @@ All features are categorized:
 - [ ] Migration system
 
 **Billing:**
-- [ ] Lemon Squeezy account setup
-- [ ] Products and variants created
+- [ ] Dodo Payments account setup
+- [ ] Products and prices created
 - [ ] Webhook endpoint
 - [ ] Subscription status sync
 - [ ] Entitlement system
@@ -9153,11 +9197,11 @@ This section explores opportunities beyond the core product vision. These are no
 - High-margin revenue
 
 **Requirements for success:**
-- Gift card infrastructure (Lemon Squeezy supports this)
+- Gift card infrastructure (via Dodo Payments discount codes or prepaid one-time products)
 - Gift card experience (beautiful presentation)
 - Redemption flow
 
-**Recommendation:** Evaluate in Phase 3. Relatively simple to implement with Lemon Squeezy.
+**Recommendation:** Evaluate in Phase 3. Relatively simple to implement with Dodo Payments discount codes and one-time payment links.
 
 ---
 
@@ -9476,7 +9520,7 @@ That is the product. Everything else is infrastructure.
 # MemorableDay — Complete Product Requirements Document
 
 **Product:** MemorableDay  
-**Domain:** memorableday.online  
+**Domain:** memorableday.in  
 **Primary Market:** United States  
 **Document Status:** Living PRD — v1.0  
 **Last Updated:** 2026-09-16  
@@ -9544,7 +9588,7 @@ This is not a V1 feature list. It is the full product definition. The [Product R
 
 | # | File | Sections Covered |
 |---|---|---|
-| 17 | [Payments, Lemon Squeezy & Entitlements](17-payments-lemon-squeezy-entitlements.md) | §36 Payments · §37 Lemon Squeezy Integration · §38 Subscription Entitlements |
+| 17 | [Payments, Dodo Payments & Entitlements](17-payments-dodo-payments-entitlements.md) | §36 Payments · §37 Dodo Payments Integration · §38 Subscription Entitlements |
 | 18 | [Pricing Strategy & Free Plan](18-pricing-strategy-free-plan.md) | §39 Pricing Strategy · §40 Free Plan |
 
 ### Part V — Growth & SEO

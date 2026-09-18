@@ -20,7 +20,7 @@ Stage Summary:
 ## PRD Quick Reference (MemorableDay)
 
 **Product:** MemorableDay — a SaaS "Interactive Moment Experiences (IME)" platform that lets individuals and businesses create, send, and track beautiful, personalized, interactive digital experiences (moments recipients remember).
-- **Domain:** memorableday.online | Primary market: United States | Tagline: "Make Every Moment Memorable."
+- **Domain:** memorableday.in (UPDATED 2026-09-18, was memorableday.online) | Primary market: United States + India (INR supported) | Tagline: "Make Every Moment Memorable."
 - **Two audiences:** Personal users (birthdays, anniversaries, apologies, long-distance) and Business users (post-purchase thank-yous, shipping journeys, delay apologies, VIP milestones, win-backs).
 - **Core systems:**
   1. **Experience Builder** — scenes → blocks architecture (text, image, gallery, video, audio, 3D object, countdown, CTA, reward, scratch reveal, quiz, order info, tracking button, etc.), drag-and-drop, auto-save, undo/redo, mobile preview.
@@ -36,9 +36,9 @@ Stage Summary:
   11. **Analytics** — delivery → engagement → completion → action → outcome funnel; open rate, completion rate, scene drop-off, CTA clicks, reward claims, revenue attribution.
   12. **Accounts/Teams/Agency/White Label** — personal vs business account types, team roles (Owner/Admin/Editor/Analyst/Viewer), multi-brand agency workspaces, white label (custom domain, remove branding).
   13. **API** — REST v1, Bearer API keys, experiences/templates/automations/customers/rewards/analytics/webhooks endpoints, rate limits by plan.
-  14. **Payments** — Lemon Squeezy (Merchant of Record), products/variants per plan, webhook-driven entitlement sync, AI credit top-ups.
+  14. **Payments** — Dodo Payments (Merchant of Record) (UPDATED 2026-09-18, was Lemon Squeezy), products/prices per plan, webhook-driven entitlement sync (payment.succeeded, subscription.active, subscription.plan_changed, etc.), AI credit top-ups.
 - **Pricing:** Free (Starter), Personal $9/mo, Pro $19/mo | Business $49/mo, Growth $99/mo, Agency $249/mo, Enterprise custom. Annual ~20% off.
-- **Design system:** Deep Violet #4A1D96 (primary), Warm Rose #F43F5E (accent), Golden Amber #F59E0B (rewards), Soft Cream #FFF8F0 (bg), Deep Charcoal #1A1A2E (text). Playfair Display (display) + Inter (body). 8px spacing grid. Lucide icons. WCAG 2.1 AA. Mobile-first.
+- **Design system (UPDATED 2026-09-18):** System Blue #007AFF (primary), Jet Black #1D1D1F (text), Cool Gray #AAAAAA (muted), Off-White #F5F5F7 (background), White #FFFFFF (elevated surfaces). Inter/SF Pro (display + body — Playfair Display removed). 8px spacing grid. Lucide icons. WCAG 2.1 AA. Mobile-first. Reference UI: pill search bar "What's the theme?", theme hero cards (24px radius, soft shadows), floating pill bottom nav (Home/Create/Explore/Gallery/Profile, active = blue pill). Reference images: /home/z/my-project/docs/design-reference/.
 - **Recipient experience requirements:** loads <3s on 4G, no login required, mobile-first, "Created with MemorableDay" attribution with "Create your own" CTA (viral loop), graceful expiration/404 states, password protection, replayable.
 - **North Star Metric:** Memorable Moments Delivered (MMD) — experiences opened by recipients.
 - **Roadmap phases:** Phase 0 Foundation (auth, DB, billing) → Phase 1 Core Product (builder, 3D, templates, sharing, personal dashboard, public website) → Phase 2 AI & Business (AI features, business dashboard, Shopify, automations, rewards, analytics) → Phase 3 Growth & Scale (referral, reminders, advanced blocks, white label, SEO content) → Phase 4 Premium & Enterprise (agency, API, SSO) → Phase 5 Platform & Ecosystem (marketplace, advanced AI/3D, mobile apps).
@@ -50,3 +50,27 @@ Stage Summary:
 
 ## Next Steps
 - Wait for the user to specify what to build.
+
+---
+Task ID: 1
+Agent: Z.ai Code (main orchestrator)
+Task: Update the PRD per user's instructions: (1) exact color palette from uploaded image, (2) UI/UX reference page from uploaded image, (3) payment gateway Lemon Squeezy → Dodo Payments, (4) domain memorableday.online → memorableday.in. Then push to GitHub.
+
+Work Log:
+- Analyzed uploaded images with VLM: `828d26e3a34a102ae34119cc58d5222c.jpg` = color palette page with EXACT codes (#F5F5F7, #1D1D1F, #AAAAAA, #007AFF — Apple Modern palette); `file_000000001d2882118fdd4967233523ed.png` = reference UI page (mobile-first app: pill search bar "What's the theme?" with blue circular submit button, theme hero image cards w/ 24px radius + soft shadows, floating pill bottom nav Home/Create/Explore/Gallery/Profile with active state in blue).
+- Verified Dodo Payments facts via web search + docs (docs.dodopayments.com): Merchant of Record, pricing 4% + $0.40 (+1.5% intl, +0.5% subs), concepts (Business/Product/Price/Customer/Subscription/Payment/Payment Link/Webhook), webhook event catalog (payment.succeeded/failed, subscription.active/cancelled/expired/paused/unpaused/plan_changed/renewed/past_due/on_hold/update_payment_method, dunning.started/recovered, refund.succeeded, dispute.opened), Standard Webhooks signature verification, hosted customer portal, UPI support, discount codes, one-time payment links.
+- Applied to /home/z/my-project/docs/MemorableDay_PRD.md (the full 32-file combined PRD):
+  1. Domain: 95× memorableday.online → memorableday.in (incl. app. subdomain + support@ email).
+  2. Payment gateway: 55× Lemon Squeezy → Dodo Payments + filename refs 17-payments-lemon-squeezy-entitlements.md → 17-payments-dodo-payments-entitlements.md; rewrote §37.1 concepts table (Store→Business, Variant→Price, Order→Payment); §37.2 Variants→Prices; §37.3 checkout flow (payment link, metadata param, payment.succeeded + subscription.active webhooks); §37.4 full webhook event table with real Dodo events; §37.5 lifecycle flows (plan_changed, dunning.recovered, subscription.expired); §36.3 added UPI + local methods; §36.5 INR secondary currency; §37.9 one-time payment links + payment.succeeded; fee table 4% + $0.40; gift cards via discount codes; PRD index entry updated.
+  3. Color system §48.2: replaced old palette (Deep Violet/Warm Rose/Golden Amber/Soft Cream/Deep Charcoal) with EXACT palette from image: System Blue #007AFF (primary), Jet Black #1D1D1F (text), Cool Gray #AAAAAA (muted), Off-White #F5F5F7 (background) + White #FFFFFF surface; added exact design tokens block; Info color aligned to #007AFF; added PRD-UX-104/105 (exact palette enforcement).
+  4. UI/UX reference §48.1.1 (new section): full reference UI spec (pill search bar "What's the theme?", hero image cards, floating pill bottom nav Home/Create/Explore/Gallery/Profile, elevation style, typography style) + PRD-UX-106/107/108.
+  5. Typography §48.3: Display font Playfair Display (serif) → Inter/SF Pro Display (modern sans-serif) to match Apple-modern reference.
+- Copied reference images to /home/z/my-project/docs/design-reference/ (color-palette-exact-codes.jpg, ui-reference-main-page.png).
+- Created full change patch: /tmp/prd_changes.patch (631 lines, 91 hunks). Backup of original: /tmp/PRD_backup_original.md.
+- GitHub push BLOCKED: repo sandeepdolai/NewMemorableday is PRIVATE and the GitHub Classic Token from the previous session was truncated during session continuation (only "ghp_f6ze..." prefix retained; full token not on disk). Need user to re-share token to push.
+
+Stage Summary:
+- ALL 4 requested PRD changes are COMPLETE in the local authoritative copy: /home/z/my-project/docs/MemorableDay_PRD.md.
+- Payment gateway section is now factually accurate for Dodo Payments (real event names, concepts, pricing).
+- Design system now locked to the exact uploaded palette (#007AFF/#1D1D1F/#AAAAAA/#F5F5F7) with reference UI spec.
+- PENDING: git push to github.com/sandeepdolai/NewMemorableday — requires the user to re-provide the GitHub token (previous one was lost in session continuation; also recommend rotating it since it was shared in chat).
