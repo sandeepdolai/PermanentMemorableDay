@@ -19,7 +19,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 
 export function GalleryView() {
-  const { notify } = useMD();
+  const { openMoment } = useMD();
   const [filter, setFilter] = useState<Filter>("all");
 
   const moments = useMemo(
@@ -73,7 +73,7 @@ export function GalleryView() {
             <button
               key={m.id}
               type="button"
-              onClick={() => notify(`“${m.title}” — preview coming soon`)}
+              onClick={() => openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` })}
               className="card-shadow hairline overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.97]"
             >
               <CoverArt variant={m.cover} className="aspect-square w-full">

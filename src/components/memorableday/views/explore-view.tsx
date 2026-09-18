@@ -23,7 +23,7 @@ function formatCount(n: number): string {
 }
 
 export function ExploreView() {
-  const { query, setQuery } = useMD();
+  const { query, setQuery, openMoment } = useMD();
   const [segment, setSegment] = useState<Segment>("trending");
 
   const items = useMemo(() => {
@@ -80,7 +80,13 @@ export function ExploreView() {
       ) : (
         <div className="grid grid-cols-2 gap-4">
           {items.map((item, idx) => (
-            <ExploreCard key={item.id} idx={idx}>
+            <ExploreCard
+              key={item.id}
+              idx={idx}
+              onClick={() =>
+                openMoment({ id: item.id, title: item.title, cover: item.cover, dedication: `By ${item.creator}` })
+              }
+            >
               <CoverArt variant={item.cover} className="aspect-[4/3.4] w-full rounded-t-[22px]">
                 <span className="absolute bottom-2.5 right-2.5 flex items-center gap-1 rounded-full bg-[#1D1D1F]/30 px-2 py-1 text-[10.5px] font-semibold text-white backdrop-blur-md">
                   <Eye size={11} aria-hidden /> {formatCount(item.views)}
@@ -115,15 +121,25 @@ export function ExploreView() {
 }
 
 /** Card wrapper with entrance animation */
-function ExploreCard({ idx, children }: { idx: number; children: React.ReactNode }) {
+function ExploreCard({
+  idx,
+  onClick,
+  children,
+}: {
+  idx: number;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <motion.article
+    <motion.button
+      type="button"
+      onClick={onClick}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(idx * 0.04, 0.3), duration: 0.3, ease: "easeOut" }}
-      className="card-shadow hairline overflow-hidden rounded-[22px] bg-white"
+      className="card-shadow hairline overflow-hidden rounded-[22px] bg-white text-left"
     >
       {children}
-    </motion.article>
+    </motion.button>
   );
 }

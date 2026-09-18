@@ -14,7 +14,7 @@ const STATS = [
 ];
 
 export function HomeView() {
-  const { setTab, notify } = useMD();
+  const { setTab, notify, openMoment } = useMD();
   const [greeting, setGreeting] = useState("Hello");
 
   useEffect(() => {
@@ -118,7 +118,7 @@ export function HomeView() {
             <button
               key={m.id}
               type="button"
-              onClick={() => notify(`“${m.title}” — preview coming soon`)}
+              onClick={() => openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` })}
               className="flex w-full items-center gap-3.5 px-4 py-3 text-left transition-colors active:bg-[#007AFF]/[0.04]"
             >
               <CoverArt variant={m.cover} className="h-[52px] w-[52px] shrink-0 rounded-[14px]" />

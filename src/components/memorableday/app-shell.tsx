@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
 import { PRICING_PLANS } from "@/lib/mock-data";
-import { MDContext, type Sheet, type Tab } from "./md-context";
+import { MDContext, type PlayerPayload, type Sheet, type Tab } from "./md-context";
 import { SearchBar } from "./search-bar";
 import { BottomNav } from "./bottom-nav";
 import { BottomSheet } from "./bottom-sheet";
+import { MomentPlayer } from "./moment-player";
 import { HomeView } from "./views/home-view";
 import { CreateView } from "./views/create-view";
 import { ExploreView } from "./views/explore-view";
@@ -170,6 +171,7 @@ export function AppShell() {
   const [scrolled, setScrolled] = useState(false);
   const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [player, setPlayer] = useState<PlayerPayload | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const notify = useCallback((message: string) => {
@@ -210,11 +212,15 @@ export function AppShell() {
 
   const openSheet = useCallback((s: Exclude<Sheet, null>) => setSheet(s), []);
 
+  const openMoment = useCallback((m: PlayerPayload) => setPlayer(m), []);
+
+  const closeMoment = useCallback(() => setPlayer(null), []);
+
   const isSearchTab = tab === "home" || tab === "explore";
 
   return (
     <MDContext.Provider
-      value={{ tab, setTab, query, setQuery, submitSearch, notify, openSheet }}
+      value={{ tab, setTab, query, setQuery, submitSearch, notify, openSheet, openMoment }}
     >
       <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05]">
         {/* Top chrome: signature search pill (Home/Explore) or compact title on scroll */}
@@ -296,6 +302,13 @@ export function AppShell() {
             }}
           />
         </BottomSheet>
+
+        {/* Recipient experience player */}
+        <AnimatePresence>
+          {player ? (
+            <MomentPlayer key={player.id} moment={player} onClose={closeMoment} />
+          ) : null}
+        </AnimatePresence>
       </div>
     </MDContext.Provider>
   );
