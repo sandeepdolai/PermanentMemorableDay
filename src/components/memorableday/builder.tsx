@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Check,
   ChevronLeft,
+  ChevronRight,
   Clock,
   ExternalLink,
   FileMusic,
@@ -168,7 +169,20 @@ function seedScenes(opts: BuilderOptions): Scene[] {
     }
     return scenes;
   }
+  const wantsSeedBlock = !!opts.initialBlock && !!BLOCK_BY_TYPE[opts.initialBlock];
   const count = Math.max(1, Math.min(opts.scenes ?? 1, MAX_SCENES));
+  // Single-scene starts are honest about what was asked for:
+  // - "Blank canvas" → a truly empty scene stack (no hidden pattern blocks)
+  // - "Start with a X block" → just that block, nothing else
+  if (count <= 1) {
+    const blocks: Block[] = wantsSeedBlock ? [{ id: "bSeed", type: opts.initialBlock! }] : [];
+    if (opts.seedText) {
+      return [{ id: "s1", blocks: [{ id: "bAi0", type: "text", text: opts.seedText }, ...blocks] }];
+    }
+    return [{ id: "s1", blocks }];
+  }
+  // Multi-scene layout starts (template remix / gallery layouts) sketch
+  // deterministic patterns so the storyboard communicates the flow.
   const scenes: Scene[] = [];
   for (let i = 0; i < count; i++) {
     const pattern = DRAFT_PATTERNS[(i + (opts.cover ?? 0)) % DRAFT_PATTERNS.length];
@@ -177,8 +191,8 @@ function seedScenes(opts: BuilderOptions): Scene[] {
       blocks: pattern.map((t, j) => ({ id: `b${i * 4 + j + 1}`, type: t })),
     });
   }
-  if (opts.initialBlock && BLOCK_BY_TYPE[opts.initialBlock]) {
-    scenes[0].blocks.push({ id: "bSeed", type: opts.initialBlock });
+  if (wantsSeedBlock) {
+    scenes[0].blocks.push({ id: "bSeed", type: opts.initialBlock! });
   }
   if (opts.seedText) {
     scenes[0].blocks = [{ id: "bAi0", type: "text", text: opts.seedText }, ...scenes[0].blocks];
@@ -2423,6 +2437,14 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const blockDragStarted = useRef(false);
   const sceneDragStarted = useRef(false);
   const [cover, setCover] = useState(opts.cover ?? 5);
+  /** Palette strip scrolled to the end? (mobile scroll-affordance) */
+  const paletteRef = useRef<HTMLDivElement>(null);
+  const [paletteAtEnd, setPaletteAtEnd] = useState(false);
+  const checkPaletteScroll = useCallback(() => {
+    const el = paletteRef.current;
+    if (!el) return;
+    setPaletteAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 24);
+  }, []);
 
   const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
   const scenePos = sceneIdx + 1;
@@ -3035,9 +3057,16 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
                 Add to Scene {scenePos}
               </h2>
-              <p className="text-[11.5px] font-medium text-[#AAAAAA]">Tap to drop a block</p>
+              <p className="text-[11.5px] font-medium text-[#AAAAAA]">
+                {BLOCKS.length} block kinds · tap to drop
+              </p>
             </div>
-            <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-1 no-scrollbar lg:mx-0 lg:flex-wrap lg:px-0 lg:overflow-visible">
+            <div className="relative">
+            <div
+              ref={paletteRef}
+              onScroll={checkPaletteScroll}
+              className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-1 no-scrollbar lg:mx-0 lg:flex-wrap lg:px-0 lg:overflow-visible"
+            >
               <button
                 type="button"
                 onClick={() => openComposer()}
@@ -3072,6 +3101,26 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                   </button>
                 );
               })}
+            </div>
+            {/* Scroll affordance — the strip holds 12 pills; without a hint,
+                the back half (Gift → Confetti) looks "unavailable" on mobile. */}
+            <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-[#F5F5F7] via-[#F5F5F7]/80 to-transparent transition-opacity duration-300 lg:hidden",
+                paletteAtEnd ? "opacity-0" : "opacity-100"
+              )}
+            />
+            {!paletteAtEnd ? (
+              <button
+                type="button"
+                aria-label="Scroll for more blocks"
+                onClick={() => paletteRef.current?.scrollBy({ left: 260, behavior: "smooth" })}
+                className="absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#1D1D1F] card-shadow hairline transition-transform active:scale-90 lg:hidden"
+              >
+                <ChevronRight size={17} strokeWidth={2.4} aria-hidden />
+              </button>
+            ) : null}
             </div>
           </section>
 

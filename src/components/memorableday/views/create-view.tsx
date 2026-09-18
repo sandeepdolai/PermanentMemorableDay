@@ -12,23 +12,25 @@ import {
   Sparkles,
   Type,
   Video,
+  Wallpaper,
 } from "lucide-react";
 import { CoverArt } from "../cover-art";
 import { LargeTitle, SectionHeader } from "../bits";
 import { useMD } from "../md-context";
 
-/** Scene block types from the PRD Experience Builder (type ids match the builder) */
+/** Scene block types from the PRD Experience Builder — ids + tints match the builder palette 1:1 */
 const SCENE_BLOCKS = [
-  { label: "Text", type: "text", icon: Type },
-  { label: "Photo", type: "photo", icon: ImagesIcon },
-  { label: "Video", type: "video", icon: Video },
-  { label: "Audio", type: "audio", icon: Music },
-  { label: "3D Gift", type: "gift", icon: Gift },
-  { label: "Countdown", type: "countdown", icon: Clock },
-  { label: "Quiz", type: "quiz", icon: ListChecks },
-  { label: "Reward", type: "reward", icon: Award },
-  { label: "Button", type: "cta", icon: MousePointerClick },
-  { label: "Confetti", type: "confetti", icon: PartyPopper },
+  { label: "Text", type: "text", icon: Type, tint: "#007AFF" },
+  { label: "Photo", type: "photo", icon: ImagesIcon, tint: "#30D158" },
+  { label: "Video", type: "video", icon: Video, tint: "#FF9F0A" },
+  { label: "Audio", type: "audio", icon: Music, tint: "#FF375F" },
+  { label: "Background", type: "background", icon: Wallpaper, tint: "#64D2FF" },
+  { label: "3D Gift", type: "gift", icon: Gift, tint: "#5E5CE6" },
+  { label: "Countdown", type: "countdown", icon: Clock, tint: "#FF9F0A" },
+  { label: "Quiz", type: "quiz", icon: ListChecks, tint: "#007AFF" },
+  { label: "Reward", type: "reward", icon: Award, tint: "#30D158" },
+  { label: "Button", type: "cta", icon: MousePointerClick, tint: "#007AFF" },
+  { label: "Confetti", type: "confetti", icon: PartyPopper, tint: "#FF375F" },
 ];
 
 export function CreateView() {
@@ -89,7 +91,10 @@ export function CreateView() {
                 onClick={() => openBuilder({ initialBlock: b.type, cover: 5 })}
                 className="card-shadow hairline flex flex-col items-center gap-2 rounded-[20px] bg-white px-2 py-4 transition-transform active:scale-[0.94]"
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#007AFF]/[0.1] text-[#007AFF]">
+                <span
+                  className="flex h-11 w-11 items-center justify-center rounded-[14px]"
+                  style={{ backgroundColor: `${b.tint}1A`, color: b.tint }}
+                >
                   <Icon size={21} strokeWidth={2.1} aria-hidden />
                 </span>
                 <span className="text-[12.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">

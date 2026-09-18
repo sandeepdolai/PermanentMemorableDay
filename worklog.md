@@ -742,3 +742,29 @@ Stage Summary:
 - Gotcha: rg's `-r` flag is --replace (mangles output if used like grep's `-r`); use `--glob` + plain patterns.
 - Next-phase candidates (unchanged queue): Spotify credentials drop-in, video trim/loop UI for background block, upload progress via XHR, public /e/[slug] recipient page, per-scene soundtrack override, e2e harness for builder→player.
 - Reminder: user should rotate the GitHub PAT shared earlier in chat.
+
+---
+Task ID: 19
+Agent: Z.ai Code (main orchestrator)
+Task: User report — "Some Feature Are Not Available When I create with Blank Canvas, But I saw All Feature In Premade Moments." Diagnose and fix the blank-canvas feature gap.
+
+Work Log:
+- Full diagnosis sweep of every creation entry point (Create sheet, Create view grid, ⌘K palette, Explore "Use this layout", Gallery edit/duplicate) + live E2E audit of the builder: all 11 block editors ARE complete (Photo upload+filter+caption, Audio search+upload, Video upload, Background upload, Gift note+wrap, Countdown presets+custom, Quiz Q&A+correct answer, Reward type+code+link, Button label+action+URL, Confetti style, Text message) — verified by scripting card→edit→dialog loops.
+- Root causes of the perceived gap (4 real defects):
+  1. Create view "Scene Blocks" quick-start grid was missing the Background block entirely (10 of 11) — the Round-17 flagship block was unquickstartable.
+  2. "Blank canvas" promised "Start from an empty scene stack" but secretly seeded Audio+Photo pattern blocks (DRAFT_PATTERNS[cover]) — looked like a random limited preset.
+  3. Quick-start tiles ("Start a scene with a Gift block") stacked the chosen block ON TOP of the seeded audio+photo pattern — not what was advertised.
+  4. Mobile palette strip: 12 pills in a single horizontal scroller with NO affordance — only ~3-5 visible on a phone, so Gift/Countdown/Quiz/Reward/Button/Confetti looked "not available".
+- Fixes:
+  - builder.tsx seedScenes rework: single-scene starts are now honest — blank canvas → truly empty scene; initialBlock → ONLY that block; multi-scene (template remix, scenes≥2) keeps deterministic pattern sketching; ai/doc/seedText paths unchanged.
+  - create-view.tsx: SCENE_BLOCKS now 11 tiles (added Background/Wallpaper) and every tile uses the builder palette's exact tint colors (was all-blue).
+  - builder.tsx palette: header now reads "11 block kinds · tap to drop"; added mobile scroll affordance — right-edge gradient fade + circular chevron button that scrollBy(260) and self-hides at the end (lg:hidden on desktop where pills wrap).
+- E2E VERIFIED (agent-browser): blank canvas → "Nothing here yet" empty state, zero seeded blocks; Create grid → 11 tiles incl. Background with colorful tints (VLM-confirmed); Background quick-start → builder contains ONLY the Background card; mobile 390×844 → chevron visible with only 3/12 pills on screen, tap scrolls, chevron disappears at strip end; desktop 1280×900 → pills wrap, chevron display:none; Explore "Use this layout" regression → still seeds 3 scenes × 2 blocks; fresh reload → zero console errors; `bun run lint` exit 0.
+- Also discovered + documented: the Welcome Tour (z-95) covers the player (z-70) on first visit — one-time by design (md-onboarded flag), not a bug.
+
+Stage Summary:
+- Blank canvas now delivers what it promises (a truly empty stack + a fully discoverable 11-block palette), quick-starts are exact, and the Create grid exposes every block kind with proper color coding. Premade/blank parity restored.
+- Files touched: src/components/memorableday/builder.tsx (seedScenes honesty rework + palette affordance + ChevronRight import + paletteRef/checkPaletteScroll), src/components/memorableday/views/create-view.tsx (Background tile + tint colors + Wallpaper import).
+- Tool gotchas logged: Bash tool output display strips "[m" (looks like corrupted `const [mode…` lines — verify with Read tool before panicking); agent-browser eval quoting breaks on nested quotes — write JS to a temp file and eval "$(cat file)"; programmatic .click() bypasses overlay hit-testing (verify overlays via z-index/rect, not innerText).
+- Next-phase candidates: per-block quick-start from ⌘K palette, template gallery inside the builder (premade layouts picker), Spotify credentials drop-in, public /e/[slug] recipient page, e2e harness for builder→player.
+- Reminder: user should rotate the GitHub PAT shared earlier in chat.
