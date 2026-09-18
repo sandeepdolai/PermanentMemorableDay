@@ -45,6 +45,10 @@ model Moment {
   cover       Int       @default(0)
   scenes      Int       @default(3)
   blocks      Int       @default(0)
+  /// Authored experience document — JSON SceneDoc[] built in the builder
+  sceneData   String?
+  /// Experience soundtrack pick — JSON SongPick (searched catalog song + snippet)
+  trackData   String?
   views       Int       @default(0)
   loves       Int       @default(0)
   /// 0–100 (nullable until a moment has analytics)

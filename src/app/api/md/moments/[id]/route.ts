@@ -6,6 +6,7 @@
  */
 import { db } from "@/lib/db";
 import { fail, getUser, ok, serializeMoment } from "@/lib/md-server";
+import type { SceneDoc, SongPick } from "@/lib/md-blocks";
 
 interface PatchBody {
   title?: string;
@@ -16,6 +17,8 @@ interface PatchBody {
   progress?: number | null;
   dateLabel?: string;
   archived?: boolean;
+  sceneData?: SceneDoc[] | null;
+  track?: SongPick | null;
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -34,6 +37,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.blocks !== undefined) data.blocks = body.blocks;
     if (body.progress !== undefined) data.progress = body.progress;
     if (body.dateLabel !== undefined) data.dateLabel = body.dateLabel;
+    if (body.sceneData !== undefined)
+      data.sceneData = body.sceneData ? JSON.stringify(body.sceneData) : null;
+    if (body.track !== undefined) data.trackData = body.track ? JSON.stringify(body.track) : null;
 
     if (body.archived !== undefined) {
       if (body.archived && existing.status !== "archived") {

@@ -399,6 +399,8 @@ export function AppShell() {
           scenes: m.scenes,
           blocks: m.blocks,
           editedAt: m.date,
+          sceneData: m.sceneData,
+          track: m.track,
         }))
         .slice(0, 12),
     [moments, isUserDraft]
@@ -422,6 +424,8 @@ export function AppShell() {
                   scenes: draft.scenes,
                   blocks: draft.blocks,
                   date: draft.editedAt,
+                  sceneData: draft.sceneData ?? m.sceneData,
+                  track: draft.track !== undefined ? draft.track : m.track,
                 }
               : m
           );
@@ -442,6 +446,8 @@ export function AppShell() {
           blocks: draft.blocks,
           source: "user",
           shareSlug: null,
+          sceneData: draft.sceneData ?? null,
+          track: draft.track ?? null,
         };
         return [created, ...prev];
       });
@@ -453,6 +459,8 @@ export function AppShell() {
         blocks: draft.blocks,
         status: "draft",
         dateLabel: draft.editedAt,
+        ...(draft.sceneData !== undefined ? { sceneData: draft.sceneData } : {}),
+        ...(draft.track !== undefined ? { track: draft.track } : {}),
       }).catch(notifySyncError);
     },
     [notifySyncError]
@@ -472,6 +480,8 @@ export function AppShell() {
             scenes: m.scenes,
             blocks: m.blocks,
             editedAt: m.date,
+            sceneData: m.sceneData,
+            track: m.track,
           };
         }
         return prev.filter((x) => x.id !== id);
@@ -505,6 +515,8 @@ export function AppShell() {
           scenes: source.scenes,
           blocks: source.blocks,
           editedAt: "Just now",
+          sceneData: source.sceneData,
+          track: source.track,
         };
         const created: ClientMoment = {
           ...source,
@@ -514,6 +526,8 @@ export function AppShell() {
           date: "Just now",
           blocks: source.blocks,
           shareSlug: null,
+          sceneData: source.sceneData,
+          track: source.track,
         };
         return [created, ...prev];
       });
@@ -526,6 +540,8 @@ export function AppShell() {
           blocks: copy.blocks,
           status: "draft",
           dateLabel: copy.editedAt,
+          ...(copy.sceneData ? { sceneData: copy.sceneData } : {}),
+          ...(copy.track ? { track: copy.track } : {}),
         }).catch(notifySyncError);
       }
       return copy;
@@ -973,7 +989,14 @@ export function AppShell() {
           <NotificationsContent
             onOpenMoment={(m) => {
               setSheet(null);
-              openMoment(m);
+              // Notifications carry a light moment ref — enrich it with the
+              // authored scene document + soundtrack from the live collection.
+              const full = moments.find((x) => x.id === m.id);
+              openMoment({
+                ...m,
+                ...(full?.sceneData?.length ? { scenes: full.sceneData } : {}),
+                ...(full?.track ? { music: full.track } : {}),
+              });
             }}
           />
         </BottomSheet>

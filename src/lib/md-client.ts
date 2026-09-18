@@ -3,6 +3,7 @@
  * All calls are relative-path (same-origin) against the Next.js route handlers.
  */
 import type { ClientMoment, SendMomentPayload } from "@/lib/md-types";
+import type { SceneDoc, SongPick, SongResult } from "@/lib/md-blocks";
 import type { AppNotification } from "@/lib/mock-data";
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
@@ -42,13 +43,15 @@ export function apiUpsertMoment(payload: {
   blocks?: number;
   progress?: number | null;
   dateLabel?: string;
+  sceneData?: SceneDoc[] | null;
+  track?: SongPick | null;
 }): Promise<{ moment: ClientMoment }> {
   return req("/api/md/moments", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function apiPatchMoment(
   id: string,
-  payload: { title?: string; recipient?: string; cover?: number; scenes?: number; blocks?: number; progress?: number | null; dateLabel?: string; archived?: boolean }
+  payload: { title?: string; recipient?: string; cover?: number; scenes?: number; blocks?: number; progress?: number | null; dateLabel?: string; archived?: boolean; sceneData?: SceneDoc[] | null; track?: SongPick | null }
 ): Promise<{ moment: ClientMoment }> {
   return req(`/api/md/moments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
@@ -133,4 +136,28 @@ export function apiPutSavedTemplates(ids: string[]): Promise<{ savedIds: string[
 /** Spend (negative) or refill (positive) AI credits — returns the fresh user. */
 export function apiAdjustCredits(creditsDelta: number): Promise<{ user: { name: string; email: string; plan: string; credits: number } }> {
   return req("/api/md/user", { method: "PATCH", body: JSON.stringify({ creditsDelta }) });
+}
+
+/* ------------------------------------------------------------------ */
+/* Media + music                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Uploads a photo/video for a builder block — returns the served URL. */
+export async function apiUploadFile(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/md/upload", { method: "POST", body: form });
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
+  if (!res.ok || data.ok === false || !data.url) {
+    throw new Error(data.error || "Upload failed");
+  }
+  return data.url;
+}
+
+/** Searches the song catalog (iTunes today, Spotify when configured). */
+export async function apiSearchMusic(q: string): Promise<SongResult[]> {
+  const data = await req<{ songs: SongResult[] }>(
+    `/api/md/music/search?q=${encodeURIComponent(q)}`
+  );
+  return data.songs;
 }

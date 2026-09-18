@@ -4,6 +4,7 @@ import { createContext, useContext } from "react";
 import type { RefObject } from "react";
 import type { AppNotification, ExploreItem, InsightRange, MomentStatus } from "@/lib/mock-data";
 import type { ClientMoment, SendMomentPayload } from "@/lib/md-types";
+import type { SceneDoc, SongPick } from "@/lib/md-blocks";
 
 export type Tab = "home" | "create" | "explore" | "gallery" | "profile";
 export type ThemeMode = "light" | "dark" | "system";
@@ -30,6 +31,11 @@ export interface PlayerPayload {
   dedication: string;
   /** Optional soundtrack to surface in the player ("Now playing" chip) */
   trackId?: string;
+  /** Authored scene document — when present the player renders exactly
+   *  these blocks (block-driven mode) instead of the canned demo flow. */
+  scenes?: SceneDoc[];
+  /** Soundtrack song pick (real catalog preview + snippet) */
+  music?: SongPick;
 }
 
 /** Payload for the share sheet */
@@ -55,7 +61,7 @@ export interface StatsPayload {
   loves?: number;
 }
 
-/** A moment draft saved by the user from the builder (persisted in localStorage) */
+/** A moment draft saved by the user from the builder (server-persisted) */
 export interface UserDraft {
   id: string;
   title: string;
@@ -64,6 +70,10 @@ export interface UserDraft {
   scenes: number;
   blocks: number;
   editedAt: string;
+  /** Authored scene document (blocks with content) — restores in the builder */
+  sceneData?: SceneDoc[] | null;
+  /** Soundtrack song pick */
+  track?: SongPick | null;
 }
 
 /** Options when opening the Experience Builder */
@@ -82,6 +92,8 @@ export interface BuilderOptions {
   initialBlock?: string;
   /** Seed an AI-composed message into Scene 1 as a text block */
   seedText?: string;
+  /** Restore an existing moment's authored document (Edit in Builder) */
+  doc?: { scenes: SceneDoc[]; track: SongPick | null };
 }
 
 /** Optional action button rendered inside a toast (e.g. "Undo") */

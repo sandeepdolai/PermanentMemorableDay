@@ -139,7 +139,15 @@ export function CommandPalette() {
           icon: Play,
           group: "Moments",
           keywords: `${m.status} ${m.tags.join(" ")} ${m.recipient}`,
-          run: () => md.openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` }),
+          run: () =>
+            md.openMoment({
+              id: m.id,
+              title: m.title,
+              cover: m.cover,
+              dedication: `For ${m.recipient}`,
+              ...(m.sceneData?.length ? { scenes: m.sceneData } : {}),
+              ...(m.track ? { music: m.track } : {}),
+            }),
         })),
 
       // Drafts (user-saved, newest first)
@@ -149,7 +157,14 @@ export function CommandPalette() {
         subtitle: `Draft · ${d.scenes} scenes · ${d.blocks} blocks`,
         icon: FileEdit,
         group: "Drafts",
-        run: () => md.openBuilder({ title: d.title, cover: d.cover, draftId: d.id, scenes: d.scenes }),
+        run: () =>
+          md.openBuilder({
+            title: d.title,
+            cover: d.cover,
+            draftId: d.id,
+            scenes: d.scenes,
+            ...(d.sceneData?.length ? { doc: { scenes: d.sceneData, track: d.track ?? null } } : {}),
+          }),
       })),
 
       // Templates (explore collection)

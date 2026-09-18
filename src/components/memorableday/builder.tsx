@@ -20,15 +20,28 @@ import {
   Play,
   Plus,
   Redo2,
+  Search as SearchIcon,
   Share2,
   Sparkles,
   Trash2,
   Type,
   Undo2,
   Video,
+  X,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
-import { SOUNDTRACKS, formatDuration, type Soundtrack } from "@/lib/mock-data";
+import { formatDuration } from "@/lib/mock-data";
+import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
+import {
+  formatClock,
+  photoFilterCss,
+  PHOTO_FILTERS,
+  type BlockData,
+  type BlockDoc,
+  type SceneDoc,
+  type SongPick,
+  type SongResult,
+} from "@/lib/md-blocks";
 import { CoverArt, COVER_NAMES } from "./cover-art";
 import { BottomSheet } from "./bottom-sheet";
 import { RenameDialog } from "./moment-menu";
@@ -63,61 +76,19 @@ const BLOCKS: BlockDef[] = [
 
 const BLOCK_BY_TYPE = Object.fromEntries(BLOCKS.map((b) => [b.type, b]));
 
-interface Block {
-  id: string;
-  type: string;
-  /** Optional composed copy (AI messages render here) */
-  text?: string;
-  /** Per-type configuration set in the block editor */
-  data?: BlockData;
-}
-
-/** Per-type block configuration (all optional — unset fields fall back to defaults) */
-interface BlockData {
-  /** text: message body */
-  body?: string;
-  /** photo */
-  caption?: string;
-  filter?: string;
-  /** video: clip length seconds */
-  duration?: number;
-  /** audio: library track */
-  trackId?: string;
-  /** gift */
-  message?: string;
-  wrap?: string;
-  /** countdown: unlock delay minutes */
-  minutes?: number;
-  /** quiz */
-  question?: string;
-  options?: string[];
-  answer?: number;
-  /** reward */
-  rewardKind?: string;
-  code?: string;
-  /** cta */
-  label?: string;
-  action?: string;
-  /** confetti */
-  style?: string;
-}
-
-interface Scene {
-  id: string;
-  blocks: Block[];
-}
+type Block = BlockDoc;
+type Scene = SceneDoc;
 
 /** Undo/redo snapshot of the whole draft */
 interface Snapshot {
   label: string;
   title: string;
   scenes: Scene[];
-  trackId: string | null;
+  track: SongPick | null;
   cover: number;
 }
 
 /* Block editor option catalogues (abstract, no themed content) */
-const PHOTO_FILTERS = ["Original", "Warm", "Mono", "Fade", "Vivid"];
 const GIFT_WRAPS = ["#007AFF", "#FF375F", "#5E5CE6", "#30D158", "#FF9F0A"];
 const COUNTDOWN_PRESETS = [
   { label: "1 min", minutes: 1 },
@@ -163,6 +134,10 @@ const DRAFT_PATTERNS: string[][] = [
 ];
 
 function seedScenes(opts: BuilderOptions): Scene[] {
+  // Edit-in-Builder restore — the full authored document wins over sketching.
+  if (opts.doc && opts.doc.scenes.length > 0) {
+    return opts.doc.scenes.map((s) => ({ ...s, blocks: s.blocks.map((b) => ({ ...b })) }));
+  }
   if (opts.ai) {
     const scenes: Scene[] = [
       { id: "s1", blocks: [{ id: "b1", type: "text" }, { id: "b2", type: "photo" }] },
@@ -244,10 +219,15 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     }
     case "photo": {
       const filtered = d?.filter && d.filter !== "Original" ? d.filter : null;
+      const src = d?.image;
       return (
         <div className="flex items-center gap-3">
           <span className="relative block shrink-0">
-            <CoverArt variant={filtered ? (cover + 1) % 10 : cover} className="h-16 w-24 rounded-[12px]" />
+            {src ? (
+              <img src={src} alt={d?.caption?.trim() || "Uploaded photo"} style={photoFilterCss(d?.filter)} className="h-16 w-24 rounded-[12px] object-cover" />
+            ) : (
+              <CoverArt variant={filtered ? (cover + 1) % 10 : cover} className="h-16 w-24 rounded-[12px]" />
+            )}
             {filtered ? (
               <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[#1D1D1F]/45 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur-md">
                 {filtered}
@@ -255,20 +235,36 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
             ) : null}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Photo block</p>
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+              {src ? "Your photo" : "Photo block"}
+            </p>
             {d?.caption?.trim() ? (
               <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{d.caption.trim()}”</p>
             ) : (
-              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Full-bleed image with a soft caption</p>
+              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">
+                {src ? "Uploaded — tap Edit to adjust" : "Full-bleed image with a soft caption"}
+              </p>
             )}
           </div>
         </div>
       );
     }
-    case "video":
+    case "video": {
+      const src = d?.video;
       return (
         <div className="relative overflow-hidden rounded-[14px]">
-          <CoverArt variant={(cover + 3) % 10} className="h-24 w-full" />
+          {src ? (
+            <video
+              src={src}
+              muted
+              playsInline
+              preload="metadata"
+              aria-label="Uploaded video"
+              className="h-24 w-full bg-[#1D1D1F] object-cover"
+            />
+          ) : (
+            <CoverArt variant={(cover + 3) % 10} className="h-24 w-full" />
+          )}
           <span className="absolute inset-0 flex items-center justify-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/25 backdrop-blur-md">
               <Play size={18} className="ml-0.5 text-white" fill="white" aria-hidden />
@@ -279,28 +275,27 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
           </span>
         </div>
       );
+    }
     case "audio": {
-      const track = d?.trackId ? SOUNDTRACKS.find((t) => t.id === d.trackId) : null;
-      if (track) {
+      const song = d?.song;
+      if (song) {
         return (
           <div className="flex items-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-white"
-              style={{ background: `linear-gradient(135deg, ${track.vibe}, ${track.vibe2})` }}
-            >
-              <Music size={15} />
-            </span>
+            {song.artwork ? (
+              <img src={song.artwork} alt="" aria-hidden className="h-10 w-10 shrink-0 rounded-[12px] object-cover" />
+            ) : (
+              <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#FF375F]/15 text-[#FF375F]">
+                <Music size={15} />
+              </span>
+            )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
-                {track.title}
+                {song.title}
               </p>
-              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">
-                {track.artist} · {track.mood}
-              </p>
+              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">{song.artist}</p>
             </div>
-            <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#AAAAAA]">
-              {formatDuration(track.duration)}
+            <span className="shrink-0 rounded-full bg-[#FF375F]/[0.1] px-2 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
+              {formatClock(song.length)} clip
             </span>
           </div>
         );
@@ -618,6 +613,527 @@ function ChipGroup<T extends string | number>({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Media upload field (photo / video blocks)                           */
+/* ------------------------------------------------------------------ */
+
+const UPLOAD_LIMIT_MB = 16;
+
+function MediaUploadField({
+  kind,
+  value,
+  onUploaded,
+  onRemove,
+}: {
+  kind: "photo" | "video";
+  value?: string;
+  onUploaded: (url: string) => void;
+  onRemove: () => void;
+}) {
+  const { notify } = useMD();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const isPhoto = kind === "photo";
+
+  const pick = () => inputRef.current?.click();
+
+  const upload = async (file: File) => {
+    const expected = isPhoto ? "image/" : "video/";
+    if (!file.type.startsWith(expected)) {
+      notify(isPhoto ? "That file isn't a photo" : "That file isn't a video");
+      return;
+    }
+    if (file.size > UPLOAD_LIMIT_MB * 1024 * 1024) {
+      notify(`Too large — keep it under ${UPLOAD_LIMIT_MB} MB`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const url = await apiUploadFile(file);
+      onUploaded(url);
+      notify(isPhoto ? "Photo uploaded" : "Video uploaded");
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Upload failed — try again");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={isPhoto ? "image/*" : "video/*"}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // allow re-picking the same file
+          if (file) void upload(file);
+        }}
+      />
+      {value ? (
+        <div className="space-y-2.5">
+          <div className="relative overflow-hidden rounded-[16px] border border-[#1D1D1F]/[0.07]">
+            {isPhoto ? (
+              <img src={value} alt="Uploaded photo preview" className="max-h-[220px] w-full object-cover" />
+            ) : (
+              <video src={value} controls muted playsInline preload="metadata" className="max-h-[220px] w-full bg-[#1D1D1F] object-cover" />
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={pick}
+              disabled={busy}
+              className="flex-1 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97] disabled:opacity-50"
+            >
+              {busy ? "Uploading…" : "Replace"}
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={busy}
+              className="flex-1 rounded-full bg-[#FF375F]/[0.08] py-2.5 text-[13px] font-semibold text-[#FF375F] transition-transform active:scale-[0.97] disabled:opacity-50"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={pick}
+          disabled={busy}
+          className="flex w-full flex-col items-center rounded-[18px] border-2 border-dashed border-[#1D1D1F]/[0.14] bg-white px-6 py-8 transition-all hover:border-[#007AFF]/45 hover:bg-[#007AFF]/[0.03] active:scale-[0.98] disabled:opacity-60"
+        >
+          <span className={cn(
+            "mb-2.5 flex h-11 w-11 items-center justify-center rounded-full",
+            isPhoto ? "bg-[#30D158]/[0.1] text-[#1E9E4A]" : "bg-[#FF9F0A]/[0.12] text-[#B26A00]"
+          )}>
+            {busy ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+            ) : isPhoto ? (
+              <ImagesIcon size={19} aria-hidden />
+            ) : (
+              <Video size={19} aria-hidden />
+            )}
+          </span>
+          <span className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+            {busy ? "Uploading…" : isPhoto ? "Upload a photo" : "Upload a video"}
+          </span>
+          <span className="mt-1 text-[11.5px] text-[#AAAAAA]">
+            {isPhoto ? "JPG, PNG, WebP or GIF · up to 16 MB" : "MP4 or WebM · up to 16 MB"}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Song picker — Instagram-Notes-style search + snippet selection      */
+/* ------------------------------------------------------------------ */
+
+const SNIPPET_LENGTHS = [10, 15, 30];
+
+/** Row preview + snippet playback state machine for one shared <audio>. */
+function usePreviewAudio() {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const stopRef = useRef<(() => void) | null>(null);
+
+  const stop = useCallback(() => {
+    stopRef.current?.();
+    stopRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlayingId(null);
+  }, []);
+
+  /** Plays a clip — from `start` for `length` seconds (preview clips are ~30s). */
+  const play = useCallback(
+    (id: string, url: string, start: number, length: number) => {
+      stop();
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      setPlayingId(id);
+      const onTime = () => {
+        if (audio.currentTime >= start + length) {
+          stop();
+        }
+      };
+      const onReady = () => {
+        try {
+          audio.currentTime = Math.min(start, Math.max(0, (audio.duration || 30) - 0.5));
+        } catch {
+          // seek before metadata — the assignment still queues on most browsers
+        }
+        void audio.play().catch(() => stop());
+      };
+      const onEnd = () => stop();
+      audio.addEventListener("loadedmetadata", onReady, { once: true });
+      audio.addEventListener("timeupdate", onTime);
+      audio.addEventListener("ended", onEnd);
+      audio.addEventListener("error", onEnd);
+      // If metadata is already available (cached), loadedmetadata may not fire.
+      if (audio.readyState >= 1) onReady();
+      stopRef.current = () => {
+        audio.removeEventListener("timeupdate", onTime);
+        audio.removeEventListener("loadedmetadata", onReady);
+        audio.removeEventListener("ended", onEnd);
+        audio.removeEventListener("error", onEnd);
+      };
+    },
+    [stop]
+  );
+
+  // Stop on unmount (sheet close)
+  useEffect(() => () => stop(), [stop]);
+
+  return { playingId, play, stop };
+}
+
+/**
+ * SongPickerContent — search any song, preview it, pick the exact part.
+ * Used for both the audio block editor and the experience soundtrack.
+ */
+function SongPickerContent({
+  selected,
+  onConfirm,
+}: {
+  selected: SongPick | null;
+  onConfirm: (song: SongPick | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  /** Last settled search result — {q} ties it to the query it answers. */
+  const [results, setResults] = useState<{ q: string; songs: SongResult[]; error: boolean } | null>(null);
+  const [chosen, setChosen] = useState<SongResult | null>(null);
+  const [start, setStart] = useState(0);
+  const [length, setLength] = useState(15);
+  const { playingId, play, stop } = usePreviewAudio();
+
+  // Debounced search — fires when the query settles (≥2 chars).
+  // Spinner / results / empty states are all DERIVED from (query, results),
+  // so nothing needs a synchronous reset when the query changes.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const t = window.setTimeout(() => {
+      apiSearchMusic(q)
+        .then((songs) => setResults({ q, songs, error: false }))
+        .catch(() => setResults({ q, songs: [], error: true }));
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  const q = query.trim();
+  const active = q.length >= 2;
+  const settled = active && results?.q === q;
+  const searching = active && !settled; // includes the debounce window
+  const songs = settled ? results.songs : [];
+  const searched = settled && !results.error;
+  const error = settled && results.error;
+
+  const choose = (s: SongResult) => {
+    stop();
+    if (chosen?.id === s.id) {
+      setChosen(null);
+      return;
+    }
+    setChosen(s);
+    // Sensible default: drop the needle 5s in, 15s clip.
+    setStart(Math.min(5, Math.max(0, 30 - 15)));
+    setLength(15);
+  };
+
+  const confirm = () => {
+    if (!chosen) return;
+    stop();
+    onConfirm({
+      id: chosen.id,
+      title: chosen.title,
+      artist: chosen.artist,
+      album: chosen.album,
+      artwork: chosen.artwork,
+      previewUrl: chosen.previewUrl,
+      durationMs: chosen.durationMs,
+      start,
+      length,
+      source: chosen.source,
+    });
+  };
+
+  return (
+    <div className="pb-2">
+      {/* Current selection */}
+      {selected && !chosen ? (
+        <div className="mb-3 flex items-center gap-3 rounded-[18px] border-2 border-[#007AFF] bg-[#007AFF]/[0.04] p-3">
+          {selected.artwork ? (
+            <img src={selected.artwork} alt="" aria-hidden className="h-11 w-11 shrink-0 rounded-[12px] object-cover" />
+          ) : (
+            <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-[#FF375F]/15 text-[#FF375F]">
+              <Music size={16} />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{selected.title}</p>
+            <p className="mt-0.5 truncate text-[12px] text-[#AAAAAA]">
+              {selected.artist} · {formatClock(selected.start)}–{formatClock(selected.start + selected.length)} clip
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onConfirm(null)}
+            aria-label="Remove song"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.09] text-[#FF375F] transition-transform active:scale-90"
+          >
+            <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+          </button>
+        </div>
+      ) : null}
+
+      {/* Search field */}
+      <div className="relative">
+        <SearchIcon
+          size={15}
+          aria-hidden
+          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
+        />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search songs, artists…"
+          aria-label="Search songs"
+          autoComplete="off"
+          className={cn(fieldInput, "pl-9")}
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setChosen(null);
+            }}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[#1D1D1F]/[0.08] text-[#AAAAAA] transition-colors hover:text-[#1D1D1F]"
+          >
+            <X size={11} strokeWidth={2.6} aria-hidden />
+          </button>
+        ) : null}
+      </div>
+
+      {/* Results */}
+      <div className="mt-3 space-y-2">
+        {searching ? (
+          <div className="flex flex-col gap-2.5 py-4" aria-live="polite">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="h-11 w-11 shrink-0 animate-pulse rounded-[12px] bg-[#1D1D1F]/[0.06]" />
+                <span className="flex-1 space-y-1.5">
+                  <span className="block h-3 w-2/3 animate-pulse rounded-full bg-[#1D1D1F]/[0.06]" />
+                  <span className="block h-2.5 w-1/3 animate-pulse rounded-full bg-[#1D1D1F]/[0.06]" />
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <p className="py-6 text-center text-[13px] font-medium text-[#FF375F]">
+            Search is unavailable right now — try again
+          </p>
+        ) : songs.length === 0 ? (
+          <div className="py-8 text-center">
+            <span className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-[#FF375F]/[0.08] text-[#FF375F]">
+              <Music size={17} aria-hidden />
+            </span>
+            <p className="text-[13px] font-semibold text-[#1D1D1F]">
+              {searched ? "Nothing found — try another search" : "Find the song that sets the mood"}
+            </p>
+            <p className="mt-1 px-6 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+              {searched
+                ? "Check the spelling or try the artist's name."
+                : "Search any artist or track, listen to the preview, then pick the exact part that plays."}
+            </p>
+          </div>
+        ) : (
+          songs.map((s) => {
+            const isChosen = chosen?.id === s.id;
+            const playing = playingId === s.id;
+            return (
+              <div
+                key={s.id}
+                className={cn(
+                  "flex items-center gap-3 rounded-[16px] border-2 bg-white p-2.5 transition-all",
+                  isChosen ? "border-[#007AFF] bg-[#007AFF]/[0.04]" : "border-[#1D1D1F]/[0.07]"
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    playing
+                      ? stop()
+                      : play(s.id, s.previewUrl, 0, 30)
+                  }
+                  aria-label={playing ? `Pause preview of ${s.title}` : `Preview ${s.title}`}
+                  className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[12px]"
+                >
+                  {s.artwork ? (
+                    <img src={s.artwork} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+                  ) : (
+                    <span aria-hidden className="absolute inset-0 bg-[#1D1D1F]/[0.08]" />
+                  )}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "absolute inset-0 flex items-center justify-center bg-black/35 text-white transition-opacity",
+                      playing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    )}
+                  >
+                    {playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
+                  </span>
+                </button>
+                <button type="button" onClick={() => choose(s)} className="min-w-0 flex-1 text-left">
+                  <p className={cn("truncate text-[14px] font-bold tracking-[-0.01em]", isChosen ? "text-[#007AFF]" : "text-[#1D1D1F]")}>
+                    {s.title}
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-[#AAAAAA]">
+                    {playing ? <EqBars className="h-3 w-4 text-[#007AFF]" /> : null}
+                    <span className="truncate">{s.artist}</span>
+                  </p>
+                </button>
+                <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#AAAAAA]">
+                  {formatClock(s.durationMs / 1000)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => choose(s)}
+                  aria-label={isChosen ? `Unselect ${s.title}` : `Select ${s.title}`}
+                  aria-pressed={isChosen}
+                  className={cn(
+                    "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                    isChosen ? "border-[#007AFF] bg-[#007AFF]" : "border-[#D1D1D6]"
+                  )}
+                >
+                  {isChosen ? <Check size={13} strokeWidth={3} className="text-white" aria-hidden /> : null}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Snippet picker — Instagram-Notes style “choose the part” */}
+      {chosen ? (
+        <div className="mt-4 rounded-[20px] border border-[#007AFF]/25 bg-[#007AFF]/[0.04] p-4">
+          <div className="flex items-center gap-3">
+            {chosen.artwork ? (
+              <img src={chosen.artwork} alt="" aria-hidden className="h-12 w-12 shrink-0 rounded-[13px] object-cover" />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{chosen.title}</p>
+              <p className="mt-0.5 truncate text-[11.5px] text-[#AAAAAA]">Pick the part that plays</p>
+            </div>
+          </div>
+
+          {/* Waveform-ish scrubber */}
+          <div className="mt-3.5">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Start</span>
+              <span className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F]">
+                {formatClock(start)} → {formatClock(start + length)}
+              </span>
+            </div>
+            <div aria-hidden className="flex h-8 items-center gap-[2px]">
+              {Array.from({ length: 40 }, (_, i) => {
+                const frac = i / 40;
+                const inSnippet = frac >= start / 30 && frac <= (start + length) / 30;
+                const h = 8 + ((i * 37) % 19);
+                return (
+                  <span
+                    key={i}
+                    className={cn("flex-1 rounded-full transition-colors", inSnippet ? "bg-[#007AFF]" : "bg-[#1D1D1F]/[0.12]")}
+                    style={{ height: `${h}px` }}
+                  />
+                );
+              })}
+            </div>
+            <Slider
+              value={[start]}
+              min={0}
+              max={Math.max(0, 30 - length)}
+              step={0.5}
+              onValueChange={(v) => setStart(v[0])}
+              aria-label="Snippet start time"
+              className="mt-1"
+            />
+          </div>
+
+          {/* Length chips */}
+          <div className="mt-3">
+            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Length</p>
+            <div className="flex gap-2">
+              {SNIPPET_LENGTHS.map((len) => (
+                <button
+                  key={len}
+                  type="button"
+                  aria-pressed={length === len}
+                  onClick={() => {
+                    setLength(len);
+                    setStart((s) => Math.min(s, Math.max(0, 30 - len)));
+                  }}
+                  className={cn(
+                    "flex-1 rounded-full border py-2 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
+                    length === len
+                      ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                      : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+                  )}
+                >
+                  {formatClock(len)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                playingId === `snippet-${chosen.id}`
+                  ? stop()
+                  : play(`snippet-${chosen.id}`, chosen.previewUrl, start, length)
+              }
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97]"
+            >
+              {playingId === `snippet-${chosen.id}` ? (
+                <>
+                  <Pause size={13} aria-hidden /> Pause
+                </>
+              ) : (
+                <>
+                  <Play size={13} fill="currentColor" aria-hidden /> Preview
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={confirm}
+              className="flex-[1.6] rounded-full bg-[#007AFF] py-2.5 text-[14px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+            >
+              Use this song
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <p className="mt-3 px-1 text-center text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+        Previews are 30-second catalog clips — pick the exact part that plays, Instagram-style.
+      </p>
+    </div>
+  );
+}
+
 function BlockEditorContent({
   block,
   onChange,
@@ -656,9 +1172,18 @@ function BlockEditorContent({
       return (
         <div className="space-y-4 pb-2">
           <div>
+            <FieldLabel>Photo</FieldLabel>
+            <MediaUploadField
+              kind="photo"
+              value={d.image}
+              onUploaded={(url) => set({ image: url })}
+              onRemove={() => set({ image: undefined })}
+            />
+          </div>
+          <div>
             <FieldLabel>Filter</FieldLabel>
             <ChipGroup
-              options={PHOTO_FILTERS.map((f) => ({ value: f, label: f }))}
+              options={PHOTO_FILTERS.map((f) => ({ value: f as string, label: f }))}
               value={d.filter ?? "Original"}
               onChange={(v) => set({ filter: v })}
               groupLabel="Photo filter"
@@ -681,72 +1206,50 @@ function BlockEditorContent({
       );
     case "video":
       return (
-        <div className="pb-2">
-          <div className="flex items-baseline justify-between">
-            <FieldLabel>Clip length</FieldLabel>
-            <span className="text-[13px] font-bold tabular-nums text-[#1D1D1F]">{formatDuration(d.duration ?? 12)}</span>
+        <div className="space-y-4 pb-2">
+          <div>
+            <FieldLabel>Video</FieldLabel>
+            <MediaUploadField
+              kind="video"
+              value={d.video}
+              onUploaded={(url) => set({ video: url })}
+              onRemove={() => set({ video: undefined, duration: undefined })}
+            />
           </div>
-          <Slider
-            value={[d.duration ?? 12]}
-            min={5}
-            max={60}
-            step={1}
-            onValueChange={(v) => set({ duration: v[0] })}
-            aria-label="Clip length in seconds"
-            className="mt-1"
-          />
-          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
-            Short clips hold attention — aim under 20 seconds.
-          </p>
+          {d.video ? (
+            <div>
+              <div className="flex items-baseline justify-between">
+                <FieldLabel>Play length</FieldLabel>
+                <span className="text-[13px] font-bold tabular-nums text-[#1D1D1F]">{formatDuration(d.duration ?? 12)}</span>
+              </div>
+              <Slider
+                value={[d.duration ?? 12]}
+                min={5}
+                max={60}
+                step={1}
+                onValueChange={(v) => set({ duration: v[0] })}
+                aria-label="Clip length in seconds"
+                className="mt-1"
+              />
+              <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                The clip plays for this long in the experience.
+              </p>
+            </div>
+          ) : (
+            <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+              Upload a clip — short videos hold attention best.
+            </p>
+          )}
         </div>
       );
     case "audio":
       return (
         <div className="pb-2">
-          <FieldLabel>Track</FieldLabel>
-          <div className="space-y-2" role="radiogroup" aria-label="Audio track">
-            {SOUNDTRACKS.map((t) => {
-              const selected = d.trackId === t.id;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => set({ trackId: selected ? undefined : t.id })}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-[18px] border-2 bg-white p-3 text-left transition-all active:scale-[0.98]",
-                    selected ? "border-[#007AFF] bg-[#007AFF]/[0.04]" : "border-[#1D1D1F]/[0.07]"
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-white"
-                    style={{ background: `linear-gradient(135deg, ${t.vibe}, ${t.vibe2})` }}
-                  >
-                    <Music size={16} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{t.title}</span>
-                    <span className="mt-0.5 block text-[12px] text-[#AAAAAA]">
-                      {t.artist} · {t.mood}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-[#AAAAAA]">
-                    {formatDuration(t.duration)}
-                  </span>
-                  <span
-                    className={cn(
-                      "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2",
-                      selected ? "border-[#007AFF] bg-[#007AFF]" : "border-[#D1D1D6]"
-                    )}
-                  >
-                    {selected ? <Check size={13} strokeWidth={3} className="text-white" /> : null}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <FieldLabel>Song — search, listen, pick the part</FieldLabel>
+          <SongPickerContent
+            selected={d.song ?? null}
+            onConfirm={(song) => set(song ? { song } : { song: undefined })}
+          />
         </div>
       );
     case "gift":
@@ -954,7 +1457,7 @@ function BlockEditorContent({
 }
 
 /* ------------------------------------------------------------------ */
-/* Soundtrack picker (experience-level music, sheet content)           */
+/* Soundtrack picker (experience-level music) — shared equalizer bars   */
 /* ------------------------------------------------------------------ */
 
 /** Mini animated equalizer bars (playing state) */
@@ -965,85 +1468,6 @@ function EqBars({ className }: { className?: string }) {
       <span />
       <span />
     </span>
-  );
-}
-
-function SoundtrackContent({
-  selected,
-  onSelect,
-}: {
-  selected: string | null;
-  onSelect: (id: string | null) => void;
-}) {
-  const [previewId, setPreviewId] = useState<string | null>(null);
-
-  // Previews auto-stop after a few seconds (simulated playback)
-  useEffect(() => {
-    if (!previewId) return;
-    const t = window.setTimeout(() => setPreviewId(null), 6000);
-    return () => window.clearTimeout(t);
-  }, [previewId]);
-
-  return (
-    <div className="pb-2">
-      <div className="space-y-2">
-        {SOUNDTRACKS.map((t) => {
-          const selectedRow = selected === t.id;
-          const playing = previewId === t.id;
-          return (
-            <div
-              key={t.id}
-              className={cn(
-                "card-shadow flex items-center gap-3 rounded-[18px] border-2 bg-white p-2.5",
-                selectedRow ? "border-[#007AFF]" : "border-[#1D1D1F]/[0.07]"
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setPreviewId((p) => (p === t.id ? null : t.id))}
-                aria-label={playing ? `Pause preview of ${t.title}` : `Preview ${t.title}`}
-                className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[13px] text-white transition-transform active:scale-90"
-                style={{ background: `linear-gradient(135deg, ${t.vibe}, ${t.vibe2})` }}
-              >
-                {playing ? (
-                  <Pause size={15} fill="currentColor" aria-hidden />
-                ) : (
-                  <Play size={15} fill="currentColor" className="ml-0.5" aria-hidden />
-                )}
-              </button>
-              <button
-                type="button"
-                aria-pressed={selectedRow}
-                onClick={() => onSelect(selectedRow ? null : t.id)}
-                className="min-w-0 flex-1 text-left"
-              >
-                <p className="truncate text-[14.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{t.title}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-[#AAAAAA]">
-                  {playing ? <EqBars className="h-3 w-4 text-[#007AFF]" /> : null}
-                  <span className="truncate">
-                    {t.artist} · {t.mood} · {t.bpm} BPM
-                  </span>
-                </p>
-              </button>
-              <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-[#AAAAAA]">
-                {formatDuration(t.duration)}
-              </span>
-              <span
-                className={cn(
-                  "flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full border-2",
-                  selectedRow ? "border-[#007AFF] bg-[#007AFF]" : "border-[#D1D1D6]"
-                )}
-              >
-                {selectedRow ? <Check size={14} strokeWidth={3} className="text-white" aria-hidden /> : null}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-3 px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
-        Soundtracks play softly under every scene. Previews are simulated in this UI preview.
-      </p>
-    </div>
   );
 }
 
@@ -1311,7 +1735,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const [reorderMode, setReorderMode] = useState(false);
   const [past, setPast] = useState<Snapshot[]>([]);
   const [future, setFuture] = useState<Snapshot[]>([]);
-  const [trackId, setTrackId] = useState<string | null>(null);
+  const [track, setTrack] = useState<SongPick | null>(opts.doc?.track ?? null);
   const [editBlockId, setEditBlockId] = useState<string | null>(null);
   const [musicOpen, setMusicOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -1327,7 +1751,6 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
   const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
   const scenePos = sceneIdx + 1;
-  const track: Soundtrack | null = trackId ? (SOUNDTRACKS.find((t) => t.id === trackId) ?? null) : null;
   const editBlock = editBlockId ? (scenes.flatMap((s) => s.blocks).find((b) => b.id === editBlockId) ?? null) : null;
   /** Any builder-local sheet open? (Escape / ⌘Z defer to it) */
   const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen || sendPromptOpen;
@@ -1335,8 +1758,8 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   /* ---------- Undo / redo ---------- */
 
   const snapshot = useCallback(
-    (label: string): Snapshot => ({ label, title, scenes, trackId, cover }),
-    [title, scenes, trackId, cover]
+    (label: string): Snapshot => ({ label, title, scenes, track, cover }),
+    [title, scenes, track, cover]
   );
 
   /** Push the CURRENT state onto the past stack (call before every mutation) */
@@ -1351,7 +1774,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const applySnapshot = useCallback((s: Snapshot) => {
     setTitle(s.title);
     setScenes(s.scenes);
-    setTrackId(s.trackId);
+    setTrack(s.track);
     setCover(s.cover);
     setSceneIdx((i) => Math.min(i, s.scenes.length - 1));
     setSelectedBlock(null);
@@ -1457,12 +1880,11 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
   /* ---------- Soundtrack ---------- */
 
-  const selectTrack = (id: string | null) => {
-    if (trackId === id) return;
-    pushHistory(id ? "Soundtrack changed" : "Soundtrack removed");
-    setTrackId(id);
-    const name = id ? SOUNDTRACKS.find((t) => t.id === id)?.title ?? "Track" : null;
-    notify(name ? `“${name}” set as soundtrack` : "Soundtrack removed");
+  const selectTrack = (song: SongPick | null) => {
+    if ((track?.id ?? null) === (song?.id ?? null) && !!track === !!song) return;
+    pushHistory(song ? "Soundtrack changed" : "Soundtrack removed");
+    setTrack(song);
+    notify(song ? `“${song.title}” set as soundtrack` : "Soundtrack removed");
   };
 
   /* ---------- Cover art ---------- */
@@ -1628,7 +2050,10 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 title: title || "Untitled Experience",
                 cover,
                 dedication: "Draft preview",
-                trackId: trackId ?? undefined,
+                ...(track ? { music: track } : {}),
+                ...(scenes.some((s) => s.blocks.length > 0)
+                  ? { scenes: scenes.map((s) => ({ ...s, blocks: s.blocks.map((b) => ({ ...b })) })) }
+                  : {}),
               })
             }
             aria-label="Preview experience"
@@ -1879,17 +2304,17 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             <div className="card-shadow hairline flex items-center gap-3 rounded-[20px] bg-white p-3">
               {track ? (
                 <>
-                  <span
-                    aria-hidden
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] text-white"
-                    style={{ background: `linear-gradient(135deg, ${track.vibe}, ${track.vibe2})` }}
-                  >
-                    <Music size={17} />
-                  </span>
+                  {track.artwork ? (
+                    <img src={track.artwork} alt="" aria-hidden className="h-11 w-11 shrink-0 rounded-[13px] object-cover" />
+                  ) : (
+                    <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-[#FF375F]/15 text-[#FF375F]">
+                      <Music size={17} />
+                    </span>
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{track.title}</p>
                     <p className="mt-0.5 truncate text-[11.5px] font-medium text-[#AAAAAA]">
-                      {track.artist} · plays across all scenes
+                      {track.artist} · {formatClock(track.start)}–{formatClock(track.start + track.length)} · all scenes
                     </p>
                   </div>
                   <button
@@ -1915,7 +2340,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Add a soundtrack</p>
-                    <p className="mt-0.5 text-[11.5px] font-medium text-[#AAAAAA]">Set the mood across every scene</p>
+                    <p className="mt-0.5 text-[11.5px] font-medium text-[#AAAAAA]">Search any song — plays under every scene</p>
                   </div>
                   <button
                     type="button"
@@ -1998,6 +2423,8 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               scenes: scenes.length,
               blocks: scenes.reduce((n, s) => n + s.blocks.length, 0),
               editedAt: "Just now",
+              sceneData: scenes,
+              track,
             });
             notify("Draft saved to your Gallery");
             onClose();
@@ -2039,7 +2466,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
       </BottomSheet>
 
       <BottomSheet open={musicOpen} onClose={() => setMusicOpen(false)} title="Soundtrack">
-        <SoundtrackContent selected={trackId} onSelect={selectTrack} />
+        <SongPickerContent selected={track} onConfirm={selectTrack} />
       </BottomSheet>
 
       <BottomSheet open={coverOpen} onClose={() => setCoverOpen(false)} title="Cover art">
@@ -2057,6 +2484,8 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               cover,
               scenes: scenes.length,
               blocks: scenes.reduce((n, s) => n + s.blocks.length, 0),
+              sceneData: scenes,
+              track,
               scheduledFor: iso,
               label,
             }).then((moment) => {
@@ -2091,6 +2520,8 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             cover,
             scenes: scenes.length,
             blocks: scenes.reduce((n, s) => n + s.blocks.length, 0),
+            sceneData: scenes,
+            track,
             recipient,
           }).then((moment) => {
             setSending(false);

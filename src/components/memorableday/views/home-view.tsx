@@ -55,6 +55,8 @@ export function HomeView() {
     isUser?: boolean;
     blocks?: number;
     editedAt?: string;
+    sceneData?: import("@/lib/md-blocks").SceneDoc[] | null;
+    track?: import("@/lib/md-blocks").SongPick | null;
   }> = [
     ...userDrafts.map((d) => ({
       id: d.id,
@@ -65,6 +67,8 @@ export function HomeView() {
       isUser: true,
       blocks: d.blocks,
       editedAt: d.editedAt,
+      sceneData: d.sceneData,
+      track: d.track,
     })),
     ...moments.filter((m) => m.source === "seed" && m.status === "draft").map((m) => ({
       id: m.id,
@@ -72,6 +76,8 @@ export function HomeView() {
       cover: m.cover,
       scenes: m.scenes,
       progress: m.progress,
+      sceneData: m.sceneData,
+      track: m.track,
     })),
   ];
   const recent = moments.filter((m) => m.status !== "draft").slice(0, 5);
@@ -167,6 +173,7 @@ export function HomeView() {
                   cover: d.cover,
                   scenes: d.scenes,
                   ...(d.isUser ? { draftId: d.id } : {}),
+                  ...(d.sceneData?.length ? { doc: { scenes: d.sceneData, track: d.track ?? null } } : {}),
                 })
               }
               onKeyDown={(e) => {
@@ -232,7 +239,14 @@ export function HomeView() {
         <div className="card-shadow hairline divide-y divide-[#1D1D1F]/[0.06] overflow-hidden rounded-[24px] bg-white lg:grid lg:grid-cols-2 lg:gap-3 lg:divide-y-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
           {recent.map((m) => {
             const open = () =>
-              openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` });
+              openMoment({
+                id: m.id,
+                title: m.title,
+                cover: m.cover,
+                dedication: `For ${m.recipient}`,
+                ...(m.sceneData?.length ? { scenes: m.sceneData } : {}),
+                ...(m.track ? { music: m.track } : {}),
+              });
             return (
               <div
                 key={m.id}

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { MOMENTS, NOTIFICATIONS, USER } from "@/lib/mock-data";
 import type { AppNotification } from "@/lib/mock-data";
 import type { ClientMoment } from "@/lib/md-types";
+import { parseScenes, parseSong, type BlockData, type BlockDoc, type SceneDoc } from "@/lib/md-blocks";
 
 /** The demo account every record is scoped to (auth lands in a later phase). */
 export const DEMO_EMAIL = USER.email;
@@ -29,6 +30,8 @@ export function serializeMoment(m: {
   dateLabel: string;
   source: string;
   shareSlug: string | null;
+  sceneData: string | null;
+  trackData: string | null;
 }): ClientMoment {
   return {
     id: m.id,
@@ -46,6 +49,8 @@ export function serializeMoment(m: {
     blocks: m.blocks,
     source: m.source === "seed" ? "seed" : "user",
     shareSlug: m.shareSlug,
+    sceneData: parseScenes(m.sceneData),
+    track: parseSong(m.trackData),
   };
 }
 
@@ -94,6 +99,73 @@ function safeTags(raw: string): string[] {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Authored seed scene documents                                       */
+/* ------------------------------------------------------------------ */
+
+/** Deterministic id hash → picks copy + block layouts so seeds look authored. */
+function hashId(id: string): number {
+  return [...id].reduce((a, c) => (a * 33 + c.charCodeAt(0)) % 100003, 11);
+}
+
+const OPENERS = [
+  "Some moments deserve more than a text message.",
+  "This one is interactive — keep going.",
+  "A few words that land.",
+  "Made for you, and only you.",
+];
+const QUIZ_QUESTIONS = [
+  { q: "Who is this moment for?", options: ["You", "Not you", "Someone else"], answer: 0 },
+  { q: "Ready for what's next?", options: ["Born ready", "Almost", "No"], answer: 0 },
+  { q: "How's your day going?", options: ["Better now", "Fine", "Don't ask"], answer: 0 },
+];
+const GIFT_NOTES = [
+  "Open it — it's yours.",
+  "A small thing, made just for you.",
+  "You earned this.",
+];
+const CAPTIONS = ["golden hour, somewhere quiet", "the exact color of that evening", "saved this one for you"];
+const CTA_ROWS = [
+  { label: "Keep going", action: "Reply" },
+  { label: "Say it back", action: "Reply" },
+  { label: "Continue", action: "Open link" },
+];
+
+/** Builds a real authored SceneDoc[] for a seeded moment (deterministic per id). */
+export function seedSceneDoc(id: string, title: string): SceneDoc[] {
+  const h = hashId(id);
+  const opener = OPENERS[h % OPENERS.length];
+  const quiz = QUIZ_QUESTIONS[h % QUIZ_QUESTIONS.length];
+  const giftNote = GIFT_NOTES[h % GIFT_NOTES.length];
+  const caption = CAPTIONS[h % CAPTIONS.length];
+  const cta = CTA_ROWS[h % CTA_ROWS.length];
+  const b = (i: number, type: string, data?: BlockData): BlockDoc => ({
+    id: `sb-${id}-${i}`,
+    type,
+    ...(data ? { data } : {}),
+  });
+
+  return [
+    { id: `ss-${id}-1`, blocks: [b(1, "text", { body: `${title} — ${opener}` })] },
+    {
+      id: `ss-${id}-2`,
+      blocks: [
+        b(2, "photo", { caption, ...(h % 2 ? { filter: "Warm" } : {}) }),
+        b(3, "countdown", { minutes: [1, 10, 60][h % 3] }),
+      ],
+    },
+    {
+      id: `ss-${id}-3`,
+      blocks: [
+        b(4, "quiz", { question: quiz.q, options: quiz.options, answer: quiz.answer }),
+        b(5, "gift", { message: giftNote, wrap: ["#5E5CE6", "#FF375F", "#007AFF"][h % 3] }),
+        b(6, "confetti", { style: ["Burst", "Rain", "Hearts"][h % 3] }),
+      ],
+    },
+    { id: `ss-${id}-4`, blocks: [b(7, "cta", { label: cta.label, action: cta.action })] },
+  ];
+}
+
 /** Ensures the demo user exists; seeds moments + notifications on first run. */
 export async function getUser() {
   let user = await db.user.findUnique({ where: { email: DEMO_EMAIL } });
@@ -103,6 +175,7 @@ export async function getUser() {
     });
     await seedContent(user.id);
   }
+  await backfillSeedDocs();
   return user;
 }
 
@@ -124,6 +197,7 @@ async function seedContent(userId: string) {
       cover: m.cover,
       scenes: m.scenes,
       blocks: 0,
+      sceneData: JSON.stringify(seedSceneDoc(m.id, m.title)),
       views: m.views ?? 0,
       // Deterministic preview loves (~38% of views) so seeded analytics look lived-in
       loves: m.views ? Math.round(m.views * 0.38) : 0,
@@ -150,6 +224,20 @@ async function seedContent(userId: string) {
       createdAt: new Date(now - (i + 1) * 18e5),
     })),
   });
+}
+
+/** One-time upgrade for DBs seeded before authored scene docs existed. */
+async function backfillSeedDocs() {
+  const missing = await db.moment.findMany({
+    where: { source: "seed", sceneData: null },
+    select: { id: true, title: true },
+  });
+  for (const m of missing) {
+    await db.moment.update({
+      where: { id: m.id },
+      data: { sceneData: JSON.stringify(seedSceneDoc(m.id, m.title)) },
+    });
+  }
 }
 
 /** Generates the deterministic recipient link slug (8 chars). */

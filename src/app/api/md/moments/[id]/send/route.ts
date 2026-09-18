@@ -8,6 +8,7 @@
  */
 import { db } from "@/lib/db";
 import { fail, getUser, makeShareSlug, ok, serializeMoment } from "@/lib/md-server";
+import type { SceneDoc, SongPick } from "@/lib/md-blocks";
 
 interface SendBody {
   title?: string;
@@ -17,6 +18,8 @@ interface SendBody {
   blocks?: number;
   scheduledFor?: string;
   label?: string;
+  sceneData?: SceneDoc[] | null;
+  track?: SongPick | null;
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -42,6 +45,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         cover: Math.max(0, Math.min(9, body.cover ?? 0)),
         scenes: Math.max(1, body.scenes ?? 1),
         blocks: body.blocks ?? 0,
+        ...(body.sceneData ? { sceneData: JSON.stringify(body.sceneData) } : {}),
+        ...(body.track ? { trackData: JSON.stringify(body.track) } : {}),
         dateLabel: scheduled ? body.label || "Scheduled" : "Sent just now",
         ...(scheduled ? { scheduledFor: scheduledFor! } : {}),
         ...(!scheduled ? { shareSlug: makeShareSlug(id) } : {}),
@@ -50,6 +55,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         recipient,
         status: scheduled ? "scheduled" : "sent",
         prevStatus: null,
+        ...(body.title !== undefined ? { title: body.title.trim() || "Untitled Experience" } : {}),
+        ...(body.cover !== undefined ? { cover: Math.max(0, Math.min(9, body.cover)) } : {}),
+        ...(body.scenes !== undefined ? { scenes: Math.max(1, body.scenes) } : {}),
+        ...(body.blocks !== undefined ? { blocks: body.blocks } : {}),
+        ...(body.sceneData !== undefined
+          ? { sceneData: body.sceneData ? JSON.stringify(body.sceneData) : null }
+          : {}),
+        ...(body.track !== undefined ? { trackData: body.track ? JSON.stringify(body.track) : null } : {}),
         dateLabel: scheduled ? body.label || "Scheduled" : "Sent just now",
         ...(scheduled ? { scheduledFor: scheduledFor! } : { scheduledFor: null, shareSlug: makeShareSlug(id) }),
       },

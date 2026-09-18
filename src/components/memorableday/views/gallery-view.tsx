@@ -122,7 +122,13 @@ export function GalleryView() {
               notify(`“${copy.title}” created`, {
                 label: "Open",
                 onClick: () =>
-                  openBuilder({ title: copy.title, cover: copy.cover, scenes: copy.scenes, draftId: copy.id }),
+                  openBuilder({
+                    title: copy.title,
+                    cover: copy.cover,
+                    scenes: copy.scenes,
+                    draftId: copy.id,
+                    ...(copy.sceneData?.length ? { doc: { scenes: copy.sceneData, track: copy.track ?? null } } : {}),
+                  }),
               });
             }
           },
@@ -186,7 +192,13 @@ export function GalleryView() {
           label: "Edit in Builder",
           icon: Pencil,
           tint: "#007AFF",
-          onSelect: () => openBuilder({ title: it.title, cover: it.cover, scenes: it.scenes }),
+          onSelect: () =>
+            openBuilder({
+              title: it.title,
+              cover: it.cover,
+              scenes: it.scenes,
+              ...(it.sceneData?.length ? { doc: { scenes: it.sceneData, track: it.track ?? null } } : {}),
+            }),
         },
         { id: "share", label: "Share", icon: Share2, tint: "#30D158", onSelect: () => openShare({ id: it.id, title: it.title }) },
         {
@@ -332,15 +344,30 @@ export function GalleryView() {
                 tabIndex={0}
                 onClick={() =>
                   isArchived
-                    ? openMoment({ id: it.id, title: it.title, cover: it.cover, dedication: `For ${it.recipient}` })
+                    ? openMoment({
+                        id: it.id,
+                        title: it.title,
+                        cover: it.cover,
+                        dedication: `For ${it.recipient}`,
+                        ...(it.kind === "moment" && it.sceneData?.length ? { scenes: it.sceneData } : {}),
+                        ...(it.kind === "moment" && it.track ? { music: it.track } : {}),
+                      })
                     : isDraft
                       ? openBuilder({
                           title,
                           cover,
                           scenes,
                           ...(draftId ? { draftId } : {}),
+                          ...(it.sceneData?.length ? { doc: { scenes: it.sceneData, track: it.track ?? null } } : {}),
                         })
-                      : openMoment({ id: it.id, title: it.title, cover: it.cover, dedication: `For ${it.recipient}` })
+                      : openMoment({
+                          id: it.id,
+                          title: it.title,
+                          cover: it.cover,
+                          dedication: `For ${it.recipient}`,
+                          ...(it.sceneData?.length ? { scenes: it.sceneData } : {}),
+                          ...(it.track ? { music: it.track } : {}),
+                        })
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {

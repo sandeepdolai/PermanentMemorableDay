@@ -6,6 +6,7 @@
  */
 import { db } from "@/lib/db";
 import { fail, getUser, ok, serializeMoment } from "@/lib/md-server";
+import type { SceneDoc, SongPick } from "@/lib/md-blocks";
 
 interface MomentInput {
   id?: string;
@@ -18,6 +19,10 @@ interface MomentInput {
   progress?: number | null;
   tags?: string[];
   dateLabel?: string;
+  /** Full authored scene document (blocks with content) */
+  sceneData?: SceneDoc[] | null;
+  /** Soundtrack song pick */
+  track?: SongPick | null;
 }
 
 const STATUSES = new Set(["draft", "scheduled", "sent", "viewed", "archived"]);
@@ -50,6 +55,10 @@ export async function POST(req: Request) {
       ...(body.progress !== undefined ? { progress: body.progress } : {}),
       ...(body.tags ? { tags: JSON.stringify(body.tags) } : {}),
       ...(body.dateLabel !== undefined ? { dateLabel: body.dateLabel } : {}),
+      ...(body.sceneData !== undefined
+        ? { sceneData: body.sceneData ? JSON.stringify(body.sceneData) : null }
+        : {}),
+      ...(body.track !== undefined ? { trackData: body.track ? JSON.stringify(body.track) : null } : {}),
     };
 
     const moment = await db.moment.upsert({

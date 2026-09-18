@@ -1,10 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronRight, Heart, Play, RotateCcw, Share2, X } from "lucide-react";
+import {
+  Award,
+  Check,
+  ChevronRight,
+  Clock,
+  Heart,
+  MousePointerClick,
+  Music as MusicIcon,
+  PartyPopper,
+  Pause,
+  Play,
+  RotateCcw,
+  Share2,
+  Sparkles,
+  Video as VideoIcon,
+  X,
+} from "lucide-react";
 import type { PlayerPayload } from "./md-context";
-import { SOUNDTRACKS } from "@/lib/mock-data";
+import type { BlockDoc, SongPick } from "@/lib/md-blocks";
+import { formatClock, photoFilterCss } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
@@ -22,7 +39,7 @@ interface Particle {
   color: string;
 }
 
-/** One-shot confetti burst (gift reveal) */
+/** One-shot confetti burst (gift reveal / confetti blocks) */
 function ConfettiBurst() {
   const [particles] = useState<Particle[]>(() =>
     Array.from({ length: 28 }, (_, i) => {
@@ -48,38 +65,38 @@ function ConfettiBurst() {
           key={p.id}
           initial={{ x: 0, y: 0, opacity: 1, rotate: 0, scale: 0.5 }}
           animate={{ x: p.x, y: p.y, opacity: 0, rotate: p.rotate, scale: 1 }}
-          transition={{ duration: 1 + p.delay * 2.4, ease: "easeOut", delay: p.delay }}
+          transition={{ duration: 1.05, ease: "easeOut", delay: p.delay }}
           className="absolute rounded-[2px]"
-          style={{ width: p.size, height: p.size * 0.62, backgroundColor: p.color }}
+          style={{ width: p.size, height: p.size * 0.72, backgroundColor: p.color }}
         />
       ))}
     </div>
   );
 }
 
-/** Tap-to-open gift box (signature interaction) */
-function GiftBox({ open, onOpen }: { open: boolean; onOpen: () => void }) {
+/** 3D gift box — tap to open (spring lid + bow) */
+function GiftBox({ open, wrap, onOpen }: { open: boolean; wrap?: string; onOpen: () => void }) {
+  const base = wrap ?? "#5E5CE6";
   return (
     <button
       type="button"
-      aria-label={open ? "Gift opened" : "Tap to open the gift"}
       onClick={(e) => {
-        e.stopPropagation();
-        if (!open) onOpen();
+        e.stopPropagation(); // the gift opens on its own tap, not the scene advance
+        onOpen();
       }}
-      className="relative outline-none"
+      aria-label={open ? "Gift opened" : "Tap to open the gift"}
+      className="relative mx-auto block h-[104px] w-[104px] outline-none"
     >
       <motion.div
-        animate={open ? { y: 0 } : { y: [0, -10, 0] }}
-        transition={open ? { duration: 0.2 } : { repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
-        className="relative"
+        animate={open ? { scale: 1.06, rotate: -2 } : { scale: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 16 }}
+        className="relative h-full w-full"
       >
-        {/* box body */}
+        {/* box */}
         <div
-          className="relative h-[84px] w-[104px] rounded-[18px] shadow-[0_24px_50px_-12px_rgba(0,0,0,0.45)]"
-          style={{ background: "linear-gradient(160deg, #339CFF, #007AFF 60%)" }}
+          className="absolute inset-x-0 bottom-0 h-[76px] rounded-[18px] shadow-[0_18px_40px_-10px_rgba(0,0,0,0.55)]"
+          style={{ background: `linear-gradient(160deg, ${base}CC, ${base})` }}
         >
-          {/* vertical ribbon */}
           <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" />
           <div className="absolute inset-0 rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.3),transparent_45%)]" />
         </div>
@@ -88,14 +105,14 @@ function GiftBox({ open, onOpen }: { open: boolean; onOpen: () => void }) {
           animate={open ? { y: -84, rotate: -24, opacity: 1 } : { y: 0, rotate: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 18 }}
           className="absolute -top-[14px] left-[-6px] h-[26px] w-[116px] rounded-[10px] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.4)]"
-          style={{ background: "linear-gradient(160deg, #5AB4FF, #0A6FE0)" }}
+          style={{ background: `linear-gradient(160deg, ${base}, ${base}B3)` }}
         >
           <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" />
           <div className="absolute inset-0 rounded-[10px] bg-[linear-gradient(180deg,rgba(255,255,255,0.4),transparent_60%)]" />
         </motion.div>
         {/* bow */}
         <motion.div
-          animate={open ? { y: -120, rotate: -30, opacity: 0.9 } : { y: 0, rotate: 0 }}
+          animate={open ? { y: -120, rotate: -30, opacity: 0.9 } : { y: 0, rotate: 0 } }
           transition={{ type: "spring", stiffness: 260, damping: 18 }}
           className="absolute -top-[34px] left-1/2 flex -translate-x-1/2 items-center justify-center text-white drop-shadow-md"
         >
@@ -171,14 +188,684 @@ function HeartBurst() {
   );
 }
 
-/** Recipient-answerable quiz (abstract — every answer is the recipient) */
+/* ------------------------------------------------------------------ */
+/* Soundtrack — real catalog preview, snippet looped across scenes     */
+/* ------------------------------------------------------------------ */
+
+type SoundtrackState = "idle" | "playing" | "paused" | "needsTap";
+
+/** Plays the picked snippet on loop; falls back to a tap-to-start chip
+ *  when the browser blocks programmatic audio. */
+function useSoundtrack(music: SongPick | null) {
+  const [state, setState] = useState<SoundtrackState>("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const url = music?.previewUrl ?? null;
+  const start = music?.start ?? 0;
+  const length = music?.length ?? 30;
+
+  useEffect(() => {
+    if (!url) return;
+    const audio = new Audio(url);
+    audio.preload = "auto";
+    audioRef.current = audio;
+
+    const begin = () => {
+      try {
+        audio.currentTime = start;
+      } catch {
+        // seek before metadata — retried on timeupdate anyway
+      }
+      audio
+        .play()
+        .then(() => setState("playing"))
+        .catch(() => setState("needsTap"));
+    };
+    const onTime = () => {
+      if (audio.currentTime >= start + length - 0.05) {
+        audio.currentTime = start; // loop the snippet
+      }
+    };
+    const onMeta = () => {
+      try {
+        audio.currentTime = start;
+      } catch {
+        // ignore
+      }
+    };
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("loadedmetadata", onMeta, { once: true });
+    begin();
+    if (audio.readyState >= 1) {
+      try {
+        audio.currentTime = start;
+      } catch {
+        // ignore
+      }
+    }
+
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onMeta);
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, [url, start, length]);
+
+  const toggle = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      try {
+        audio.currentTime = start;
+      } catch {
+        // ignore
+      }
+      void audio.play().then(() => setState("playing")).catch(() => setState("needsTap"));
+    } else {
+      audio.pause();
+      setState("paused");
+    }
+  }, [start]);
+
+  const pause = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
+      setState("paused");
+    }
+  }, []);
+
+  const resume = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && audio.paused && state !== "needsTap") {
+      void audio.play().then(() => setState("playing")).catch(() => {});
+    }
+  }, [state]);
+
+  return { state, toggle, pause, resume };
+}
+
+/* ------------------------------------------------------------------ */
+/* Authored block renderers (block-driven mode)                        */
+/* ------------------------------------------------------------------ */
+
+function TextBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const body = block.text?.trim() || block.data?.body?.trim() || "";
+  const isAi = !!block.text?.trim();
+  const long = body.length > 120;
+  const medium = body.length > 40;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="w-full text-center"
+    >
+      {body ? (
+        <>
+          <p
+            className={cn(
+              "font-bold leading-[1.22] tracking-[-0.02em] text-white drop-shadow-md",
+              long ? "text-[21px] md:text-[28px]" : medium ? "text-[26px] md:text-[34px]" : "text-[31px] md:text-[42px]"
+            )}
+          >
+            {isAi ? `“${body}”` : body}
+          </p>
+          {isAi ? (
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#B4A7FF] backdrop-blur-md">
+              <Sparkles size={10} aria-hidden /> AI composed
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="text-[27px] font-bold leading-[1.25] tracking-[-0.02em] text-white md:text-[36px]">
+          Some words that land.
+        </p>
+      )}
+    </motion.div>
+  );
+}
+
+function PhotoBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const d = block.data;
+  const caption = d?.caption?.trim();
+  return (
+    <motion.figure
+      initial={{ opacity: 0, y: 22, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.45, ease: "easeOut" }}
+      className="relative w-full overflow-hidden rounded-[22px] shadow-[0_30px_70px_-24px_rgba(0,0,0,0.65)] ring-1 ring-white/15"
+    >
+      <motion.div
+        initial={{ scale: 1 }}
+        animate={{ scale: 1.05 }}
+        transition={{ duration: 9, ease: "easeOut" }}
+        className="w-full"
+      >
+        {d?.image ? (
+          <img
+            src={d.image}
+            alt={caption || "A photo in this moment"}
+            style={photoFilterCss(d.filter)}
+            className="max-h-[46vh] w-full object-cover md:max-h-[52vh]"
+          />
+        ) : (
+          <CoverArt variant={d?.filter && d.filter !== "Original" ? 4 : 0} className="h-[36vh] w-full md:h-[42vh]" />
+        )}
+      </motion.div>
+      {caption ? (
+        <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-4 pb-3.5 pt-10 text-center">
+          <span className="text-[14px] font-medium italic tracking-[-0.01em] text-white/95">{caption}</span>
+        </figcaption>
+      ) : null}
+      {d?.filter && d.filter !== "Original" ? (
+        <span className="absolute left-3 top-3 rounded-full bg-black/45 px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white backdrop-blur-md">
+          {d.filter}
+        </span>
+      ) : null}
+    </motion.figure>
+  );
+}
+
+function VideoBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const d = block.data;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const start = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      void v.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    } else {
+      v.pause();
+      setPlaying(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 22, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.45, ease: "easeOut" }}
+      className="relative w-full overflow-hidden rounded-[22px] bg-black shadow-[0_30px_70px_-24px_rgba(0,0,0,0.65)] ring-1 ring-white/15"
+    >
+      {d?.video ? (
+        <>
+          <video
+            ref={videoRef}
+            src={d.video}
+            playsInline
+            preload="metadata"
+            aria-label="Video in this moment"
+            className="max-h-[46vh] w-full object-cover md:max-h-[52vh]"
+            onTimeUpdate={() => {
+              const v = videoRef.current;
+              if (v && d?.duration && v.currentTime >= d.duration) {
+                v.pause();
+                setPlaying(false);
+              }
+            }}
+            onEnded={() => setPlaying(false)}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation(); // the scene tap shouldn't advance while playing
+              start();
+            }}
+            aria-label={playing ? "Pause video" : "Play video"}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <span
+              className={cn(
+                "flex h-14 w-14 items-center justify-center rounded-full bg-white/25 text-white backdrop-blur-md transition-all active:scale-90",
+                playing ? "opacity-0 hover:opacity-100" : "opacity-100"
+              )}
+            >
+              {playing ? <Pause size={20} fill="currentColor" aria-hidden /> : <Play size={20} fill="currentColor" className="ml-1" aria-hidden />}
+            </span>
+          </button>
+        </>
+      ) : (
+        <div className="flex h-[30vh] w-full flex-col items-center justify-center gap-2 text-white/60 md:h-[34vh]">
+          <VideoIcon size={26} aria-hidden />
+          <p className="text-[13px] font-semibold">A clip plays here</p>
+        </div>
+      )}
+      <span className="absolute bottom-3 right-3 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-semibold tabular-nums text-white backdrop-blur-md">
+        {formatClock(d?.duration ?? 12)}
+      </span>
+    </motion.div>
+  );
+}
+
+function AudioBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const song = block.data?.song;
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Plays the picked snippet once when the scene enters.
+  useEffect(() => {
+    if (!song) return;
+    const audio = new Audio(song.previewUrl);
+    audioRef.current = audio;
+    const onTime = () => {
+      if (audio.currentTime >= song.start + song.length) {
+        audio.pause();
+        setPlaying(false);
+      }
+    };
+    const onMeta = () => {
+      try {
+        audio.currentTime = song.start;
+      } catch {
+        // ignore
+      }
+      void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    };
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("loadedmetadata", onMeta, { once: true });
+    if (audio.readyState >= 1) onMeta();
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onMeta);
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, [song?.previewUrl, song?.start, song?.length, song]);
+
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation(); // don't advance the scene from a play/pause tap
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      try {
+        audio.currentTime = song?.start ?? 0;
+      } catch {
+        // ignore
+      }
+      void audio.play().then(() => setPlaying(true)).catch(() => {});
+    } else {
+      audio.pause();
+      setPlaying(false);
+    }
+  };
+
+  if (!song) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.12 + index * 0.09 }}
+        className="flex w-full flex-col items-center gap-2 rounded-[22px] bg-white/[0.06] px-6 py-8 ring-1 ring-white/10"
+      >
+        <MusicIcon size={24} className="text-white/60" aria-hidden />
+        <p className="text-[14px] font-semibold text-white/80">A song plays here</p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.button
+      type="button"
+      onClick={toggle}
+      initial={{ opacity: 0, y: 22, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.45, ease: "easeOut" }}
+      aria-label={playing ? `Pause ${song.title}` : `Play ${song.title}`}
+      className="flex w-full items-center gap-4 rounded-[22px] bg-white/[0.08] p-4 text-left ring-1 ring-white/12 backdrop-blur-md active:scale-[0.98]"
+    >
+      <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[16px] shadow-lg">
+        {song.artwork ? (
+          <img src={song.artwork} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <span aria-hidden className="absolute inset-0 bg-[#FF375F]/40" />
+        )}
+        <span aria-hidden className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+          {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" className="ml-0.5" />}
+        </span>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[16.5px] font-bold tracking-[-0.01em] text-white">{song.title}</span>
+        <span className="mt-0.5 flex items-center gap-2 text-[13px] text-white/65">
+          {playing ? (
+            <span aria-hidden className="md-eq h-3 w-4 text-[#64D2FF]">
+              <span />
+              <span />
+              <span />
+            </span>
+          ) : null}
+          <span className="truncate">{song.artist}</span>
+        </span>
+      </span>
+      <span className="shrink-0 rounded-full bg-[#FF375F]/25 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF9FB2]">
+        {formatClock(song.length)}
+      </span>
+    </motion.button>
+  );
+}
+
+function QuizBlockView({
+  block,
+  index,
+  solved,
+  onSolved,
+}: {
+  block: BlockDoc;
+  index: number;
+  solved: boolean;
+  onSolved: () => void;
+}) {
+  const d = block.data;
+  const question = d?.question?.trim() || "Who is this moment for?";
+  const options = d?.options?.length ? d.options : ["You", "Not you", "Someone else"];
+  const answer = d?.answer ?? 0;
+  const [wrong, setWrong] = useState<number | null>(null);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="w-full"
+    >
+      <p className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">Pop quiz</p>
+      <h2 className="mx-auto mt-2 max-w-[440px] text-center text-[22px] font-bold leading-[1.2] tracking-[-0.02em] text-white md:text-[28px]">
+        {question}
+      </h2>
+      <div className="mx-auto mt-7 flex w-full max-w-[320px] flex-col gap-3 md:max-w-[380px]" role="group" aria-label="Quiz answers">
+        {options.map((o, i) => {
+          const correctPick = solved && i === answer;
+          const wrongPick = wrong === i;
+          return (
+            <motion.button
+              key={i}
+              type="button"
+              aria-label={`Answer: ${o}`}
+              disabled={solved}
+              onClick={(e) => {
+                e.stopPropagation(); // don't advance the scene from an answer tap
+                if (solved) return;
+                if (i === answer) {
+                  onSolved();
+                  setWrong(null);
+                } else {
+                  setWrong(i);
+                  window.setTimeout(() => setWrong((w) => (w === i ? null : w)), 600);
+                }
+              }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={wrongPick ? { opacity: 1, y: 0, x: [0, -8, 8, -5, 0] } : { opacity: 1, y: 0, x: 0 }}
+              transition={wrongPick ? { duration: 0.45 } : { delay: 0.18 + i * 0.08 }}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-full border py-3.5 text-[15.5px] font-semibold transition-colors",
+                correctPick
+                  ? "border-[#30D158]/60 bg-[#30D158]/25 text-white"
+                  : wrongPick
+                    ? "border-[#FF6482]/60 bg-[#FF6482]/20 text-white"
+                    : solved
+                      ? "border-white/10 bg-white/[0.04] text-white/35"
+                      : "border-white/25 bg-white/10 text-white backdrop-blur-md active:scale-[0.96]"
+              )}
+            >
+              {o}
+              {correctPick ? <Check size={16} strokeWidth={3} aria-hidden /> : null}
+            </motion.button>
+          );
+        })}
+      </div>
+      <AnimatePresence>
+        {solved ? (
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mt-6 text-center text-[13.5px] font-medium text-white/70"
+          >
+            Obviously. Keep going —
+          </motion.p>
+        ) : (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0.45, 1, 0.45] }}
+            transition={{ repeat: Infinity, duration: 1.8 }}
+            className="mt-6 text-center text-[12.5px] font-semibold text-white/60"
+          >
+            Pick an answer to continue
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function GiftBlockView({
+  block,
+  index,
+  open,
+  onOpen,
+}: {
+  block: BlockDoc;
+  index: number;
+  open: boolean;
+  onOpen: () => void;
+}) {
+  const d = block.data;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+    >
+      {open ? <ConfettiBurst /> : null}
+      {!open ? (
+        <>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">A surprise</p>
+          <p className="mb-8 mt-1.5 text-[19px] font-bold tracking-[-0.02em] text-white md:text-[24px]">
+            There&apos;s something for you.
+          </p>
+        </>
+      ) : (
+        <p className="mb-4 max-w-[340px] text-center text-[19px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[24px]">
+          {d?.message?.trim() || "This is for you."}
+        </p>
+      )}
+      <GiftBox open={open} wrap={d?.wrap} onOpen={onOpen} />
+      {!open ? (
+        <p className="mt-8 animate-pulse text-[12.5px] font-semibold text-white/70">Tap the gift to open it</p>
+      ) : null}
+    </motion.div>
+  );
+}
+
+function CountdownBlockView({
+  block,
+  index,
+  done,
+  onDone,
+}: {
+  block: BlockDoc;
+  index: number;
+  done: boolean;
+  onDone: () => void;
+}) {
+  const minutes = block.data?.minutes ?? 1;
+  const totalMs = minutes * 60_000;
+  // Accelerated preview: any countdown resolves within ~4.5s.
+  const [elapsed, setElapsed] = useState(0);
+  const [running, setRunning] = useState(true);
+
+  useEffect(() => {
+    if (done || !running) return;
+    const startedAt = Date.now();
+    const id = window.setInterval(() => {
+      const t = (Date.now() - startedAt) / 4500; // 0 → 1 over 4.5s
+      if (t >= 1) {
+        setElapsed(1);
+        setRunning(false);
+        onDone();
+      } else {
+        setElapsed(t);
+      }
+    }, 60);
+    return () => window.clearInterval(id);
+  }, [done, running, onDone]);
+
+  const remainingMs = Math.max(0, totalMs * (1 - elapsed));
+  const mm = Math.floor(remainingMs / 60000);
+  const ss = Math.floor((remainingMs % 60000) / 1000);
+  const pct = Math.round(elapsed * 100);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+    >
+      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">Unlocks in</p>
+      <p
+        className={cn(
+          "mt-2 font-extrabold tabular-nums tracking-tight transition-colors",
+          done ? "text-[34px] text-[#30D158] md:text-[42px]" : "text-[44px] text-white md:text-[56px]"
+        )}
+      >
+        {done ? "Open" : `${String(mm).padStart(2, "0")} : ${String(ss).padStart(2, "0")}`}
+      </p>
+      <div className="mt-4 h-[6px] w-full max-w-[280px] overflow-hidden rounded-full bg-white/15">
+        <div
+          className={cn("h-full rounded-full transition-[width] duration-75", done ? "bg-[#30D158]" : "bg-[#FF9F0A]")}
+          style={{ width: `${done ? 100 : pct}%` }}
+        />
+      </div>
+      <p className="mt-3 flex items-center gap-1.5 text-[12.5px] font-medium text-white/60">
+        <Clock size={12} aria-hidden />
+        {done ? "The wait is over" : "Time moves fast in this preview"}
+      </p>
+      {!done ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setRunning(false);
+            setElapsed(1);
+            onDone();
+          }}
+          className="mt-4 rounded-full bg-white/12 px-4 py-2 text-[12.5px] font-semibold text-white backdrop-blur-md transition-transform active:scale-95"
+        >
+          Skip the wait
+        </button>
+      ) : null}
+    </motion.div>
+  );
+}
+
+function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const d = block.data;
+  const [revealed, setRevealed] = useState(false);
+  const kind = d?.rewardKind ?? "Reward";
+  const code = d?.code?.trim() || "MD-REWARD";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation(); // keep the scene put while revealing
+          setRevealed(true);
+        }}
+        aria-label={revealed ? "Reward revealed" : "Tap to reveal your reward"}
+        className="relative w-full max-w-[340px] rounded-[22px] border-2 border-dashed border-[#30D158]/45 bg-[#30D158]/[0.08] px-6 py-7 text-center active:scale-[0.98]"
+      >
+        <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#30D158]/20 text-[#5BE07E]">
+          <Award size={20} aria-hidden />
+        </span>
+        <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#5BE07E]">{kind} reveal</p>
+        <p
+          className={cn(
+            "mt-2 font-mono text-[19px] font-bold tracking-[0.1em] transition-all duration-300",
+            revealed ? "text-white" : "select-none text-white/20 blur-[6px]"
+          )}
+        >
+          {code}
+        </p>
+        {!revealed ? (
+          <p className="mt-3 text-[12px] font-semibold text-white/60">Tap to reveal</p>
+        ) : (
+          <p className="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-[#5BE07E]">
+            <Check size={12} strokeWidth={3} aria-hidden /> Yours to use
+          </p>
+        )}
+        {revealed ? <ConfettiBurst /> : null}
+      </button>
+    </motion.div>
+  );
+}
+
+function CtaBlockView({ block, index, onAction }: { block: BlockDoc; index: number; onAction: (label: string, action?: string) => void }) {
+  const d = block.data;
+  const label = d?.label?.trim() || "Continue";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation(); // fire the action, not the scene advance
+          onAction(label, d?.action);
+        }}
+        className="flex items-center gap-2 rounded-full bg-[#007AFF] px-8 py-3.5 text-[16px] font-semibold text-white shadow-[0_14px_34px_-10px_rgba(0,122,255,0.7)] transition-transform active:scale-[0.97]"
+      >
+        <MousePointerClick size={16} aria-hidden /> {label}
+      </button>
+      <p className="mt-2.5 text-[11.5px] font-medium text-white/55">{d?.action ?? "Opens a link, claim or reply"}</p>
+    </motion.div>
+  );
+}
+
+function ConfettiBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const style = block.data?.style;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+    >
+      <ConfettiBurst />
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FF375F]/25 text-[#FF9FB2]">
+        <PartyPopper size={21} aria-hidden />
+      </span>
+      <p className="mt-3 text-[15px] font-bold tracking-[-0.01em] text-white">
+        {style ? `${style} celebration` : "Celebration!"}
+      </p>
+      <p className="mt-1 text-[12.5px] text-white/60">Fired the moment this scene opened</p>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Player                                                              */
+/* ------------------------------------------------------------------ */
+
+/** Recipient-answerable quiz (legacy demo flow — every answer is the recipient) */
 const QUIZ_OPTIONS = [
   { label: "You", correct: true },
   { label: "Not you", correct: false },
   { label: "Someone else", correct: false },
 ];
 
-const SCENE_COUNT = 5;
+const LEGACY_SCENE_COUNT = 5;
 
 export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClose: () => void }) {
   const { setTab, notify, openShare, sheet, trackLove } = useMD();
@@ -188,20 +875,54 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
   const [wrongPick, setWrongPick] = useState<number | null>(null);
   const [loved, setLoved] = useState(false);
   const [burstKey, setBurstKey] = useState(0);
-  const track = moment.trackId ? (SOUNDTRACKS.find((t) => t.id === moment.trackId) ?? null) : null;
+
+  /* Block-driven mode — the authored document plays exactly as built. */
+  const authored = useMemo(
+    () => (moment.scenes && moment.scenes.length > 0 ? moment.scenes : null),
+    [moment.scenes]
+  );
+  const total = authored ? authored.length + 2 : LEGACY_SCENE_COUNT;
+  const authoredIdx = authored ? scene - 1 : -1;
+  const currentDoc = authored && authoredIdx >= 0 && authoredIdx < authored.length ? authored[authoredIdx] : null;
+
+  /* Per-scene progress for authored gating (quiz solved / gift opened / countdown done) */
+  const [solvedMap, setSolvedMap] = useState<Record<number, boolean>>({});
+  const [giftMap, setGiftMap] = useState<Record<number, boolean>>({});
+  const [countdownMap, setCountdownMap] = useState<Record<number, boolean>>({});
+
+  const sceneHasQuiz = !!currentDoc?.blocks.some((b) => b.type === "quiz");
+  const sceneHasGift = !!currentDoc?.blocks.some((b) => b.type === "gift");
+  const sceneHasAudio = !!currentDoc?.blocks.some((b) => b.type === "audio");
+  const quizGate = authored ? sceneHasQuiz && !solvedMap[authoredIdx] : scene === 2 && !quizSolved;
+  const giftGate = authored ? sceneHasGift && !giftMap[authoredIdx] : scene === 3 && !giftOpen;
+
+  /* Soundtrack — real catalog snippet, looped, ducked under audio blocks */
+  const soundtrack = useSoundtrack(moment.music ?? null);
+  const duckedRef = useRef(false);
+  useEffect(() => {
+    if (!moment.music) return;
+    if (sceneHasAudio) {
+      if (soundtrack.state === "playing") {
+        soundtrack.pause();
+        duckedRef.current = true;
+      }
+    } else if (duckedRef.current && soundtrack.state === "paused") {
+      soundtrack.resume();
+      duckedRef.current = false;
+    }
+  }, [sceneHasAudio, soundtrack, moment.music]);
 
   const advance = useCallback(() => {
-    // Quiz scene: requires a correct answer first
-    if (scene === 2 && !quizSolved) return;
-    // Gift scene: first tap opens the gift
-    if (scene === 3) {
-      if (!giftOpen) {
-        setGiftOpen(true);
-        return;
-      }
+    // Quiz scenes require a correct answer first
+    if (quizGate) return;
+    // Gift scenes: the first tap opens the gift
+    if (giftGate) {
+      if (authored) setGiftMap((m) => ({ ...m, [authoredIdx]: true }));
+      else setGiftOpen(true);
+      return;
     }
-    setScene((s) => Math.min(s + 1, SCENE_COUNT - 1));
-  }, [scene, giftOpen, quizSolved]);
+    setScene((s) => Math.min(s + 1, total - 1));
+  }, [quizGate, giftGate, authored, authoredIdx, total]);
 
   /** Love reaction — heart burst + filled state + real server tracking (once per session) */
   const love = useCallback(() => {
@@ -223,7 +944,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, sheet]);
 
-  const isFinal = scene === SCENE_COUNT - 1;
+  const isFinal = scene === total - 1;
   const isLightScene = isFinal;
 
   const replay = () => {
@@ -231,6 +952,13 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
     setGiftOpen(false);
     setQuizSolved(false);
     setWrongPick(null);
+    setSolvedMap({});
+    setGiftMap({});
+    setCountdownMap({});
+  };
+
+  const onCta = (label: string, action?: string) => {
+    notify(`“${label}” — ${action ?? "action"} (preview)`);
   };
 
   return (
@@ -251,7 +979,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
         onDoubleClick={isFinal ? undefined : love}
       >
         <AnimatePresence mode="wait" initial={false}>
-          {/* Scene 1 — Intro */}
+          {/* Scene 1 — Intro (title card) */}
           {scene === 0 && (
             <motion.section
               key="s0"
@@ -261,7 +989,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
               transition={{ duration: 0.32, ease: "easeOut" }}
               className="absolute inset-0"
             >
-              <CoverArt variant={moment.cover} className="absolute inset-0">
+              <CoverArt variant={moment.cover} className="absolute inset-0 h-full">
                 <div className="absolute inset-0 bg-[#1D1D1F]/35" />
               </CoverArt>
               <div className="relative flex h-full flex-col items-center justify-center px-8 text-center">
@@ -289,12 +1017,91 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                 >
                   {moment.dedication}
                 </motion.p>
+                {authored ? (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.62 }}
+                    className="mt-8 rounded-full bg-white/12 px-4 py-2 text-[12.5px] font-semibold text-white/85 backdrop-blur-md"
+                  >
+                    {authored.length} scenes · tap to walk through
+                  </motion.p>
+                ) : null}
               </div>
             </motion.section>
           )}
 
-          {/* Scene 2 — Message */}
-          {scene === 1 && (
+          {/* Authored scenes — exactly the blocks the creator built */}
+          {authored && currentDoc ? (
+            <motion.section
+              key={`authored-${authoredIdx}`}
+              initial={{ opacity: 0, x: 70 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -70 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
+              className="absolute inset-0 overflow-y-auto no-scrollbar"
+            >
+              <CoverArt variant={(moment.cover + authoredIdx * 3) % 10} className="fixed-like absolute inset-0 h-full">
+                <div className="absolute inset-0 bg-[#1D1D1F]/55" />
+                <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(0,0,0,0.12),rgba(0,0,0,0.5))]" />
+              </CoverArt>
+              <div className="relative flex min-h-full flex-col items-center justify-center gap-7 px-7 py-16 md:gap-8">
+                {currentDoc.blocks.map((b, i) => {
+                  switch (b.type) {
+                    case "text":
+                      return <TextBlockView key={b.id} block={b} index={i} />;
+                    case "photo":
+                      return <PhotoBlockView key={b.id} block={b} index={i} />;
+                    case "video":
+                      return <VideoBlockView key={b.id} block={b} index={i} />;
+                    case "audio":
+                      return <AudioBlockView key={b.id} block={b} index={i} />;
+                    case "quiz":
+                      return (
+                        <QuizBlockView
+                          key={b.id}
+                          block={b}
+                          index={i}
+                          solved={!!solvedMap[authoredIdx]}
+                          onSolved={() => setSolvedMap((m) => ({ ...m, [authoredIdx]: true }))}
+                        />
+                      );
+                    case "gift":
+                      return (
+                        <GiftBlockView
+                          key={b.id}
+                          block={b}
+                          index={i}
+                          open={!!giftMap[authoredIdx]}
+                          onOpen={() => setGiftMap((m) => ({ ...m, [authoredIdx]: true }))}
+                        />
+                      );
+                    case "countdown":
+                      return (
+                        <CountdownBlockView
+                          key={b.id}
+                          block={b}
+                          index={i}
+                          done={!!countdownMap[authoredIdx]}
+                          onDone={() => setCountdownMap((m) => ({ ...m, [authoredIdx]: true }))}
+                        />
+                      );
+                    case "reward":
+                      return <RewardBlockView key={b.id} block={b} index={i} />;
+                    case "cta":
+                      return <CtaBlockView key={b.id} block={b} index={i} onAction={onCta} />;
+                    case "confetti":
+                      return <ConfettiBlockView key={b.id} block={b} index={i} />;
+                    default:
+                      return null;
+                  }
+                })}
+              </div>
+            </motion.section>
+          ) : null}
+
+          {/* Legacy scene 2 — Message (demo flow without authored scenes) */}
+          {!authored && scene === 1 && (
             <motion.section
               key="s1"
               initial={{ opacity: 0, x: 70 }}
@@ -335,8 +1142,8 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
             </motion.section>
           )}
 
-          {/* Scene 3 — Quiz (interactive) */}
-          {scene === 2 && (
+          {/* Legacy scene 3 — Quiz (interactive) */}
+          {!authored && scene === 2 && (
             <motion.section
               key="s2-quiz"
               initial={{ opacity: 0, x: 70 }}
@@ -444,8 +1251,8 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
             </motion.section>
           )}
 
-          {/* Scene 4 — Gift reveal */}
-          {scene === 3 && (
+          {/* Legacy scene 4 — Gift reveal */}
+          {!authored && scene === 3 && (
             <motion.section
               key="s3-gift"
               initial={{ opacity: 0, x: 70 }}
@@ -454,7 +1261,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
               transition={{ duration: 0.32, ease: "easeOut" }}
               className="absolute inset-0"
             >
-              <CoverArt variant={moment.cover + 3} className="absolute inset-0">
+              <CoverArt variant={moment.cover + 3} className="absolute inset-0 h-full">
                 <div className="absolute inset-0 bg-[#1D1D1F]/45" />
               </CoverArt>
               {giftOpen ? <ConfettiBurst /> : null}
@@ -518,10 +1325,10 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
             </motion.section>
           )}
 
-          {/* Scene 5 — Signature */}
-          {scene === 4 && (
+          {/* Signature finale — shared by both modes */}
+          {scene === total - 1 && (
             <motion.section
-              key="s4"
+              key="finale"
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 50 }}
@@ -616,26 +1423,46 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
         {/* Love burst (double-tap or heart button) */}
         {burstKey > 0 ? <HeartBurst key={burstKey} /> : null}
 
-        {/* Soundtrack chip — "now playing" (dark scenes only) */}
-        {track && !isFinal ? (
-          <motion.div
+        {/* Soundtrack chip — real snippet, tap to pause / needs a tap to start */}
+        {moment.music && !isFinal ? (
+          <motion.button
+            type="button"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="pointer-events-none absolute bottom-[70px] left-4 flex items-center gap-2 rounded-full bg-[#1D1D1F]/40 py-1.5 pl-2.5 pr-3.5 text-white backdrop-blur-md"
+            onClick={(e) => {
+              e.stopPropagation();
+              soundtrack.toggle();
+            }}
+            aria-label={
+              soundtrack.state === "playing"
+                ? `Pause soundtrack: ${moment.music.title}`
+                : `Play soundtrack: ${moment.music.title}`
+            }
+            className="absolute bottom-[70px] left-4 flex items-center gap-2 rounded-full bg-[#1D1D1F]/40 py-1.5 pl-2.5 pr-3.5 text-white backdrop-blur-md"
           >
-            <span aria-hidden className="md-eq h-3 w-4 text-[#64D2FF]">
-              <span />
-              <span />
-              <span />
+            {soundtrack.state === "playing" ? (
+              <span aria-hidden className="md-eq h-3 w-4 text-[#64D2FF]">
+                <span />
+                <span />
+                <span />
+              </span>
+            ) : (
+              <MusicIcon size={12} aria-hidden className="text-[#64D2FF]" />
+            )}
+            <span className="max-w-[160px] truncate text-[11.5px] font-semibold tracking-[-0.01em]">
+              {soundtrack.state === "needsTap"
+                ? "Tap to play soundtrack"
+                : soundtrack.state === "paused"
+                  ? `${moment.music.title} · paused`
+                  : moment.music.title}
             </span>
-            <span className="text-[11.5px] font-semibold tracking-[-0.01em]">{track.title}</span>
-          </motion.div>
+          </motion.button>
         ) : null}
 
         {/* Continue hint */}
         <AnimatePresence>
-          {!isFinal && !(scene === 2 && !quizSolved) ? (
+          {!isFinal && !quizGate ? (
             <motion.button
               type="button"
               aria-label="Continue"
@@ -649,7 +1476,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
               transition={{ y: { repeat: Infinity, duration: 1.6, ease: "easeInOut" } }}
               className="absolute inset-x-0 bottom-9 mx-auto flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-[12.5px] font-semibold text-white backdrop-blur-md"
             >
-              Tap to continue <ChevronRight size={13} aria-hidden />
+              {giftGate ? "Tap to open the gift" : "Tap to continue"} <ChevronRight size={13} aria-hidden />
             </motion.button>
           ) : null}
         </AnimatePresence>
@@ -670,7 +1497,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
         >
           <X size={19} strokeWidth={2.4} />
         </button>
-        <SceneDots total={SCENE_COUNT} current={scene} light={isLightScene} />
+        <SceneDots total={total} current={scene} light={isLightScene} />
         <div className="pointer-events-auto flex items-center gap-2">
           <button
             type="button"
