@@ -1,10 +1,20 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { ExploreItem } from "@/lib/mock-data";
+import type { RefObject } from "react";
+import type { ExploreItem, InsightRange } from "@/lib/mock-data";
 
 export type Tab = "home" | "create" | "explore" | "gallery" | "profile";
-export type Sheet = "create" | "pricing" | "notifications" | "share" | "settings" | "explore" | null;
+export type Sheet =
+  | "create"
+  | "pricing"
+  | "notifications"
+  | "share"
+  | "settings"
+  | "explore"
+  | "insights"
+  | "composer"
+  | null;
 export type SettingsTopic = "account" | "notifications" | "privacy" | "help";
 
 /** Payload for the recipient experience player */
@@ -33,7 +43,12 @@ export interface BuilderOptions {
   ai?: boolean;
   /** Seed a first block of this type */
   initialBlock?: string;
+  /** Seed an AI-composed message into Scene 1 as a text block */
+  seedText?: string;
 }
+
+/** Inserts a composed AI message into the open builder's current scene */
+export type AiInsertFn = (message: string) => void;
 
 export interface MDContextValue {
   tab: Tab;
@@ -67,6 +82,14 @@ export interface MDContextValue {
   openExplore: (item: ExploreItem) => void;
   /** Currently previewed explore item */
   exploreItem: ExploreItem | null;
+  /** Opens the insights/analytics sheet (optionally at a range) */
+  openInsights: (range?: InsightRange) => void;
+  /** Opens the AI message composer sheet */
+  openComposer: () => void;
+  /** Builder-registered handler that inserts an AI message into the open draft (event, not effect) */
+  aiInsertRef: RefObject<AiInsertFn | null>;
+  /** Inserts an AI-composed message: into the open builder, or opens one seeded with it */
+  insertAiMessage: (message: string) => void;
 }
 
 export const MDContext = createContext<MDContextValue | null>(null);

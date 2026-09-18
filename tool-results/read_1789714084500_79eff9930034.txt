@@ -1,0 +1,648 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useRef, useState } from "react";
+     4→import { AnimatePresence, motion } from "framer-motion";
+     5→import {
+     6→  Award,
+     7→  Check,
+     8→  ChevronLeft,
+     9→  Clock,
+    10→  Gift,
+    11→  GripVertical,
+    12→  Images as ImagesIcon,
+    13→  ListChecks,
+    14→  MousePointerClick,
+    15→  Music,
+    16→  PartyPopper,
+    17→  Play,
+    18→  Plus,
+    19→  Share2,
+    20→  Sparkles,
+    21→  Trash2,
+    22→  Type,
+    23→  Video,
+    24→  X,
+    25→} from "lucide-react";
+    26→import { CoverArt } from "./cover-art";
+    27→import { useMD, type BuilderOptions } from "./md-context";
+    28→import { cn } from "@/lib/utils";
+    29→
+    30→/* ------------------------------------------------------------------ */
+    31→/* Block catalogue (PRD Experience Builder scene blocks)               */
+    32→/* ------------------------------------------------------------------ */
+    33→
+    34→type IconType = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+    35→
+    36→interface BlockDef {
+    37→  type: string;
+    38→  label: string;
+    39→  icon: IconType;
+    40→  tint: string;
+    41→}
+    42→
+    43→const BLOCKS: BlockDef[] = [
+    44→  { type: "text", label: "Text", icon: Type, tint: "#007AFF" },
+    45→  { type: "photo", label: "Photo", icon: ImagesIcon, tint: "#30D158" },
+    46→  { type: "video", label: "Video", icon: Video, tint: "#FF9F0A" },
+    47→  { type: "audio", label: "Audio", icon: Music, tint: "#FF375F" },
+    48→  { type: "gift", label: "3D Gift", icon: Gift, tint: "#5E5CE6" },
+    49→  { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
+    50→  { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
+    51→  { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
+    52→  { type: "cta", label: "Button", icon: MousePointerClick, tint: "#007AFF" },
+    53→  { type: "confetti", label: "Confetti", icon: PartyPopper, tint: "#FF375F" },
+    54→];
+    55→
+    56→const BLOCK_BY_TYPE = Object.fromEntries(BLOCKS.map((b) => [b.type, b]));
+    57→
+    58→interface Block {
+    59→  id: string;
+    60→  type: string;
+    61→}
+    62→
+    63→interface Scene {
+    64→  id: string;
+    65→  blocks: Block[];
+    66→}
+    67→
+    68→const MAX_SCENES = 8;
+    69→
+    70→/** Deterministic draft layouts — abstract, no themed content */
+    71→const DRAFT_PATTERNS: string[][] = [
+    72→  ["text", "photo"],
+    73→  ["video", "text"],
+    74→  ["gift", "confetti"],
+    75→  ["countdown", "cta"],
+    76→  ["quiz", "text"],
+    77→  ["audio", "photo"],
+    78→  ["text", "cta"],
+    79→  ["reward", "confetti"],
+    80→];
+    81→
+    82→function seedScenes(opts: BuilderOptions): Scene[] {
+    83→  if (opts.ai) {
+    84→    return [
+    85→      { id: "s1", blocks: [{ id: "b1", type: "text" }, { id: "b2", type: "photo" }] },
+    86→      { id: "s2", blocks: [{ id: "b3", type: "gift" }, { id: "b4", type: "confetti" }] },
+    87→      { id: "s3", blocks: [{ id: "b5", type: "text" }, { id: "b6", type: "cta" }] },
+    88→    ];
+    89→  }
+    90→  const count = Math.max(1, Math.min(opts.scenes ?? 1, MAX_SCENES));
+    91→  const scenes: Scene[] = [];
+    92→  for (let i = 0; i < count; i++) {
+    93→    const pattern = DRAFT_PATTERNS[(i + (opts.cover ?? 0)) % DRAFT_PATTERNS.length];
+    94→    scenes.push({
+    95→      id: `s${i + 1}`,
+    96→      blocks: pattern.map((t, j) => ({ id: `b${i * 4 + j + 1}`, type: t })),
+    97→    });
+    98→  }
+    99→  if (opts.initialBlock && BLOCK_BY_TYPE[opts.initialBlock]) {
+   100→    scenes[0].blocks.push({ id: "bSeed", type: opts.initialBlock });
+   101→  }
+   102→  return scenes;
+   103→}
+   104→
+   105→/* ------------------------------------------------------------------ */
+   106→/* Block visual previews                                               */
+   107→/* ------------------------------------------------------------------ */
+   108→
+   109→function BlockPreview({ type, cover }: { type: string; cover: number }) {
+   110→  switch (type) {
+   111→    case "text":
+   112→      return (
+   113→        <div className="flex items-start gap-3">
+   114→          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#007AFF]/[0.1] text-[#007AFF]">
+   115→            <Type size={16} strokeWidth={2.2} aria-hidden />
+   116→          </span>
+   117→          <div className="min-w-0 flex-1">
+   118→            <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F]">
+   119→              A few words that land.
+   120→            </p>
+   121→            <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
+   122→              Your message renders here — big type, generous spacing, one idea per scene.
+   123→            </p>
+   124→          </div>
+   125→        </div>
+   126→      );
+   127→    case "photo":
+   128→      return (
+   129→        <div className="flex items-center gap-3">
+   130→          <CoverArt variant={cover} className="h-16 w-24 shrink-0 rounded-[12px]" />
+   131→          <div className="min-w-0 flex-1">
+   132→            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Photo block</p>
+   133→            <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Full-bleed image with a soft caption</p>
+   134→          </div>
+   135→        </div>
+   136→      );
+   137→    case "video":
+   138→      return (
+   139→        <div className="relative overflow-hidden rounded-[14px]">
+   140→          <CoverArt variant={(cover + 3) % 10} className="h-24 w-full" />
+   141→          <span className="absolute inset-0 flex items-center justify-center">
+   142→            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/25 backdrop-blur-md">
+   143→              <Play size={18} className="ml-0.5 text-white" fill="white" aria-hidden />
+   144→            </span>
+   145→          </span>
+   146→          <span className="absolute bottom-2 right-2 rounded-full bg-[#1D1D1F]/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md">
+   147→            0:12
+   148→          </span>
+   149→        </div>
+   150→      );
+   151→    case "audio":
+   152→      return (
+   153→        <div className="flex items-center gap-3">
+   154→          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.12] text-[#FF375F]">
+   155→            <Play size={16} fill="currentColor" aria-hidden />
+   156→          </span>
+   157→          <div className="flex h-10 flex-1 items-center gap-[3px]" aria-hidden>
+   158→            {[10, 18, 26, 14, 30, 22, 12, 28, 16, 24, 11, 20, 15, 27, 13, 25, 17, 9, 21, 14].map((h, i) => (
+   159→              <span
+   160→                key={i}
+   161→                className="w-[3px] shrink-0 rounded-full bg-[#FF375F]/45"
+   162→                style={{ height: `${h}px` }}
+   163→              />
+   164→            ))}
+   165→          </div>
+   166→          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#AAAAAA]">0:34</span>
+   167→        </div>
+   168→      );
+   169→    case "gift":
+   170→      return (
+   171→        <div className="flex items-center gap-3">
+   172→          <span
+   173→            aria-hidden
+   174→            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] text-white"
+   175→            style={{ background: "linear-gradient(135deg, #5E5CE6 0%, #7D7AFF 60%, #B4A7FF 100%)" }}
+   176→          >
+   177→            <Gift size={22} strokeWidth={2} />
+   178→          </span>
+   179→          <div className="min-w-0 flex-1">
+   180→            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D gift box</p>
+   181→            <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Recipient taps to open — confetti included</p>
+   182→          </div>
+   183→          <span className="shrink-0 rounded-full bg-[#5E5CE6]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#5E5CE6]">
+   184→            Reveal
+   185→          </span>
+   186→        </div>
+   187→      );
+   188→    case "countdown":
+   189→      return (
+   190→        <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[#FF9F0A]/[0.08] px-4 py-3">
+   191→          <div className="flex items-center gap-2.5">
+   192→            <Clock size={16} className="text-[#B26A00]" aria-hidden />
+   193→            <p className="text-[13px] font-semibold text-[#B26A00]">Unlocks in</p>
+   194→          </div>
+   195→          <p className="text-[17px] font-bold tabular-nums tracking-wide text-[#1D1D1F]">03 : 12 : 45</p>
+   196→        </div>
+   197→      );
+   198→    case "quiz":
+   199→      return (
+   200→        <div>
+   201→          <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+   202→            Pick the answer that fits —
+   203→          </p>
+   204→          <div className="mt-2.5 flex gap-2.5">
+   205→            <span className="flex-1 rounded-full border border-[#007AFF]/25 bg-[#007AFF]/[0.06] py-2 text-center text-[12.5px] font-semibold text-[#007AFF]">
+   206→              Option A
+   207→            </span>
+   208→            <span className="flex-1 rounded-full border border-[#1D1D1F]/[0.08] bg-white py-2 text-center text-[12.5px] font-semibold text-[#1D1D1F]/70">
+   209→              Option B
+   210→            </span>
+   211→          </div>
+   212→        </div>
+   213→      );
+   214→    case "reward":
+   215→      return (
+   216→        <div className="flex items-center gap-3 rounded-[14px] border border-dashed border-[#30D158]/40 bg-[#30D158]/[0.06] px-4 py-3">
+   217→          <Award size={20} className="shrink-0 text-[#1E9E4A]" aria-hidden />
+   218→          <div className="min-w-0 flex-1">
+   219→            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1E9E4A]">Reward reveal</p>
+   220→            <p className="text-[12px] text-[#AAAAAA]">Attach a coupon, gift card or download</p>
+   221→          </div>
+   222→        </div>
+   223→      );
+   224→    case "cta":
+   225→      return (
+   226→        <div className="flex flex-col items-center py-1">
+   227→          <span className="rounded-full bg-[#007AFF] px-7 py-2.5 text-[14px] font-semibold text-white pill-shadow">
+   228→            Continue
+   229→          </span>
+   230→          <p className="mt-2 text-[11px] font-medium text-[#AAAAAA]">Opens a link, claim or reply</p>
+   231→        </div>
+   232→      );
+   233→    case "confetti":
+   234→      return (
+   235→        <div className="flex items-center gap-3">
+   236→          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#FF375F]/[0.1] text-[#FF375F]">
+   237→            <PartyPopper size={16} strokeWidth={2.2} aria-hidden />
+   238→          </span>
+   239→          <p className="flex-1 text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+   240→            Celebration burst
+   241→          </p>
+   242→          <span className="flex shrink-0 items-center gap-1" aria-hidden>
+   243→            {["#FF375F", "#FF9F0A", "#30D158", "#007AFF", "#5E5CE6"].map((c) => (
+   244→              <span key={c} className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+   245→            ))}
+   246→          </span>
+   247→        </div>
+   248→      );
+   249→    default:
+   250→      return null;
+   251→  }
+   252→}
+   253→
+   254→/* ------------------------------------------------------------------ */
+   255→/* Experience Builder                                                  */
+   256→/* ------------------------------------------------------------------ */
+   257→
+   258→export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onClose: () => void }) {
+   259→  const { notify, openMoment, openShare, sheet, player } = useMD();
+   260→  const [title, setTitle] = useState(opts.title ?? "Untitled Experience");
+   261→  const [editing, setEditing] = useState(false);
+   262→  const [scenes, setScenes] = useState<Scene[]>(() => seedScenes(opts));
+   263→  const [sceneIdx, setSceneIdx] = useState(0);
+   264→  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
+   265→  const idRef = useRef(100);
+   266→  const blocksEndRef = useRef<HTMLDivElement>(null);
+   267→  const cover = opts.cover ?? 5;
+   268→
+   269→  // Escape closes the builder — deferred while a sheet or the player is layered above
+   270→  useEffect(() => {
+   271→    const onKey = (e: KeyboardEvent) => {
+   272→      if (e.key === "Escape" && !sheet && !player) onClose();
+   273→    };
+   274→    window.addEventListener("keydown", onKey);
+   275→    return () => window.removeEventListener("keydown", onKey);
+   276→  }, [sheet, player, onClose]);
+   277→
+   278→  const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
+   279→  const scenePos = sceneIdx + 1;
+   280→
+   281→  const addBlock = (type: string) => {
+   282→    const id = `b${idRef.current++}`;
+   283→    setScenes((prev) =>
+   284→      prev.map((s, i) =>
+   285→        i === sceneIdx ? { ...s, blocks: [...s.blocks, { id, type }] } : s
+   286→      )
+   287→    );
+   288→    setSelectedBlock(id);
+   289→    notify(`${BLOCK_BY_TYPE[type]?.label ?? "Block"} added to Scene ${scenePos}`);
+   290→    requestAnimationFrame(() => {
+   291→      blocksEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+   292→    });
+   293→  };
+   294→
+   295→  const removeBlock = (id: string) => {
+   296→    setScenes((prev) =>
+   297→      prev.map((s, i) => (i === sceneIdx ? { ...s, blocks: s.blocks.filter((b) => b.id !== id) } : s))
+   298→    );
+   299→    if (selectedBlock === id) setSelectedBlock(null);
+   300→    notify("Block removed");
+   301→  };
+   302→
+   303→  const addScene = () => {
+   304→    if (scenes.length >= MAX_SCENES) {
+   305→      notify(`Scene limit reached (${MAX_SCENES}) in this preview`);
+   306→      return;
+   307→    }
+   308→    const id = `s${Date.now()}`;
+   309→    setScenes((prev) => [...prev, { id, blocks: [] }]);
+   310→    setSceneIdx(scenes.length);
+   311→    setSelectedBlock(null);
+   312→    notify(`Scene ${scenes.length + 1} added`);
+   313→  };
+   314→
+   315→  const commitTitle = () => {
+   316→    setEditing(false);
+   317→    const t = title.trim();
+   318→    if (t && t !== (opts.title ?? "Untitled Experience")) notify("Title updated");
+   319→    if (!t) setTitle(opts.title ?? "Untitled Experience");
+   320→  };
+   321→
+   322→  return (
+   323→    <motion.div
+   324→      initial={{ x: "100%" }}
+   325→      animate={{ x: 0 }}
+   326→      exit={{ x: "100%" }}
+   327→      transition={{ type: "spring", stiffness: 380, damping: 40 }}
+   328→      className="absolute inset-0 z-[60] flex flex-col bg-[#F5F5F7]"
+   329→      role="dialog"
+   330→      aria-modal="true"
+   331→      aria-label="Experience builder"
+   332→    >
+   333→      {/* ---------- Top chrome ---------- */}
+   334→      <header className="relative z-10 flex items-center gap-3 border-b border-[#1D1D1F]/[0.07] bg-white/85 px-4 pb-3 pt-4 shadow-[0_10px_30px_-18px_rgba(29,29,31,0.25)] backdrop-blur-xl">
+   335→        <button
+   336→          type="button"
+   337→          onClick={onClose}
+   338→          aria-label="Back to app"
+   339→          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#007AFF]/[0.1] text-[#007AFF] transition-transform active:scale-90"
+   340→        >
+   341→          <ChevronLeft size={20} strokeWidth={2.4} aria-hidden />
+   342→        </button>
+   343→
+   344→        <div className="min-w-0 flex-1 text-center">
+   345→          {editing ? (
+   346→            <input
+   347→              autoFocus
+   348→              value={title}
+   349→              maxLength={40}
+   350→              onChange={(e) => setTitle(e.target.value)}
+   351→              onBlur={commitTitle}
+   352→              onKeyDown={(e) => {
+   353→                if (e.key === "Enter") commitTitle();
+   354→                if (e.key === "Escape") {
+   355→                  setTitle(opts.title ?? "Untitled Experience");
+   356→                  setEditing(false);
+   357→                }
+   358→              }}
+   359→              aria-label="Experience title"
+   360→              className="w-full rounded-[10px] bg-[#F5F5F7] px-2.5 py-1 text-center text-[15.5px] font-bold tracking-[-0.02em] text-[#1D1D1F] outline-none ring-2 ring-[#007AFF]"
+   361→            />
+   362→          ) : (
+   363→            <button
+   364→              type="button"
+   365→              onClick={() => setEditing(true)}
+   366→              aria-label="Rename experience"
+   367→              className="max-w-full truncate rounded-[10px] px-2 py-0.5 text-[15.5px] font-bold tracking-[-0.02em] text-[#1D1D1F] transition-colors hover:bg-[#1D1D1F]/[0.04]"
+   368→            >
+   369→              {title}
+   370→            </button>
+   371→          )}
+   372→          <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-[#AAAAAA]">
+   373→            <Check size={10} strokeWidth={3} className="text-[#30D158]" aria-hidden /> Saved
+   374→            {opts.ai ? (
+   375→              <>
+   376→                <span aria-hidden>·</span>
+   377→                <Sparkles size={10} className="text-[#5E5CE6]" aria-hidden />
+   378→                <span className="font-semibold text-[#5E5CE6]">AI sketch</span>
+   379→              </>
+   380→            ) : null}
+   381→          </p>
+   382→        </div>
+   383→
+   384→        <div className="flex shrink-0 items-center gap-2">
+   385→          <button
+   386→            type="button"
+   387→            onClick={() =>
+   388→              openMoment({
+   389→                id: `preview-${Date.now()}`,
+   390→                title: title || "Untitled Experience",
+   391→                cover,
+   392→                dedication: "Draft preview",
+   393→              })
+   394→            }
+   395→            aria-label="Preview experience"
+   396→            className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-[#007AFF] text-white pill-shadow transition-transform active:scale-90"
+   397→          >
+   398→            <Play size={16} fill="currentColor" aria-hidden />
+   399→          </button>
+   400→          <button
+   401→            type="button"
+   402→            onClick={() => openShare({ id: `draft-${opts.cover ?? 0}`, title: title || "Untitled Experience" })}
+   403→            aria-label="Share draft"
+   404→            className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-[#1D1D1F]/[0.06] text-[#1D1D1F] transition-transform active:scale-90"
+   405→          >
+   406→            <Share2 size={15.5} strokeWidth={2.2} aria-hidden />
+   407→          </button>
+   408→        </div>
+   409→      </header>
+   410→
+   411→      {/* ---------- Scrollable workspace ---------- */}
+   412→      <main className="no-scrollbar relative flex-1 overflow-y-auto overscroll-contain">
+   413→        <div className="space-y-5 px-5 pb-6 pt-5">
+   414→          {/* Scene storyboard */}
+   415→          <section aria-label="Scenes">
+   416→            <div className="mb-2.5 flex items-center justify-between px-0.5">
+   417→              <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+   418→                Scenes · {scenes.length}
+   419→              </h2>
+   420→              <p className="text-[11.5px] font-medium text-[#AAAAAA]">Tap a scene to edit it</p>
+   421→            </div>
+   422→            <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 no-scrollbar">
+   423→              {scenes.map((s, i) => {
+   424→                const active = i === sceneIdx;
+   425→                return (
+   426→                  <button
+   427→                    key={s.id}
+   428→                    type="button"
+   429→                    onClick={() => {
+   430→                      setSceneIdx(i);
+   431→                      setSelectedBlock(null);
+   432→                    }}
+   433→                    aria-pressed={active}
+   434→                    aria-label={`Scene ${i + 1}, ${s.blocks.length} blocks`}
+   435→                    className={cn(
+   436→                      "relative w-[104px] shrink-0 overflow-hidden rounded-[18px] bg-white text-left transition-all active:scale-[0.96]",
+   437→                      active
+   438→                        ? "card-shadow ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
+   439→                        : "card-shadow hairline"
+   440→                    )}
+   441→                  >
+   442→                    <CoverArt variant={(cover + i) % 10} className="h-[64px] w-full">
+   443→                      <span
+   444→                        className={cn(
+   445→                          "absolute left-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[11px] font-bold backdrop-blur-md",
+   446→                          active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/35 text-white"
+   447→                        )}
+   448→                      >
+   449→                        {i + 1}
+   450→                      </span>
+   451→                    </CoverArt>
+   452→                    <div className="px-2.5 py-2">
+   453→                      <p className="text-[12px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+   454→                        Scene {i + 1}
+   455→                      </p>
+   456→                      <p className="mt-0.5 text-[10.5px] font-medium text-[#AAAAAA]">
+   457→                        {s.blocks.length} {s.blocks.length === 1 ? "block" : "blocks"}
+   458→                      </p>
+   459→                    </div>
+   460→                  </button>
+   461→                );
+   462→              })}
+   463→              <button
+   464→                type="button"
+   465→                onClick={addScene}
+   466→                aria-label="Add scene"
+   467→                className="flex w-[104px] shrink-0 flex-col items-center justify-center gap-2 rounded-[18px] border-2 border-dashed border-[#1D1D1F]/[0.15] bg-white/50 text-[#AAAAAA] transition-all hover:border-[#007AFF]/40 hover:text-[#007AFF] active:scale-[0.96]"
+   468→              >
+   469→                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05]">
+   470→                  <Plus size={18} strokeWidth={2.4} aria-hidden />
+   471→                </span>
+   472→                <span className="text-[11.5px] font-semibold">Scene</span>
+   473→              </button>
+   474→            </div>
+   475→          </section>
+   476→
+   477→          {/* Scene canvas */}
+   478→          <section aria-label={`Scene ${scenePos} canvas`} className="card-shadow hairline rounded-[24px] bg-white p-4">
+   479→            <div className="mb-3 flex items-center justify-between">
+   480→              <h3 className="text-[16px] font-bold tracking-[-0.02em] text-[#1D1D1F]">
+   481→                Scene {scenePos}
+   482→              </h3>
+   483→              <p className="text-[11.5px] font-medium text-[#AAAAAA]">
+   484→                {scene.blocks.length === 0 ? "Empty scene" : "Tap a block to select"}
+   485→              </p>
+   486→            </div>
+   487→
+   488→            {scene.blocks.length === 0 ? (
+   489→              <div className="flex flex-col items-center rounded-[18px] border border-dashed border-[#1D1D1F]/[0.12] px-6 py-9 text-center">
+   490→                <span className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-full bg-[#007AFF]/[0.08] text-[#007AFF]">
+   491→                  <Plus size={20} aria-hidden />
+   492→                </span>
+   493→                <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Nothing here yet</p>
+   494→                <p className="mt-1 max-w-[210px] text-[12px] leading-relaxed text-[#AAAAAA]">
+   495→                  Add blocks from the palette below — they stack into this scene.
+   496→                </p>
+   497→              </div>
+   498→            ) : (
+   499→              <div className="space-y-3">
+   500→                <AnimatePresence initial={false}>
+   501→                  {scene.blocks.map((b) => {
+   502→                    const active = selectedBlock === b.id;
+   503→                    const def = BLOCK_BY_TYPE[b.type];
+   504→                    return (
+   505→                      <motion.div
+   506→                        key={b.id}
+   507→                        layout
+   508→                        initial={{ opacity: 0, y: 14, scale: 0.97 }}
+   509→                        animate={{ opacity: 1, y: 0, scale: 1 }}
+   510→                        exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.15 } }}
+   511→                        transition={{ type: "spring", stiffness: 420, damping: 32 }}
+   512→                        role="button"
+   513→                        tabIndex={0}
+   514→                        aria-pressed={active}
+   515→                        aria-label={`${def?.label ?? "Block"} in scene ${scenePos}. ${active ? "Selected" : "Tap to select"}`}
+   516→                        onClick={() => setSelectedBlock(active ? null : b.id)}
+   517→                        onKeyDown={(e) => {
+   518→                          if (e.key === "Enter" || e.key === " ") {
+   519→                            e.preventDefault();
+   520→                            setSelectedBlock(active ? null : b.id);
+   521→                          }
+   522→                        }}
+   523→                        className={cn(
+   524→                          "relative cursor-pointer rounded-[18px] border bg-white p-3.5 outline-none transition-shadow",
+   525→                          "focus-visible:ring-2 focus-visible:ring-[#007AFF]",
+   526→                          active
+   527→                            ? "border-[#007AFF] shadow-[0_0_0_3px_rgba(0,122,255,0.12),0_12px_28px_-14px_rgba(0,122,255,0.35)]"
+   528→                            : "border-[#1D1D1F]/[0.07] card-shadow"
+   529→                        )}
+   530→                      >
+   531→                        <div className="flex items-start gap-2.5">
+   532→                          <span
+   533→                            aria-hidden
+   534→                            className={cn(
+   535→                              "mt-0.5 shrink-0 text-[#C7C7CC] transition-colors",
+   536→                              active && "text-[#007AFF]"
+   537→                            )}
+   538→                          >
+   539→                            <GripVertical size={15} strokeWidth={2.2} />
+   540→                          </span>
+   541→                          <div className="min-w-0 flex-1">
+   542→                            <BlockPreview type={b.type} cover={(cover + sceneIdx * 2) % 10} />
+   543→                          </div>
+   544→                        </div>
+   545→
+   546→                        {/* Block meta + delete */}
+   547→                        <div className="mt-3 flex items-center justify-between border-t border-[#1D1D1F]/[0.05] pt-2.5">
+   548→                          <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+   549→                            {def ? (
+   550→                              <def.icon size={11} strokeWidth={2.4} aria-hidden style={{ color: def.tint }} />
+   551→                            ) : null}
+   552→                            {def?.label ?? b.type}
+   553→                          </span>
+   554→                          {active ? (
+   555→                            <button
+   556→                              type="button"
+   557→                              onClick={(e) => {
+   558→                                e.stopPropagation();
+   559→                                removeBlock(b.id);
+   560→                              }}
+   561→                              onKeyDown={(e) => e.stopPropagation()}
+   562→                              aria-label={`Remove ${def?.label ?? "block"}`}
+   563→                              className="relative z-10 flex items-center gap-1 rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#FF375F] transition-transform active:scale-90"
+   564→                            >
+   565→                              <Trash2 size={11} strokeWidth={2.4} aria-hidden /> Remove
+   566→                            </button>
+   567→                          ) : null}
+   568→                        </div>
+   569→                      </motion.div>
+   570→                    );
+   571→                  })}
+   572→                </AnimatePresence>
+   573→                <div ref={blocksEndRef} aria-hidden />
+   574→              </div>
+   575→            )}
+   576→          </section>
+   577→
+   578→          {/* Block palette */}
+   579→          <section aria-label="Block palette">
+   580→            <div className="mb-2.5 flex items-center justify-between px-0.5">
+   581→              <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+   582→                Add to Scene {scenePos}
+   583→              </h2>
+   584→              <p className="text-[11.5px] font-medium text-[#AAAAAA]">Tap to drop a block</p>
+   585→            </div>
+   586→            <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-1 no-scrollbar">
+   587→              {BLOCKS.map((b) => {
+   588→                const Icon = b.icon;
+   589→                return (
+   590→                  <button
+   591→                    key={b.type}
+   592→                    type="button"
+   593→                    onClick={() => addBlock(b.type)}
+   594→                    aria-label={`Add ${b.label} block`}
+   595→                    className="card-shadow hairline flex shrink-0 items-center gap-2 rounded-full bg-white py-2.5 pl-3 pr-4 transition-transform active:scale-[0.94]"
+   596→                  >
+   597→                    <span
+   598→                      className="flex h-[30px] w-[30px] items-center justify-center rounded-full"
+   599→                      style={{ backgroundColor: `${b.tint}1A`, color: b.tint }}
+   600→                    >
+   601→                      <Icon size={15} strokeWidth={2.2} aria-hidden />
+   602→                    </span>
+   603→                    <span className="text-[13px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+   604→                      {b.label}
+   605→                    </span>
+   606→                  </button>
+   607→                );
+   608→              })}
+   609→            </div>
+   610→          </section>
+   611→
+   612→          {/* Tip */}
+   613→          <p className="px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+   614→            Blocks stack top-to-bottom. Recipients tap through scenes one by one.
+   615→          </p>
+   616→        </div>
+   617→      </main>
+   618→
+   619→      {/* ---------- Bottom action bar ---------- */}
+   620→      <footer className="relative z-10 flex items-center gap-2.5 border-t border-[#1D1D1F]/[0.07] bg-white/85 px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3.5 backdrop-blur-xl">
+   621→        <button
+   622→          type="button"
+   623→          onClick={() => notify("Draft saved to your Gallery")}
+   624→          className="flex-1 rounded-full bg-[#1D1D1F]/[0.06] py-3 text-[14.5px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97]"
+   625→        >
+   626→          Save Draft
+   627→        </button>
+   628→        <button
+   629→          type="button"
+   630→          onClick={() => notify("Scheduler opens here — UI preview")}
+   631→          className="flex-1 rounded-full bg-[#1D1D1F]/[0.06] py-3 text-[14.5px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97]"
+   632→        >
+   633→          Schedule
+   634→        </button>
+   635→        <button
+   636→          type="button"
+   637→          onClick={() => {
+   638→            openShare({ id: `draft-${opts.cover ?? 0}`, title: title || "Untitled Experience" });
+   639→          }}
+   640→          className="flex-[1.4] rounded-full bg-[#007AFF] py-3 text-[14.5px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+   641→        >
+   642→          Send
+   643→        </button>
+   644→      </footer>
+   645→    </motion.div>
+   646→  );
+   647→}
+   648→

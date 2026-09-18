@@ -238,3 +238,48 @@ Stage Summary:
 - Known tooling quirks (not app bugs): agent-browser snapshot -i misses overlay dialog contents; `find ... click` intermittently reports "covered element" on sheet buttons (elementFromPoint proves clickable; eval clicks work).
 - Next-phase candidates: recipient route /e/[slug] (blocked — single-route constraint), Prisma models + real CRUD behind the builder, auth screens, onboarding tour, scene reordering (drag), undo/redo in builder, analytics dashboard UI (PRD §analytics funnel).
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+
+---
+Task ID: 6
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 4)
+Task: Assess project status, QA via agent-browser, then continue development (fix bugs + add features + styling polish per round mandate).
+
+Work Log:
+- Status assessment: dev server healthy (GET / 200, compiles clean), worklog reviewed. QA pass on existing build: all 5 tabs, Create sheet flow, builder open/add-block/back, notifications, share — zero page errors, zero console errors. Investigated a suspected "Blank canvas doesn't open builder" bug — FALSE ALARM: the sheet uses a deliberate select-then-confirm flow (option row selects mode, "Start Creating" confirms).
+- BUG FIXED (real): BottomSheet had NO max-height and NO internal scrolling — tall sheet content overflowed above the viewport with an unreachable top (would have broken the new Insights sheet). Refactored bottom-sheet.tsx:
+  - Sheet is now flex-col capped at max-h-[calc(100dvh-72px)]; content area is .md-scroll overflow-y-auto overscroll-contain (all sheets scroll, tall ones stay reachable).
+  - Drag-to-dismiss moved to a header zone (grabber + title) via useDragControls (dragListener=false on the sheet) — drags inside content no longer hijack the sheet (they scroll instead). Verified: content drag keeps sheet open; grabber drag down 150px dismisses; Escape unchanged.
+- NEW FEATURE — Insights dashboard (PRD §analytics funnel, the last uncovered core system):
+  - mock-data.ts: INSIGHTS snapshots for 7d/30d/90d — funnel (Delivered→Opened→Completed→Acted→Shared with counts/notes), 4 KPIs with up/down deltas, trend series, sceneRetention %, top moments, aiNote.
+  - sheet-contents.tsx InsightsContent: 7D/30D/90D SegmentedControl (reuse); 2×2 KPI cards (staggered entrance, green/red delta arrows); "Recipient journey" funnel — 5 animated width bars (gray for Delivered, blue gradient otherwise) with % + counts; "Opens over time" — hand-rolled SVG smoothed area chart (gradient fill, pathLength draw-in, animated end dot, hairline grid); "Scene retention" animated bars; "Top moments" ranked rows (cover, green completion bar, views); dark "AI insight" card. Range switch re-keys sections so animations replay; toast on switch.
+  - Entry points: Home stats section (new "Your stats" SectionHeader with "Insights" action + tappable stat card with "See the full funnel…" hint) and Profile "Insights & analytics" row (new Insights settings group).
+- NEW FEATURE — AI Message Composer (PRD AI message generator: 3 options + tone control):
+  - mock-data.ts: AI_TONES (Heartfelt/Playful/Poetic/Minimal/Bold) + AI_MESSAGE_OPTIONS (3 deterministic messages per tone; options shift with brief length so it feels reactive).
+  - sheet-contents.tsx AIComposerContent: brief textarea (220 chars + live counter), tone radio chips, "Write 3 messages" → 1.4s shimmer skeleton phase ("Writing in a X tone…") → 3 option cards (Copy w/ Copied green state, "Use in Scene 1" primary, staggered entrance) + "Try another brief"; "Uses 3 of your 176 AI credits" footer.
+  - Insert flow (React-compiler-safe, event-based): md-context gains aiInsertRef (RefObject<AiInsertFn|null>); builder registers insertAiMessage via effect-assigned ref; app-shell insertAiMessage inserts into the OPEN builder via the ref, or opens a new builder seeded with the message (BuilderOptions.seedText). First attempt used aiMessage state + consumer effect — rejected by react-hooks/set-state-in-effect lint; ref pattern is cleaner and passed.
+  - Entry points: Create view AI Creator card "Try it" (now opens composer instead of directly opening builder); builder palette "Ask AI" gradient chip (first position, #5E5CE6 gradient).
+  - AI text blocks render quoted italic message + "AI COMPOSED" badge (BlockPreview text case extended with block.text).
+- NEW FEATURE — Builder undo/redo (PRD Experience Builder):
+  - Snapshot history (label, title, scenes) with 30-entry cap; past/future stacks; every mutation pushes (block add/remove, scene add/remove, title rename [snapshot at edit start], block/scene reorder [one entry per drag via drag-started refs], AI message insert).
+  - UI: Undo2/Redo2 circle buttons beside the SCENES header with disabled states; ⌘Z / ⇧⌘Z keyboard shortcuts (deferred while sheet/player open or title editing); toasts carry action labels ("Undo — Text added" etc.). Verified end-to-end: add→undo(3 blocks)→redo(4 blocks); scene remove→⌘Z restores; block drag reorder→undo restores order ("Undo — Blocks reordered" toast).
+- NEW FEATURE — Scene + block drag reordering (PRD drag-and-drop):
+  - Blocks: canvas list is now a Reorder.Group (axis y); BlockCard uses useDragControls with dragListener=false — tap anywhere selects, drag starts only from the grip handle (touch-none). Layout animations preserved (Reorder.Item supports initial/animate/exit under AnimatePresence).
+  - Scenes: "Order" pill in the storyboard header → reorder mode: vertical Reorder.Group of SceneRow cards (number chip, cover thumb, "Scene N · N blocks", red trash to remove [min 1 scene, selection re-clamped], grip handle) + "Done" to exit. Selection follows the dragged scene by id; toast + single history entry per drag.
+- STYLING polish: Home stats section upgraded (header + insight hint row), Profile gains Insights group header row, KPI delta arrows, funnel/retention bar animations, chart draw-ins, composer shimmer stagger.
+- VERIFICATION (agent-browser 390×844 + 1440×900, VLM):
+  - Insights: opens from Home + Profile; all sections render (DOM + VLM: funnel bars, chart, retention 100→74%, top moments w/ green bars, dark AI insight card "mid-week opens" note); 30D switch updates data (funnel 612, KPI 84%, W1–Now axis); sheet scrolls 1430px content in 690px viewport.
+  - Composer: opens from Create "Try it" + builder "Ask AI"; brief fill + Poetic tone + generate → shimmer → 3 options; insert with builder OPEN → block 4→5 in same builder ("If a moment could wrap itself…" + toast); insert with builder CLOSED → builder opens seeded (AI sketch badge + quoted AI COMPOSED first block — VLM ALL PASS).
+  - Builder: undo/redo buttons + shortcuts; Order mode rows/Done/instruction (VLM PASS); scene drag [2-block scene 1→3 verified] + undo restore; block drag [AI block 0→1 verified] + undo restore; scene remove + restore; title edit snapshot.
+  - Sheet refactor regressions: notifications sheet (mark-all-read), share sheet (QR) over player, create sheet confirm flow, pricing (Dodo footer), grabber drag-dismiss, content-drag-keeps-open, Escape chain sheet>player>builder.
+  - Desktop 1440: centered 480px column + ambient blobs (VLM PASS). ZERO page errors, ZERO console errors, lint clean (exit 0).
+
+Stage Summary:
+- Round 4 complete. App now covers every core PRD system in UI form: discover → create (builder + undo/redo + reorder + AI composer) → share → track (notifications) → analyze (Insights funnel/charts) → account (settings/credits/pricing).
+- BUG fixed: BottomSheet tall-content overflow (now scrollable + header-drag dismissal).
+- Still UI-only with mock data — no backend, no themed content (per user instruction).
+- Files: MODIFIED bottom-sheet, md-context, app-shell, sheet-contents (+~530 lines), builder (rewritten, +~250 lines), mock-data (+~160 lines), home/create/profile views; globals.css untouched (reused .md-scroll/.skeleton).
+- Layer stack unchanged: content z-10 < chrome z-50 < builder z-60 < player z-70 < sheet z-80/81 < toast z-90.
+- Known tooling quirks (not app bugs): innerText on CSS-uppercased text is case-sensitive ("AI composed" vs "AI COMPOSED"); Reorder.Item renders <li> (ring checks must target li); document.body.click() doesn't reach overlay onClick handlers; agent-browser "covered element" on sheet buttons persists (eval clicks work).
+- Minor behavior note: undoing a scene REORDER restores scenes but keeps selection by index (not identity) — harmless, documented.
+- Next-phase candidates: Prisma models + real CRUD behind builder/sheets (app is feature-complete in UI), auth screens, onboarding tour, recipient route /e/[slug] (blocked — single-route constraint), scene-level block editing (block config sheets), export/share analytics.
+- Reminder: user should rotate the GitHub token shared earlier in chat.

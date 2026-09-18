@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, Heart, Share2 } from "lucide-react";
+import { ChartPie, Eye, Heart, Share2 } from "lucide-react";
 import { MOMENTS, USER } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
 import { CountUp, SectionHeader, StatusBadge } from "../bits";
@@ -14,7 +14,7 @@ const STATS = [
 ];
 
 export function HomeView() {
-  const { setTab, openMoment, openShare, openBuilder } = useMD();
+  const { setTab, openMoment, openShare, openBuilder, openInsights } = useMD();
   const [greeting, setGreeting] = useState("Hello");
 
   useEffect(() => {
@@ -69,19 +69,30 @@ export function HomeView() {
         </article>
       </section>
 
-      {/* Stats */}
+      {/* Stats — tap through to the full Insights dashboard */}
       <section aria-label="Your stats">
-        <div className="grid grid-cols-3 gap-3">
-          {STATS.map((s) => (
-            <div key={s.label} className="card-shadow hairline rounded-[20px] bg-white px-3.5 py-3.5">
-              <CountUp
-                value={s.value}
-                className="text-[22px] font-bold tabular-nums tracking-[-0.02em] text-[#1D1D1F]"
-              />
-              <p className="mt-0.5 text-[11px] font-medium leading-tight text-[#AAAAAA]">{s.label}</p>
-            </div>
-          ))}
-        </div>
+        <SectionHeader title="Your stats" action="Insights" onAction={() => openInsights("7d")} />
+        <button
+          type="button"
+          onClick={() => openInsights("7d")}
+          aria-label="Open insights dashboard"
+          className="w-full rounded-[24px] transition-transform active:scale-[0.98]"
+        >
+          <div className="grid grid-cols-3 gap-3">
+            {STATS.map((s) => (
+              <div key={s.label} className="card-shadow hairline rounded-[20px] bg-white px-3.5 py-3.5">
+                <CountUp
+                  value={s.value}
+                  className="text-[22px] font-bold tabular-nums tracking-[-0.02em] text-[#1D1D1F]"
+                />
+                <p className="mt-0.5 text-[11px] font-medium leading-tight text-[#AAAAAA]">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 flex items-center justify-center gap-1 text-[11.5px] font-semibold text-[#007AFF]">
+            <ChartPie size={12} aria-hidden /> See the full funnel, trends and top moments
+          </p>
+        </button>
       </section>
 
       {/* Continue creating */}

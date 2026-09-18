@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, Reorder, motion, useDragControls } from "framer-motion";
 import {
   Award,
   Check,
@@ -16,12 +16,13 @@ import {
   PartyPopper,
   Play,
   Plus,
+  Redo2,
   Share2,
   Sparkles,
   Trash2,
   Type,
+  Undo2,
   Video,
-  X,
 } from "lucide-react";
 import { CoverArt } from "./cover-art";
 import { useMD, type BuilderOptions } from "./md-context";
@@ -58,6 +59,8 @@ const BLOCK_BY_TYPE = Object.fromEntries(BLOCKS.map((b) => [b.type, b]));
 interface Block {
   id: string;
   type: string;
+  /** Optional composed copy (AI messages render here) */
+  text?: string;
 }
 
 interface Scene {
@@ -65,7 +68,15 @@ interface Scene {
   blocks: Block[];
 }
 
+/** Undo/redo snapshot of the whole draft */
+interface Snapshot {
+  label: string;
+  title: string;
+  scenes: Scene[];
+}
+
 const MAX_SCENES = 8;
+const HISTORY_CAP = 30;
 
 /** Deterministic draft layouts — abstract, no themed content */
 const DRAFT_PATTERNS: string[][] = [
@@ -81,11 +92,15 @@ const DRAFT_PATTERNS: string[][] = [
 
 function seedScenes(opts: BuilderOptions): Scene[] {
   if (opts.ai) {
-    return [
+    const scenes: Scene[] = [
       { id: "s1", blocks: [{ id: "b1", type: "text" }, { id: "b2", type: "photo" }] },
       { id: "s2", blocks: [{ id: "b3", type: "gift" }, { id: "b4", type: "confetti" }] },
       { id: "s3", blocks: [{ id: "b5", type: "text" }, { id: "b6", type: "cta" }] },
     ];
+    if (opts.seedText) {
+      scenes[0].blocks = [{ id: "bAi0", type: "text", text: opts.seedText }, ...scenes[0].blocks];
+    }
+    return scenes;
   }
   const count = Math.max(1, Math.min(opts.scenes ?? 1, MAX_SCENES));
   const scenes: Scene[] = [];
@@ -99,6 +114,9 @@ function seedScenes(opts: BuilderOptions): Scene[] {
   if (opts.initialBlock && BLOCK_BY_TYPE[opts.initialBlock]) {
     scenes[0].blocks.push({ id: "bSeed", type: opts.initialBlock });
   }
+  if (opts.seedText) {
+    scenes[0].blocks = [{ id: "bAi0", type: "text", text: opts.seedText }, ...scenes[0].blocks];
+  }
   return scenes;
 }
 
@@ -106,7 +124,7 @@ function seedScenes(opts: BuilderOptions): Scene[] {
 /* Block visual previews                                               */
 /* ------------------------------------------------------------------ */
 
-function BlockPreview({ type, cover }: { type: string; cover: number }) {
+function BlockPreview({ type, cover, text }: { type: string; cover: number; text?: string }) {
   switch (type) {
     case "text":
       return (
@@ -114,14 +132,25 @@ function BlockPreview({ type, cover }: { type: string; cover: number }) {
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#007AFF]/[0.1] text-[#007AFF]">
             <Type size={16} strokeWidth={2.2} aria-hidden />
           </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F]">
-              A few words that land.
-            </p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
-              Your message renders here — big type, generous spacing, one idea per scene.
-            </p>
-          </div>
+          {text ? (
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-medium italic leading-relaxed tracking-[-0.01em] text-[#1D1D1F]">
+                “{text}”
+              </p>
+              <p className="mt-1.5 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#5E5CE6]">
+                <Sparkles size={10} aria-hidden /> AI composed
+              </p>
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F]">
+                A few words that land.
+              </p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
+                Your message renders here — big type, generous spacing, one idea per scene.
+              </p>
+            </div>
+          )}
         </div>
       );
     case "photo":
@@ -252,37 +281,256 @@ function BlockPreview({ type, cover }: { type: string; cover: number }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Draggable block card (grip handle initiates drag)                    */
+/* ------------------------------------------------------------------ */
+
+function BlockCard({
+  block,
+  cover,
+  scenePos,
+  active,
+  onSelect,
+  onRemove,
+  onGripDown,
+}: {
+  block: Block;
+  cover: number;
+  scenePos: number;
+  active: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+  onGripDown: (e: React.PointerEvent) => void;
+}) {
+  const controls = useDragControls();
+  const def = BLOCK_BY_TYPE[block.type];
+  return (
+    <Reorder.Item
+      value={block}
+      dragListener={false}
+      dragControls={controls}
+      initial={{ opacity: 0, y: 14, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.15 } }}
+      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      aria-label={`${def?.label ?? "Block"} in scene ${scenePos}. ${active ? "Selected" : "Tap to select"}. Drag the handle to reorder.`}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={cn(
+        "relative cursor-pointer rounded-[18px] border bg-white p-3.5 outline-none transition-shadow",
+        "focus-visible:ring-2 focus-visible:ring-[#007AFF]",
+        active
+          ? "border-[#007AFF] shadow-[0_0_0_3px_rgba(0,122,255,0.12),0_12px_28px_-14px_rgba(0,122,255,0.35)]"
+          : "border-[#1D1D1F]/[0.07] card-shadow"
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <button
+          type="button"
+          aria-label={`Reorder ${def?.label ?? "block"} in scene ${scenePos}`}
+          onPointerDown={(e) => {
+            onGripDown(e);
+            controls.start(e);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "mt-0.5 shrink-0 cursor-grab touch-none rounded-md p-0.5 text-[#C7C7CC] transition-colors active:cursor-grabbing hover:text-[#1D1D1F]/50",
+            active && "text-[#007AFF]"
+          )}
+        >
+          <GripVertical size={15} strokeWidth={2.2} aria-hidden />
+        </button>
+        <div className="min-w-0 flex-1">
+          <BlockPreview type={block.type} cover={cover} text={block.text} />
+        </div>
+      </div>
+
+      {/* Block meta + delete */}
+      <div className="mt-3 flex items-center justify-between border-t border-[#1D1D1F]/[0.05] pt-2.5">
+        <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          {def ? (
+            <def.icon size={11} strokeWidth={2.4} aria-hidden style={{ color: def.tint }} />
+          ) : null}
+          {def?.label ?? block.type}
+        </span>
+        {active ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            aria-label={`Remove ${def?.label ?? "block"}`}
+            className="relative z-10 flex items-center gap-1 rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#FF375F] transition-transform active:scale-90"
+          >
+            <Trash2 size={11} strokeWidth={2.4} aria-hidden /> Remove
+          </button>
+        ) : null}
+      </div>
+    </Reorder.Item>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Draggable scene row (reorder mode)                                  */
+/* ------------------------------------------------------------------ */
+
+function SceneRow({
+  scene,
+  index,
+  cover,
+  active,
+  onSelect,
+  onRemove,
+  onGripDown,
+}: {
+  scene: Scene;
+  index: number;
+  cover: number;
+  active: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+  onGripDown: (e: React.PointerEvent) => void;
+}) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      value={scene}
+      dragListener={false}
+      dragControls={controls}
+      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+      className={cn(
+        "card-shadow hairline flex items-center gap-3 rounded-[18px] bg-white p-2.5",
+        active && "ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
+      )}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={`Select scene ${index + 1}`}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <span
+          className={cn(
+            "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold",
+            active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/[0.08] text-[#1D1D1F]/70"
+          )}
+        >
+          {index + 1}
+        </span>
+        <CoverArt variant={(cover + index) % 10} className="h-[44px] w-[64px] shrink-0 rounded-[10px]" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+            Scene {index + 1}
+          </span>
+          <span className="mt-0.5 block text-[11.5px] font-medium text-[#AAAAAA]">
+            {scene.blocks.length} {scene.blocks.length === 1 ? "block" : "blocks"}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove scene ${index + 1}`}
+        className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.09] text-[#FF375F] transition-transform active:scale-90"
+      >
+        <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+      </button>
+      <button
+        type="button"
+        aria-label={`Reorder scene ${index + 1}`}
+        onPointerDown={(e) => {
+          onGripDown(e);
+          controls.start(e);
+        }}
+        className="shrink-0 cursor-grab touch-none rounded-md p-1 text-[#C7C7CC] transition-colors active:cursor-grabbing hover:text-[#1D1D1F]/50"
+      >
+        <GripVertical size={18} strokeWidth={2.2} aria-hidden />
+      </button>
+    </Reorder.Item>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Experience Builder                                                  */
 /* ------------------------------------------------------------------ */
 
 export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onClose: () => void }) {
-  const { notify, openMoment, openShare, sheet, player } = useMD();
+  const { notify, openMoment, openShare, sheet, player, aiInsertRef, openComposer } = useMD();
   const [title, setTitle] = useState(opts.title ?? "Untitled Experience");
   const [editing, setEditing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>(() => seedScenes(opts));
   const [sceneIdx, setSceneIdx] = useState(0);
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [past, setPast] = useState<Snapshot[]>([]);
+  const [future, setFuture] = useState<Snapshot[]>([]);
   const idRef = useRef(100);
   const blocksEndRef = useRef<HTMLDivElement>(null);
+  const blockDragStarted = useRef(false);
+  const sceneDragStarted = useRef(false);
   const cover = opts.cover ?? 5;
-
-  // Escape closes the builder — deferred while a sheet or the player is layered above
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !sheet && !player) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sheet, player, onClose]);
 
   const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
   const scenePos = sceneIdx + 1;
 
-  const addBlock = (type: string) => {
+  /* ---------- Undo / redo ---------- */
+
+  const snapshot = useCallback(
+    (label: string): Snapshot => ({ label, title, scenes }),
+    [title, scenes]
+  );
+
+  /** Push the CURRENT state onto the past stack (call before every mutation) */
+  const pushHistory = useCallback(
+    (label: string) => {
+      setPast((p) => [...p.slice(-(HISTORY_CAP - 1)), snapshot(label)]);
+      setFuture([]);
+    },
+    [snapshot]
+  );
+
+  const applySnapshot = useCallback((s: Snapshot) => {
+    setTitle(s.title);
+    setScenes(s.scenes);
+    setSceneIdx((i) => Math.min(i, s.scenes.length - 1));
+    setSelectedBlock(null);
+  }, []);
+
+  const undo = useCallback(() => {
+    if (past.length === 0) return;
+    const prev = past[past.length - 1];
+    setPast((p) => p.slice(0, -1));
+    setFuture((f) => [snapshot("redo"), ...f]);
+    applySnapshot(prev);
+    notify(`Undo — ${prev.label}`);
+  }, [past, snapshot, applySnapshot, notify]);
+
+  const redo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[0];
+    setFuture((f) => f.slice(1));
+    setPast((p) => [...p, snapshot(next.label)]);
+    applySnapshot(next);
+    notify(`Redo — ${next.label}`);
+  }, [future, snapshot, applySnapshot, notify]);
+
+  /* ---------- Mutations (each pushes history) ---------- */
+
+  const addBlock = (type: string, text?: string) => {
     const id = `b${idRef.current++}`;
+    pushHistory(text ? "AI message added" : `${BLOCK_BY_TYPE[type]?.label ?? "Block"} added`);
     setScenes((prev) =>
       prev.map((s, i) =>
-        i === sceneIdx ? { ...s, blocks: [...s.blocks, { id, type }] } : s
+        i === sceneIdx ? { ...s, blocks: [...s.blocks, { id, type, text }] } : s
       )
     );
     setSelectedBlock(id);
@@ -293,8 +541,10 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   };
 
   const removeBlock = (id: string) => {
+    const b = scene.blocks.find((x) => x.id === id);
+    pushHistory(`${BLOCK_BY_TYPE[b?.type ?? ""]?.label ?? "Block"} removed`);
     setScenes((prev) =>
-      prev.map((s, i) => (i === sceneIdx ? { ...s, blocks: s.blocks.filter((b) => b.id !== id) } : s))
+      prev.map((s, i) => (i === sceneIdx ? { ...s, blocks: s.blocks.filter((b2) => b2.id !== id) } : s))
     );
     if (selectedBlock === id) setSelectedBlock(null);
     notify("Block removed");
@@ -306,10 +556,25 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
       return;
     }
     const id = `s${Date.now()}`;
+    pushHistory("Scene added");
     setScenes((prev) => [...prev, { id, blocks: [] }]);
     setSceneIdx(scenes.length);
     setSelectedBlock(null);
     notify(`Scene ${scenes.length + 1} added`);
+  };
+
+  const removeScene = (id: string) => {
+    if (scenes.length <= 1) {
+      notify("Keep at least one scene");
+      return;
+    }
+    const idx = scenes.findIndex((s) => s.id === id);
+    pushHistory(`Scene ${idx + 1} removed`);
+    setScenes((prev) => prev.filter((s) => s.id !== id));
+    if (idx === sceneIdx) setSceneIdx(Math.max(0, idx - 1));
+    else if (idx < sceneIdx) setSceneIdx((i) => Math.max(0, i - 1));
+    setSelectedBlock(null);
+    notify(`Scene ${idx + 1} removed`);
   };
 
   const commitTitle = () => {
@@ -318,6 +583,88 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
     if (t && t !== (opts.title ?? "Untitled Experience")) notify("Title updated");
     if (!t) setTitle(opts.title ?? "Untitled Experience");
   };
+
+  /** Record the pre-edit title once, at edit start */
+  const beginEditTitle = () => {
+    pushHistory("Title renamed");
+    setEditing(true);
+  };
+
+  /* ---------- Reorder handlers (history pushed once per drag) ---------- */
+
+  const reorderBlocks = (next: Block[]) => {
+    const sameOrder =
+      next.length === scene.blocks.length &&
+      next.every((b, i) => b.id === scene.blocks[i].id);
+    if (sameOrder) return;
+    if (blockDragStarted.current) {
+      pushHistory("Blocks reordered");
+      blockDragStarted.current = false;
+    }
+    setScenes((prev) =>
+      prev.map((s, i) => (i === sceneIdx ? { ...s, blocks: next } : s))
+    );
+  };
+
+  const reorderScenes = (next: Scene[]) => {
+    const sameOrder =
+      next.length === scenes.length && next.every((s, i) => s.id === scenes[i].id);
+    if (sameOrder) return;
+    if (sceneDragStarted.current) {
+      pushHistory("Scenes reordered");
+      sceneDragStarted.current = false;
+    }
+    const currentId = scene.id;
+    setScenes(next);
+    const newIdx = next.findIndex((s) => s.id === currentId);
+    if (newIdx >= 0) setSceneIdx(newIdx);
+  };
+
+  /* ---------- AI message insertion (registered as an event handler via context ref) ---------- */
+
+  /** Inserts a composed message into the current scene (called from the composer sheet) */
+  const insertAiMessage = (message: string) => {
+    const id = `b${idRef.current++}`;
+    pushHistory("AI message added");
+    setScenes((prev) =>
+      prev.map((s, i) =>
+        i === sceneIdx ? { ...s, blocks: [...s.blocks, { id, type: "text", text: message }] } : s
+      )
+    );
+    setSelectedBlock(id);
+    notify(`AI message added to Scene ${sceneIdx + 1}`);
+    requestAnimationFrame(() => {
+      blocksEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  };
+
+  // Keep the context ref pointing at the latest handler (assigning a ref in an effect is cheap + lint-safe)
+  useEffect(() => {
+    aiInsertRef.current = insertAiMessage;
+    return () => {
+      if (aiInsertRef.current === insertAiMessage) aiInsertRef.current = null;
+    };
+  });
+
+  /* ---------- Keyboard: Escape closes (deferred), ⌘Z / ⇧⌘Z undo-redo ---------- */
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        if (sheet || player || editing) return;
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (e.key === "Escape" && !sheet && !player) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheet, player, editing, onClose, undo, redo]);
+
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
 
   return (
     <motion.div
@@ -352,6 +699,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitTitle();
                 if (e.key === "Escape") {
+                  e.stopPropagation();
                   setTitle(opts.title ?? "Untitled Experience");
                   setEditing(false);
                 }
@@ -362,7 +710,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
           ) : (
             <button
               type="button"
-              onClick={() => setEditing(true)}
+              onClick={beginEditTitle}
               aria-label="Rename experience"
               className="max-w-full truncate rounded-[10px] px-2 py-0.5 text-[15.5px] font-bold tracking-[-0.02em] text-[#1D1D1F] transition-colors hover:bg-[#1D1D1F]/[0.04]"
             >
@@ -411,67 +759,141 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
       {/* ---------- Scrollable workspace ---------- */}
       <main className="no-scrollbar relative flex-1 overflow-y-auto overscroll-contain">
         <div className="space-y-5 px-5 pb-6 pt-5">
-          {/* Scene storyboard */}
+          {/* Scene storyboard / reorder mode */}
           <section aria-label="Scenes">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
                 Scenes · {scenes.length}
               </h2>
-              <p className="text-[11.5px] font-medium text-[#AAAAAA]">Tap a scene to edit it</p>
-            </div>
-            <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 no-scrollbar">
-              {scenes.map((s, i) => {
-                const active = i === sceneIdx;
-                return (
+              {reorderMode ? (
+                <button
+                  type="button"
+                  onClick={() => setReorderMode(false)}
+                  className="rounded-full bg-[#007AFF] px-3.5 py-1.5 text-[12px] font-semibold text-white transition-transform active:scale-95"
+                >
+                  Done
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5">
                   <button
-                    key={s.id}
                     type="button"
-                    onClick={() => {
-                      setSceneIdx(i);
-                      setSelectedBlock(null);
-                    }}
-                    aria-pressed={active}
-                    aria-label={`Scene ${i + 1}, ${s.blocks.length} blocks`}
+                    onClick={undo}
+                    disabled={!canUndo}
+                    aria-label="Undo last change"
                     className={cn(
-                      "relative w-[104px] shrink-0 overflow-hidden rounded-[18px] bg-white text-left transition-all active:scale-[0.96]",
-                      active
-                        ? "card-shadow ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
-                        : "card-shadow hairline"
+                      "flex h-[30px] w-[30px] items-center justify-center rounded-full bg-[#1D1D1F]/[0.05] transition-all active:scale-90",
+                      canUndo ? "text-[#1D1D1F]" : "cursor-default text-[#1D1D1F]/25"
                     )}
                   >
-                    <CoverArt variant={(cover + i) % 10} className="h-[64px] w-full">
-                      <span
-                        className={cn(
-                          "absolute left-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[11px] font-bold backdrop-blur-md",
-                          active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/35 text-white"
-                        )}
-                      >
-                        {i + 1}
-                      </span>
-                    </CoverArt>
-                    <div className="px-2.5 py-2">
-                      <p className="text-[12px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
-                        Scene {i + 1}
-                      </p>
-                      <p className="mt-0.5 text-[10.5px] font-medium text-[#AAAAAA]">
-                        {s.blocks.length} {s.blocks.length === 1 ? "block" : "blocks"}
-                      </p>
-                    </div>
+                    <Undo2 size={14} strokeWidth={2.4} aria-hidden />
                   </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={addScene}
-                aria-label="Add scene"
-                className="flex w-[104px] shrink-0 flex-col items-center justify-center gap-2 rounded-[18px] border-2 border-dashed border-[#1D1D1F]/[0.15] bg-white/50 text-[#AAAAAA] transition-all hover:border-[#007AFF]/40 hover:text-[#007AFF] active:scale-[0.96]"
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05]">
-                  <Plus size={18} strokeWidth={2.4} aria-hidden />
-                </span>
-                <span className="text-[11.5px] font-semibold">Scene</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={redo}
+                    disabled={!canRedo}
+                    aria-label="Redo change"
+                    className={cn(
+                      "flex h-[30px] w-[30px] items-center justify-center rounded-full bg-[#1D1D1F]/[0.05] transition-all active:scale-90",
+                      canRedo ? "text-[#1D1D1F]" : "cursor-default text-[#1D1D1F]/25"
+                    )}
+                  >
+                    <Redo2 size={14} strokeWidth={2.4} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReorderMode(true);
+                      setSelectedBlock(null);
+                    }}
+                    aria-label="Reorder scenes"
+                    className="ml-1 rounded-full bg-[#007AFF]/[0.1] px-3 py-1.5 text-[12px] font-semibold text-[#007AFF] transition-transform active:scale-95"
+                  >
+                    Order
+                  </button>
+                </div>
+              )}
             </div>
+
+            {reorderMode ? (
+              <div>
+                <p className="mb-2.5 px-0.5 text-[11.5px] font-medium text-[#AAAAAA]">
+                  Drag the handles to rearrange — recipients tap through in this order.
+                </p>
+                <Reorder.Group axis="y" values={scenes} onReorder={reorderScenes} className="space-y-2.5">
+                  {scenes.map((s, i) => (
+                    <SceneRow
+                      key={s.id}
+                      scene={s}
+                      index={i}
+                      cover={cover}
+                      active={i === sceneIdx}
+                      onSelect={() => {
+                        setSceneIdx(i);
+                        setSelectedBlock(null);
+                      }}
+                      onRemove={() => removeScene(s.id)}
+                      onGripDown={() => {
+                        sceneDragStarted.current = true;
+                      }}
+                    />
+                  ))}
+                </Reorder.Group>
+              </div>
+            ) : (
+              <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 no-scrollbar">
+                {scenes.map((s, i) => {
+                  const active = i === sceneIdx;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSceneIdx(i);
+                        setSelectedBlock(null);
+                      }}
+                      aria-pressed={active}
+                      aria-label={`Scene ${i + 1}, ${s.blocks.length} blocks`}
+                      className={cn(
+                        "relative w-[104px] shrink-0 overflow-hidden rounded-[18px] bg-white text-left transition-all active:scale-[0.96]",
+                        active
+                          ? "card-shadow ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
+                          : "card-shadow hairline"
+                      )}
+                    >
+                      <CoverArt variant={(cover + i) % 10} className="h-[64px] w-full">
+                        <span
+                          className={cn(
+                            "absolute left-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[11px] font-bold backdrop-blur-md",
+                            active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/35 text-white"
+                          )}
+                        >
+                          {i + 1}
+                        </span>
+                      </CoverArt>
+                      <div className="px-2.5 py-2">
+                        <p className="text-[12px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+                          Scene {i + 1}
+                        </p>
+                        <p className="mt-0.5 text-[10.5px] font-medium text-[#AAAAAA]">
+                          {s.blocks.length} {s.blocks.length === 1 ? "block" : "blocks"}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={addScene}
+                  aria-label="Add scene"
+                  className="flex w-[104px] shrink-0 flex-col items-center justify-center gap-2 rounded-[18px] border-2 border-dashed border-[#1D1D1F]/[0.15] bg-white/50 text-[#AAAAAA] transition-all hover:border-[#007AFF]/40 hover:text-[#007AFF] active:scale-[0.96]"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05]">
+                    <Plus size={18} strokeWidth={2.4} aria-hidden />
+                  </span>
+                  <span className="text-[11.5px] font-semibold">Scene</span>
+                </button>
+              </div>
+            )}
           </section>
 
           {/* Scene canvas */}
@@ -481,7 +903,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 Scene {scenePos}
               </h3>
               <p className="text-[11.5px] font-medium text-[#AAAAAA]">
-                {scene.blocks.length === 0 ? "Empty scene" : "Tap a block to select"}
+                {scene.blocks.length === 0 ? "Empty scene" : "Tap a block to select · drag ⠿ to reorder"}
               </p>
             </div>
 
@@ -496,82 +918,28 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <Reorder.Group axis="y" values={scene.blocks} onReorder={reorderBlocks} className="space-y-3">
                 <AnimatePresence initial={false}>
                   {scene.blocks.map((b) => {
                     const active = selectedBlock === b.id;
-                    const def = BLOCK_BY_TYPE[b.type];
                     return (
-                      <motion.div
+                      <BlockCard
                         key={b.id}
-                        layout
-                        initial={{ opacity: 0, y: 14, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.15 } }}
-                        transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                        role="button"
-                        tabIndex={0}
-                        aria-pressed={active}
-                        aria-label={`${def?.label ?? "Block"} in scene ${scenePos}. ${active ? "Selected" : "Tap to select"}`}
-                        onClick={() => setSelectedBlock(active ? null : b.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setSelectedBlock(active ? null : b.id);
-                          }
+                        block={b}
+                        cover={(cover + sceneIdx * 2) % 10}
+                        scenePos={scenePos}
+                        active={active}
+                        onSelect={() => setSelectedBlock(active ? null : b.id)}
+                        onRemove={() => removeBlock(b.id)}
+                        onGripDown={() => {
+                          blockDragStarted.current = true;
                         }}
-                        className={cn(
-                          "relative cursor-pointer rounded-[18px] border bg-white p-3.5 outline-none transition-shadow",
-                          "focus-visible:ring-2 focus-visible:ring-[#007AFF]",
-                          active
-                            ? "border-[#007AFF] shadow-[0_0_0_3px_rgba(0,122,255,0.12),0_12px_28px_-14px_rgba(0,122,255,0.35)]"
-                            : "border-[#1D1D1F]/[0.07] card-shadow"
-                        )}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <span
-                            aria-hidden
-                            className={cn(
-                              "mt-0.5 shrink-0 text-[#C7C7CC] transition-colors",
-                              active && "text-[#007AFF]"
-                            )}
-                          >
-                            <GripVertical size={15} strokeWidth={2.2} />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <BlockPreview type={b.type} cover={(cover + sceneIdx * 2) % 10} />
-                          </div>
-                        </div>
-
-                        {/* Block meta + delete */}
-                        <div className="mt-3 flex items-center justify-between border-t border-[#1D1D1F]/[0.05] pt-2.5">
-                          <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
-                            {def ? (
-                              <def.icon size={11} strokeWidth={2.4} aria-hidden style={{ color: def.tint }} />
-                            ) : null}
-                            {def?.label ?? b.type}
-                          </span>
-                          {active ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeBlock(b.id);
-                              }}
-                              onKeyDown={(e) => e.stopPropagation()}
-                              aria-label={`Remove ${def?.label ?? "block"}`}
-                              className="relative z-10 flex items-center gap-1 rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#FF375F] transition-transform active:scale-90"
-                            >
-                              <Trash2 size={11} strokeWidth={2.4} aria-hidden /> Remove
-                            </button>
-                          ) : null}
-                        </div>
-                      </motion.div>
+                      />
                     );
                   })}
                 </AnimatePresence>
                 <div ref={blocksEndRef} aria-hidden />
-              </div>
+              </Reorder.Group>
             )}
           </section>
 
@@ -584,6 +952,18 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               <p className="text-[11.5px] font-medium text-[#AAAAAA]">Tap to drop a block</p>
             </div>
             <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-1 no-scrollbar">
+              <button
+                type="button"
+                onClick={() => openComposer()}
+                aria-label="Ask AI to write a message"
+                className="flex shrink-0 items-center gap-2 rounded-full py-2.5 pl-3 pr-4 text-white transition-transform active:scale-[0.94] pill-shadow"
+                style={{ background: "linear-gradient(135deg, #5E5CE6, #7D7AFF)" }}
+              >
+                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white/25">
+                  <Sparkles size={15} strokeWidth={2.2} aria-hidden />
+                </span>
+                <span className="text-[13px] font-semibold tracking-[-0.01em]">Ask AI</span>
+              </button>
               {BLOCKS.map((b) => {
                 const Icon = b.icon;
                 return (
@@ -612,6 +992,9 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
           {/* Tip */}
           <p className="px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
             Blocks stack top-to-bottom. Recipients tap through scenes one by one.
+            <br />
+            <Undo2 size={10} className="mr-1 inline" aria-hidden />
+            Undo anything with ⌘Z — redo with ⇧⌘Z.
           </p>
         </div>
       </main>

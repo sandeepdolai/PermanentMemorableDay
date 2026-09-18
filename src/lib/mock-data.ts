@@ -274,3 +274,155 @@ export function shareSlug(id: string): string {
 }
 
 export const SHARE_URL_BASE = "memorableday.in/e/";
+
+/* ------------------------------------------------------------------ */
+/* Insights / analytics (PRD §analytics funnel — abstract UI data)      */
+/* ------------------------------------------------------------------ */
+
+export type InsightRange = "7d" | "30d" | "90d";
+
+export interface InsightSnapshot {
+  /** Funnel stage labels + counts (delivery → engagement → completion → action → outcome) */
+  funnel: Array<{ stage: string; value: number; note: string }>;
+  /** Headline KPIs with deltas */
+  kpis: Array<{ label: string; value: string; delta: string; up: boolean }>;
+  /** Opens per day for the trend chart */
+  trend: Array<{ d: string; v: number }>;
+  /** % of openers still present at each scene position */
+  sceneRetention: Array<{ scene: number; pct: number }>;
+  /** Best performing moments in the range */
+  top: Array<{ id: string; title: string; cover: number; views: number; completion: number; recipient: string }>;
+  /** Derived, cross-range note shown in the AI insight card */
+  aiNote: string;
+}
+
+export const INSIGHTS: Record<InsightRange, InsightSnapshot> = {
+  "7d": {
+    funnel: [
+      { stage: "Delivered", value: 148, note: "links sent" },
+      { stage: "Opened", value: 129, note: "87% open rate" },
+      { stage: "Completed", value: 111, note: "86% finish all scenes" },
+      { stage: "Acted", value: 52, note: "CTA taps & reward claims" },
+      { stage: "Shared", value: 26, note: "forwarded or re-sent" },
+    ],
+    kpis: [
+      { label: "Open rate", value: "87%", delta: "+6", up: true },
+      { label: "Completion", value: "86%", delta: "+3", up: true },
+      { label: "Avg time", value: "2:41", delta: "+12s", up: true },
+      { label: "Loves", value: "34", delta: "+8", up: true },
+    ],
+    trend: [
+      { d: "Mon", v: 14 }, { d: "Tue", v: 19 }, { d: "Wed", v: 24 }, { d: "Thu", v: 17 },
+      { d: "Fri", v: 22 }, { d: "Sat", v: 28 }, { d: "Sun", v: 26 },
+    ],
+    sceneRetention: [
+      { scene: 1, pct: 100 }, { scene: 2, pct: 94 }, { scene: 3, pct: 88 },
+      { scene: 4, pct: 81 }, { scene: 5, pct: 74 },
+    ],
+    top: [
+      { id: "m4", title: "Neon District", cover: 6, views: 67, completion: 91, recipient: "Alex" },
+      { id: "m1", title: "Golden Hour", cover: 1, views: 42, completion: 88, recipient: "Maya" },
+      { id: "m7", title: "Static Dreams", cover: 8, views: 29, completion: 76, recipient: "Kabir" },
+    ],
+    aiNote: "Moments sent mid-week get ~23% more opens. Scene 4 is your soft spot — try a reveal block there to hold attention.",
+  },
+  "30d": {
+    funnel: [
+      { stage: "Delivered", value: 612, note: "links sent" },
+      { stage: "Opened", value: 516, note: "84% open rate" },
+      { stage: "Completed", value: 421, note: "82% finish all scenes" },
+      { stage: "Acted", value: 198, note: "CTA taps & reward claims" },
+      { stage: "Shared", value: 91, note: "forwarded or re-sent" },
+    ],
+    kpis: [
+      { label: "Open rate", value: "84%", delta: "+4", up: true },
+      { label: "Completion", value: "82%", delta: "-2", up: false },
+      { label: "Avg time", value: "2:33", delta: "+9s", up: true },
+      { label: "Loves", value: "117", delta: "+31", up: true },
+    ],
+    trend: [
+      { d: "W1", v: 96 }, { d: "W2", v: 124 }, { d: "W3", v: 111 },
+      { d: "W4", v: 138 }, { d: "Now", v: 147 },
+    ],
+    sceneRetention: [
+      { scene: 1, pct: 100 }, { scene: 2, pct: 92 }, { scene: 3, pct: 85 },
+      { scene: 4, pct: 76 }, { scene: 5, pct: 68 },
+    ],
+    top: [
+      { id: "m4", title: "Neon District", cover: 6, views: 67, completion: 91, recipient: "Alex" },
+      { id: "m5", title: "First Light", cover: 7, views: 12, completion: 100, recipient: "Sara" },
+      { id: "m1", title: "Golden Hour", cover: 1, views: 42, completion: 88, recipient: "Maya" },
+    ],
+    aiNote: "Longer experiences (5+ scenes) complete 9% more often when a gift or reward appears in the middle — not the end.",
+  },
+  "90d": {
+    funnel: [
+      { stage: "Delivered", value: 1738, note: "links sent" },
+      { stage: "Opened", value: 1401, note: "81% open rate" },
+      { stage: "Completed", value: 1096, note: "78% finish all scenes" },
+      { stage: "Acted", value: 502, note: "CTA taps & reward claims" },
+      { stage: "Shared", value: 214, note: "forwarded or re-sent" },
+    ],
+    kpis: [
+      { label: "Open rate", value: "81%", delta: "+7", up: true },
+      { label: "Completion", value: "78%", delta: "+5", up: true },
+      { label: "Avg time", value: "2:47", delta: "+18s", up: true },
+      { label: "Loves", value: "322", delta: "+96", up: true },
+    ],
+    trend: [
+      { d: "Jun", v: 312 }, { d: "Jul", v: 389 }, { d: "Aug", v: 464 },
+      { d: "Sep", v: 528 }, { d: "Oct", v: 445 },
+    ],
+    sceneRetention: [
+      { scene: 1, pct: 100 }, { scene: 2, pct: 91 }, { scene: 3, pct: 83 },
+      { scene: 4, pct: 72 }, { scene: 5, pct: 63 },
+    ],
+    top: [
+      { id: "m1", title: "Golden Hour", cover: 1, views: 42, completion: 88, recipient: "Maya" },
+      { id: "m7", title: "Static Dreams", cover: 8, views: 29, completion: 76, recipient: "Kabir" },
+      { id: "m4", title: "Neon District", cover: 6, views: 67, completion: 91, recipient: "Alex" },
+    ],
+    aiNote: "Your completion rate climbs every month. Recipients who replay a moment are 3× more likely to create one back.",
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/* AI message composer (PRD AI system — tones + 3 options, abstract)    */
+/* ------------------------------------------------------------------ */
+
+export const AI_TONES: Array<{ id: string; label: string; icon: string }> = [
+  { id: "heartfelt", label: "Heartfelt", icon: "heart" },
+  { id: "playful", label: "Playful", icon: "smile" },
+  { id: "poetic", label: "Poetic", icon: "feather" },
+  { id: "minimal", label: "Minimal", icon: "minus" },
+  { id: "bold", label: "Bold", icon: "zap" },
+];
+
+/** Three deterministic message options per tone — abstract, no themed content */
+export const AI_MESSAGE_OPTIONS: Record<string, [string, string, string]> = {
+  heartfelt: [
+    "Some things are easier to show than to say — so I built this instead. Every scene is a small thank you, and every pause is meant for you.",
+    "I kept this short because the important part isn't the words. It's that I thought of you first when it was time to make something worth opening.",
+    "If a moment could wrap itself around you quietly, it would look like this. No noise, no rush — just a reminder that you matter, from the first scene to the last.",
+  ],
+  playful: [
+    "Warning: this experience contains moderate levels of joy, at least one surprise, and absolutely no boring parts. Scroll responsibly.",
+    "I made you a thing. It has scenes. It has buttons. One of them might even do something. Okay — go tap stuff.",
+    "Officially classified as 'a whole vibe.' Side effects may include smiling, replaying, and sending one back. You've been warned.",
+  ],
+  poetic: [
+    "Light leans in through every scene — the way attention leans toward what it loves. What follows is less a message, more a held breath.",
+    "Between one scene and the next there is a silence shaped like you. I filled it the only way I know: slowly, and on purpose.",
+    "This is what a small hour looks like when you press it flat and keep it. Fold it open whenever the day needs a softer edge.",
+  ],
+  minimal: [
+    "Three things: I made this, it's for you, and it's short on purpose. That's the whole message.",
+    "No long intro. No big finish. Just a few quiet scenes and one clear thought — you were worth making this for.",
+    "Less, but better. A handful of moments, arranged with care. The rest is up to the pauses.",
+  ],
+  bold: [
+    "Most messages get read. This one gets remembered. Big type, zero apologies — exactly the way this moment deserves to land.",
+    "I didn't make something subtle. I made something that walks into the room, turns the lights up, and says your name out loud.",
+    "Skip the small talk — this starts loud and stays honest. Every scene commits. So did I.",
+  ],
+};

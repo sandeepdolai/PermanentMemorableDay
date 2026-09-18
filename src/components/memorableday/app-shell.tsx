@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Bell, Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
-import { NOTIFICATIONS, PRICING_PLANS } from "@/lib/mock-data";
+import { NOTIFICATIONS, PRICING_PLANS, type InsightRange } from "@/lib/mock-data";
 import {
   MDContext,
+  type AiInsertFn,
   type BuilderOptions,
   type PlayerPayload,
   type SettingsTopic,
@@ -19,7 +20,7 @@ import { BottomNav } from "./bottom-nav";
 import { BottomSheet } from "./bottom-sheet";
 import { MomentPlayer } from "./moment-player";
 import { ExperienceBuilder } from "./builder";
-import { ExploreContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent } from "./sheet-contents";
+import { ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, AIComposerContent } from "./sheet-contents";
 import { HomeView } from "./views/home-view";
 import { CreateView } from "./views/create-view";
 import { ExploreView } from "./views/explore-view";
@@ -214,6 +215,8 @@ export function AppShell() {
   const [builder, setBuilder] = useState<BuilderOptions | null>(null);
   const [settingsTopic, setSettingsTopic] = useState<SettingsTopic | null>(null);
   const [exploreItem, setExploreItem] = useState<ExploreItem | null>(null);
+  const [insightsRange, setInsightsRange] = useState<InsightRange>("7d");
+  const aiInsertRef = useRef<AiInsertFn | null>(null);
   const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -275,6 +278,28 @@ export function AppShell() {
     setSheet("explore");
   }, []);
 
+  const openInsights = useCallback((range?: InsightRange) => {
+    if (range) setInsightsRange(range);
+    setSheet("insights");
+  }, []);
+
+  const openComposer = useCallback(() => setSheet("composer"), []);
+
+  /** Insert an AI-composed message: into the open builder, or open one seeded with it */
+  const insertAiMessage = useCallback(
+    (message: string) => {
+      setSheet(null);
+      if (builder && aiInsertRef.current) {
+        aiInsertRef.current(message);
+      } else {
+        window.setTimeout(() => {
+          setBuilder({ ai: true, cover: 9, title: "Untitled Experience", seedText: message });
+        }, 240);
+      }
+    },
+    [builder]
+  );
+
   const openShare = useCallback((m: SharePayload) => {
     setSharePayload(m);
     setSheet("share");
@@ -312,6 +337,10 @@ export function AppShell() {
           settingsTopic,
           openExplore,
           exploreItem,
+          openInsights,
+          openComposer,
+          aiInsertRef,
+          insertAiMessage,
         }}
       >
       <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05]">
@@ -466,6 +495,16 @@ export function AppShell() {
               onNotify={notify}
             />
           ) : null}
+        </BottomSheet>
+
+        {/* Insights / analytics sheet */}
+        <BottomSheet open={sheet === "insights"} onClose={() => setSheet(null)} title="Insights">
+          <InsightsContent initialRange={insightsRange} onNotify={notify} />
+        </BottomSheet>
+
+        {/* AI message composer sheet */}
+        <BottomSheet open={sheet === "composer"} onClose={() => setSheet(null)} title="AI Message Composer">
+          <AIComposerContent onInsert={insertAiMessage} onNotify={notify} />
         </BottomSheet>
 
         {/* Experience builder layer */}

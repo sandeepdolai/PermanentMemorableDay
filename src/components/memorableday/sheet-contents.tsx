@@ -1,22 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  ArrowDown,
+  ArrowUp,
   Bell,
   Bookmark,
   BookmarkCheck,
+  Check,
   CheckCheck,
   ChevronRight,
   Copy,
   CreditCard,
   Crown,
   Eye,
+  Feather,
   Heart,
   LifeBuoy,
   Mail,
   MessageCircle,
   MessageSquare,
+  Minus,
   MoreHorizontal,
   Play,
   RotateCcw,
@@ -29,19 +35,25 @@ import {
   FileText,
   ShieldCheck,
   LogOut,
+  Zap,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
+  AI_TONES,
+  AI_MESSAGE_OPTIONS,
+  INSIGHTS,
   NOTIFICATIONS,
   SHARE_URL_BASE,
   shareSlug,
   type AppNotification,
+  type InsightRange,
   type NotificationKind,
   type ExploreItem,
   USER,
 } from "@/lib/mock-data";
 import type { PlayerPayload, SettingsTopic } from "./md-context";
 import { CoverArt } from "./cover-art";
+import { SegmentedControl } from "./segmented-control";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -573,6 +585,472 @@ export function ExploreContent({
       <p className="mt-3 px-1 text-center text-[11.5px] font-medium text-[#AAAAAA]">
         Layouts copy scenes and blocks into your editor — content stays yours.
       </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Insights / analytics sheet (PRD §analytics funnel)                  */
+/* ------------------------------------------------------------------ */
+
+/** Animated horizontal funnel bar row */
+function FunnelRow({
+  stage,
+  value,
+  note,
+  pct,
+  delay,
+}: {
+  stage: string;
+  value: number;
+  note: string;
+  pct: number;
+  delay: number;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[13px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{stage}</span>
+        <span className="text-[12.5px] font-semibold tabular-nums text-[#1D1D1F]/70">
+          {value.toLocaleString()}
+          <span className="ml-1.5 text-[11px] font-medium text-[#AAAAAA]">{pct}%</span>
+        </span>
+      </div>
+      <div className="mt-1.5 h-[9px] w-full overflow-hidden rounded-full bg-[#1D1D1F]/[0.05]">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.max(pct, 4)}%` }}
+          transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
+          className="h-full rounded-full"
+          style={{
+            background:
+              stage === "Delivered"
+                ? "linear-gradient(90deg, #C7C7CC, #AEAEB2)"
+                : "linear-gradient(90deg, #007AFF, #40B4FF)",
+          }}
+        />
+      </div>
+      <p className="mt-1 text-[11px] font-medium text-[#AAAAAA]">{note}</p>
+    </div>
+  );
+}
+
+/** Smooth SVG area trend chart with animated line draw-in */
+function TrendChart({ data }: { data: Array<{ d: string; v: number }> }) {
+  const W = 320;
+  const H = 108;
+  const PAD = { l: 6, r: 14, t: 12, b: 20 };
+  const max = Math.max(...data.map((p) => p.v));
+  const min = Math.min(...data.map((p) => p.v));
+  const span = Math.max(max - min, 1);
+
+  const pts = data.map((p, i) => ({
+    x: PAD.l + (i / (data.length - 1)) * (W - PAD.l - PAD.r),
+    y: PAD.t + (1 - (p.v - min) / span) * (H - PAD.t - PAD.b),
+    ...p,
+  }));
+
+  // Catmull-Rom-ish smooth path through the points
+  const line = pts
+    .map((p, i, a) => {
+      if (i === 0) return `M ${p.x} ${p.y}`;
+      const px = a[i - 1].x;
+      const py = a[i - 1].y;
+      const cx = (px + p.x) / 2;
+      return `C ${cx} ${py}, ${cx} ${p.y}, ${p.x} ${p.y}`;
+    })
+    .join(" ");
+  const area = `${line} L ${pts[pts.length - 1].x} ${H - PAD.b} L ${pts[0].x} ${H - PAD.b} Z`;
+  const last = pts[pts.length - 1];
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-[108px] w-full" role="img" aria-label="Opens over time">
+      <defs>
+        <linearGradient id="md-trend-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#007AFF" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#007AFF" stopOpacity="0.01" />
+        </linearGradient>
+        <linearGradient id="md-trend-line" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#007AFF" />
+          <stop offset="100%" stopColor="#40B4FF" />
+        </linearGradient>
+      </defs>
+
+      {/* grid hairlines */}
+      {[0.25, 0.5, 0.75].map((f) => (
+        <line key={f} x1={PAD.l} x2={W - PAD.r} y1={PAD.t + f * (H - PAD.t - PAD.b)} y2={PAD.t + f * (H - PAD.t - PAD.b)} stroke="#1D1D1F" strokeOpacity="0.05" strokeDasharray="3 5" />
+      ))}
+
+      <motion.path
+        d={area}
+        fill="url(#md-trend-fill)"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8, delay: 0.5 }}
+      />
+      <motion.path
+        d={line}
+        fill="none"
+        stroke="url(#md-trend-line)"
+        strokeWidth={2.6}
+        strokeLinecap="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+      />
+      <motion.g
+        initial={{ opacity: 0, scale: 0 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.85, type: "spring", stiffness: 400, damping: 22 }}
+      >
+        <circle cx={last.x} cy={last.y} r={4.5} fill="#007AFF" stroke="white" strokeWidth={2} />
+      </motion.g>
+      {data.map((p, i) => (
+        <text
+          key={p.d}
+          x={pts[i].x}
+          y={H - 5}
+          textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"}
+          fontSize="9.5"
+          fontWeight="600"
+          fill="#AAAAAA"
+        >
+          {p.d}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+export function InsightsContent({
+  initialRange,
+  onNotify,
+}: {
+  initialRange: InsightRange;
+  onNotify: (message: string) => void;
+}) {
+  const [range, setRange] = useState<InsightRange>(initialRange);
+  const data = INSIGHTS[range];
+  const funnelMax = data.funnel[0].value;
+  const rangeLabel = range === "7d" ? "last 7 days" : range === "30d" ? "last 30 days" : "last 90 days";
+
+  return (
+    <div className="pb-2">
+      {/* Range switcher */}
+      <SegmentedControl
+        id="insights-range"
+        options={[
+          { value: "7d", label: "7D" },
+          { value: "30d", label: "30D" },
+          { value: "90d", label: "90D" },
+        ]}
+        value={range}
+        onChange={(v) => {
+          setRange(v);
+          onNotify(`Showing the ${v === "7d" ? "last 7 days" : v === "30d" ? "last 30 days" : "last 90 days"}`);
+        }}
+      />
+
+      {/* KPI grid */}
+      <div key={`kpi-${range}`} className="mt-3.5 grid grid-cols-2 gap-2.5">
+        {data.kpis.map((k, i) => (
+          <motion.div
+            key={k.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 * i, duration: 0.3 }}
+            className="card-shadow hairline rounded-[20px] bg-white px-3.5 py-3"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#AAAAAA]">{k.label}</p>
+              <span
+                className={cn(
+                  "flex items-center gap-0.5 text-[11px] font-bold tabular-nums",
+                  k.up ? "text-[#1E9E4A]" : "text-[#FF375F]"
+                )}
+              >
+                {k.up ? <ArrowUp size={10} strokeWidth={3} aria-hidden /> : <ArrowDown size={10} strokeWidth={3} aria-hidden />}
+                {k.delta}
+              </span>
+            </div>
+            <p className="mt-1 text-[22px] font-bold tabular-nums tracking-[-0.02em] text-[#1D1D1F]">{k.value}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Funnel */}
+      <div key={`funnel-${range}`} className="card-shadow hairline mt-3 rounded-[22px] bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Recipient journey</h3>
+          <span className="text-[11px] font-medium text-[#AAAAAA]">{rangeLabel}</span>
+        </div>
+        <div className="space-y-3">
+          {data.funnel.map((f, i) => (
+            <FunnelRow
+              key={f.stage}
+              stage={f.stage}
+              value={f.value}
+              note={f.note}
+              pct={Math.round((f.value / funnelMax) * 100)}
+              delay={0.08 * i}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Trend chart */}
+      <div key={`trend-${range}`} className="card-shadow hairline mt-3 rounded-[22px] bg-white p-4">
+        <div className="mb-1.5 flex items-center justify-between">
+          <h3 className="flex items-center gap-1.5 text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+            <TrendingUp size={14} className="text-[#007AFF]" aria-hidden /> Opens over time
+          </h3>
+          <span className="text-[11px] font-medium text-[#AAAAAA]">
+            {data.trend[data.trend.length - 1].v} latest
+          </span>
+        </div>
+        <TrendChart data={data.trend} />
+      </div>
+
+      {/* Scene retention */}
+      <div key={`ret-${range}`} className="card-shadow hairline mt-3 rounded-[22px] bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Scene retention</h3>
+          <span className="text-[11px] font-medium text-[#AAAAAA]">viewers remaining</span>
+        </div>
+        <div className="space-y-2">
+          {data.sceneRetention.map((s, i) => (
+            <div key={s.scene} className="flex items-center gap-2.5">
+              <span className="w-[52px] shrink-0 text-[11.5px] font-semibold text-[#1D1D1F]/70">
+                Scene {s.scene}
+              </span>
+              <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-[#1D1D1F]/[0.05]">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${s.pct}%` }}
+                  transition={{ duration: 0.6, delay: 0.06 * i, ease: [0.22, 1, 0.36, 1] }}
+                  className="h-full rounded-full"
+                  style={{ background: `linear-gradient(90deg, #007AFF ${s.pct}%, #40B4FF 100%)` }}
+                />
+              </div>
+              <span className="w-[34px] shrink-0 text-right text-[11.5px] font-bold tabular-nums text-[#1D1D1F]/70">
+                {s.pct}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Top moments */}
+      <div className="card-shadow hairline mt-3 overflow-hidden rounded-[22px] bg-white">
+        <div className="px-4 pb-2 pt-3.5">
+          <h3 className="text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Top moments</h3>
+        </div>
+        <div className="divide-y divide-[#1D1D1F]/[0.05]">
+          {data.top.map((m, i) => (
+            <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+              <span className="w-[18px] shrink-0 text-center text-[13px] font-bold tabular-nums text-[#AAAAAA]">
+                {i + 1}
+              </span>
+              <CoverArt variant={m.cover} className="h-[42px] w-[42px] shrink-0 rounded-[12px]" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">{m.title}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="h-[4px] w-[64px] overflow-hidden rounded-full bg-[#1D1D1F]/[0.07]">
+                    <div className="h-full rounded-full bg-[#30D158]" style={{ width: `${m.completion}%` }} />
+                  </div>
+                  <span className="text-[10.5px] font-medium text-[#AAAAAA]">{m.completion}% done</span>
+                </div>
+              </div>
+              <span className="flex shrink-0 items-center gap-1 text-[12px] font-semibold tabular-nums text-[#AAAAAA]">
+                <Eye size={12} aria-hidden /> {m.views}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* AI insight */}
+      <div className="mt-3 overflow-hidden rounded-[22px] bg-[#1D1D1F] p-4">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#64D2FF]/15 px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#64D2FF]">
+          <Sparkles size={10} aria-hidden /> AI insight
+        </span>
+        <p className="mt-2.5 text-[13.5px] font-medium leading-relaxed text-white/85">{data.aiNote}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* AI message composer sheet (PRD AI system — tone control, 3 options)  */
+/* ------------------------------------------------------------------ */
+
+const TONE_ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+  heart: Heart,
+  smile: MessageCircle,
+  feather: Feather,
+  minus: Minus,
+  zap: Zap,
+};
+
+export function AIComposerContent({
+  onInsert,
+  onNotify,
+}: {
+  onInsert: (message: string) => void;
+  onNotify: (message: string) => void;
+}) {
+  const [brief, setBrief] = useState("");
+  const [tone, setTone] = useState("heartfelt");
+  const [phase, setPhase] = useState<"compose" | "generating" | "done">("compose");
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  // Deterministic option set — shifts with the brief so it feels reactive
+  const options = useMemo(() => {
+    const base = AI_MESSAGE_OPTIONS[tone] ?? AI_MESSAGE_OPTIONS.heartfelt;
+    if (!brief.trim()) return base;
+    const shift = Math.min(brief.trim().length, 2);
+    return ([...base.slice(shift), ...base.slice(0, shift)] as [string, string, string]).slice(0, 3);
+  }, [tone, brief]);
+
+  const generate = () => {
+    setPhase("generating");
+    window.setTimeout(() => setPhase("done"), 1400);
+  };
+
+  const copy = async (msg: string, idx: number) => {
+    try {
+      await navigator.clipboard.writeText(msg);
+    } catch {
+      // Clipboard may be unavailable — still show feedback
+    }
+    setCopiedIdx(idx);
+    onNotify("Message copied to clipboard");
+    window.setTimeout(() => setCopiedIdx(null), 1600);
+  };
+
+  return (
+    <div className="pb-2">
+      {phase === "compose" ? (
+        <>
+          {/* Brief */}
+          <label htmlFor="md-brief" className="mb-1.5 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+            Describe the moment
+          </label>
+          <textarea
+            id="md-brief"
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+            rows={3}
+            maxLength={220}
+            placeholder="Who is it for, and what should it feel like?"
+            className="w-full resize-none rounded-[18px] border border-[#1D1D1F]/[0.09] bg-white px-4 py-3 text-[14.5px] leading-relaxed text-[#1D1D1F] outline-none placeholder:text-[#AAAAAA]/70 focus:border-[#007AFF] focus:ring-2 focus:ring-[#007AFF]/25"
+          />
+          <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">{brief.length}/220</p>
+
+          {/* Tone */}
+          <p className="mb-2 mt-1 px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Tone</p>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Message tone">
+            {AI_TONES.map((t) => {
+              const Icon = TONE_ICONS[t.icon] ?? Sparkles;
+              const active = tone === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setTone(t.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-[0.96]",
+                    active
+                      ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                      : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+                  )}
+                >
+                  <Icon size={13} strokeWidth={2.3} aria-hidden /> {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={generate}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+          >
+            <Sparkles size={16} aria-hidden /> Write 3 messages
+          </button>
+          <p className="mt-2.5 text-center text-[11.5px] font-medium text-[#AAAAAA]">
+            Uses 3 of your {USER.credits - 64} AI credits
+          </p>
+        </>
+      ) : phase === "generating" ? (
+        <div aria-live="polite" aria-label="Writing messages">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="card-shadow hairline mb-2.5 rounded-[18px] bg-white p-4">
+              <div className="flex items-center gap-2">
+                <span className="skeleton h-3.5 w-3.5 rounded-full" />
+                <span className="skeleton h-3 w-1/3 rounded-full" />
+              </div>
+              <div className="mt-3 space-y-2">
+                <span className="skeleton block h-3 w-full rounded-full" style={{ animationDelay: `${i * 120}ms` }} />
+                <span className="skeleton block h-3 w-5/6 rounded-full" style={{ animationDelay: `${i * 120 + 90}ms` }} />
+                <span className="skeleton block h-3 w-2/3 rounded-full" style={{ animationDelay: `${i * 120 + 180}ms` }} />
+              </div>
+            </div>
+          ))}
+          <p className="mt-1 flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-[#007AFF]">
+            <Sparkles size={12} className="animate-pulse" aria-hidden /> Writing in a {AI_TONES.find((t) => t.id === tone)?.label.toLowerCase()} tone…
+          </p>
+        </div>
+      ) : (
+        <>
+          <div aria-live="polite">
+            {options.map((msg, i) => (
+              <motion.div
+                key={`${tone}-${i}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.07 * i, duration: 0.3 }}
+                className="card-shadow hairline mb-2.5 rounded-[18px] bg-white p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+                    <Sparkles size={10} className="text-[#5E5CE6]" aria-hidden /> Option {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copy(msg, i)}
+                    aria-label={`Copy option ${i + 1}`}
+                    className={cn(
+                      "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all active:scale-95",
+                      copiedIdx === i ? "bg-[#30D158]/[0.12] text-[#1E9E4A]" : "bg-[#1D1D1F]/[0.05] text-[#1D1D1F]/70"
+                    )}
+                  >
+                    {copiedIdx === i ? <Check size={11} strokeWidth={3} aria-hidden /> : <Copy size={11} aria-hidden />}
+                    {copiedIdx === i ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <p className="mt-2 text-[14px] leading-relaxed tracking-[-0.01em] text-[#1D1D1F]">{msg}</p>
+                <button
+                  type="button"
+                  onClick={() => onInsert(msg)}
+                  className="mt-3 w-full rounded-full bg-[#007AFF] py-2.5 text-[13.5px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+                >
+                  Use in Scene 1
+                </button>
+              </motion.div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPhase("compose")}
+            className="w-full rounded-full bg-[#1D1D1F]/[0.05] py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/75 transition-transform active:scale-[0.98]"
+          >
+            Try another brief
+          </button>
+        </>
+      )}
     </div>
   );
 }

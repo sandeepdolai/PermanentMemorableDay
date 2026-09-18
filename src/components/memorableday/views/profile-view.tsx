@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bell,
+  ChartPie,
   ChevronRight,
   CreditCard,
   Crown,
@@ -99,10 +100,16 @@ function CreditRing({ used, total }: { used: number; total: number }) {
 /* ------------------------------------------------------------------ */
 
 export function ProfileView() {
-  const { notify, openSheet, openSettings } = useMD();
+  const { notify, openSheet, openSettings, openInsights } = useMD();
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
 
   const sections: Array<{ title: string; rows: Row[] }> = [
+    {
+      title: "Insights",
+      rows: [
+        { kind: "link", icon: ChartPie, tint: "#007AFF", label: "Insights & analytics", action: () => openInsights("7d") },
+      ],
+    },
     {
       title: "Notifications",
       rows: [
