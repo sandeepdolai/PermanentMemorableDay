@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, ChevronRight, Search, Sparkles, X } from "lucide-react";
 import { SEARCH_SUGGESTIONS } from "@/lib/mock-data";
@@ -20,6 +20,25 @@ export function SearchBar() {
     setOpen(false);
     inputRef.current?.blur();
   };
+
+  // Desktop power-user shortcut: "/" focuses the search pill from anywhere.
+  // Skipped while typing in a field or when a dialog/sheet/builder is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      const typing =
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el instanceof HTMLElement && el.isContentEditable);
+      if (typing || document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+      setOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="relative z-10">

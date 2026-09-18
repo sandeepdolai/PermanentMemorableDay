@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "**Image 1 (Home Page):**\nYes, the UI is properly dark. The sidebar is a dark charcoal/navy, the main content area is black, and all cards (hero, stats, \"Continue Creating,\" and \"Recent Moments\") use dark backgrounds with light text. There are no light-mode leftovers or white elements that should be dark. The contrast between the white text and dark backgrounds is excellent.\n\n**Image 2 (Notifications Sheet):**\nYes, the notifications sheet is a centered floating dark card with rounded corners. It sits on top of a blurred/dimmed version of the home page. The sheet's background is dark gray/black with light-colored text, maintaining the dark mode theme perfectly. There are no light-mode leftovers or contrast problems; all text is clearly readable against the dark background.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1789721229,
+  "id": "202609181647013d335156b88541e6",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202609181647013d335156b88541e6",
+  "usage": {
+    "completion_tokens": 164,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 5544,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 5708
+  }
+}

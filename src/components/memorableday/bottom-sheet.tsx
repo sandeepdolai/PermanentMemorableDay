@@ -12,7 +12,14 @@ interface BottomSheetProps {
   children: React.ReactNode;
 }
 
-/** iOS-style bottom sheet with grabber + header drag-to-dismiss + scrollable content */
+/**
+ * iOS-style adaptive sheet —
+ * · phone: classic bottom sheet, edge-to-edge, rounded top corners
+ * · tablet/desktop (≥ md): iPad-style form sheet — centered, 440px wide,
+ *   fully rounded, floating 32px above the bottom edge. Positioned with
+ *   left-1/2 + negative margin (NOT translate utilities) so framer-motion's
+ *   inline y-transform never fights the centering.
+ */
 export function BottomSheet({ open, onClose, title, ariaLabel, children }: BottomSheetProps) {
   const controls = useDragControls();
 
@@ -57,7 +64,7 @@ export function BottomSheet({ open, onClose, title, ariaLabel, children }: Botto
             onDragEnd={(_, info) => {
               if (info.offset.y > 110 || info.velocity.y > 550) onClose();
             }}
-            className="absolute inset-x-0 bottom-0 z-[81] flex max-h-[calc(100dvh-72px)] flex-col rounded-t-[32px] border-t border-white/70 bg-white/95 pb-[max(20px,env(safe-area-inset-bottom))] shadow-[0_-20px_60px_-12px_rgba(29,29,31,0.3)]"
+            className="absolute inset-x-0 bottom-0 z-[81] flex max-h-[calc(100dvh-72px)] flex-col rounded-t-[32px] border-t border-white/70 bg-white/95 pb-[max(20px,env(safe-area-inset-bottom))] shadow-[0_-20px_60px_-12px_rgba(29,29,31,0.3)] md:bottom-8 md:left-1/2 md:right-auto md:ml-[-220px] md:w-[440px] md:max-w-[calc(100%-48px)] md:max-h-[calc(100dvh-120px)] md:rounded-[32px] md:border md:border-[#1D1D1F]/[0.08] md:shadow-[0_48px_110px_-24px_rgba(29,29,31,0.45)]"
             style={{ WebkitBackdropFilter: "blur(30px) saturate(1.8)", backdropFilter: "blur(30px) saturate(1.8)" }}
           >
             {/* Grabber + title — the drag-to-dismiss handle zone */}

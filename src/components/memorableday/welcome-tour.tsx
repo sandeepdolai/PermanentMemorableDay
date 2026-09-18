@@ -32,7 +32,8 @@ const SLIDES = [
 ] as const;
 
 /**
- * First-run welcome tour — 3 full-bleed slides (iOS onboarding style).
+ * First-run welcome tour — 3 slides, iOS onboarding style.
+ * Phone: full-bleed. Tablet/desktop: a centered floating card over a scrim.
  * Marks itself seen in localStorage when dismissed.
  */
 export function WelcomeTour({
@@ -66,11 +67,13 @@ export function WelcomeTour({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
-          className="absolute inset-0 z-[95] flex flex-col bg-[#F5F5F7]"
+          className="absolute inset-0 z-[95] flex flex-col bg-[#F5F5F7] md:items-center md:justify-center md:bg-[#1D1D1F]/[0.4] md:p-6 md:backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Welcome to MemorableDay"
         >
+          {/* Tour card — full-bleed column on phone, floating card ≥ md */}
+          <div className="flex min-h-0 w-full flex-1 flex-col md:h-[min(640px,calc(100dvh-48px))] md:max-w-[500px] md:flex-none md:overflow-hidden md:rounded-[44px] md:shadow-[0_60px_140px_-30px_rgba(29,29,31,0.55)]">
           {/* Visual half */}
           <div className="relative min-h-0 flex-1 overflow-hidden">
             <AnimatePresence mode="wait" initial={false}>
@@ -103,7 +106,7 @@ export function WelcomeTour({
           </div>
 
           {/* Text half */}
-          <div className="relative rounded-t-[36px] bg-[#F5F5F7] px-6 pb-[max(24px,env(safe-area-inset-bottom))] pt-7">
+          <div className="relative rounded-t-[36px] bg-[#F5F5F7] px-6 pb-[max(24px,env(safe-area-inset-bottom))] pt-7 md:pb-8">
             <span
               aria-hidden
               className="absolute inset-x-0 top-0 mx-auto mt-2.5 h-[5px] w-10 rounded-full bg-[#1D1D1F]/[0.14]"
@@ -175,6 +178,7 @@ export function WelcomeTour({
                 </button>
               </div>
             </div>
+          </div>
           </div>
         </motion.div>
       ) : null}

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "**QA Checklist: Dark Mode Profile Page**\n\n1.  **Dark Palette Coherence:** **PASS**\n    *   The background is a deep, near-black color (`#0f1115` approx), and the cards are elevated with a lighter dark gray (`#1c1e24` approx). Text is high-contrast white/light gray. The overall aesthetic is consistent and follows standard dark mode UI patterns.\n\n2.  **Light-mode Leftovers:** **PASS**\n    *   There are no glaring white blocks or \"invisible\" text. All elements (headers, labels, stats) are clearly visible against the dark background. The blue accents (avatar, buttons) provide good contrast without looking like light-mode artifacts.\n\n3.  **'Appearance' Section Visibility:** **FAIL / PARTIAL**\n    *   While the header \"APPEARANCE\" is barely visible at the very bottom of the screen, the actual **Light/Dark/Auto selection tiles are completely cut off** by the bottom navigation bar and the edge of the viewport. They are not legible or fully visible in this screenshot.\n\n4.  **Layout Glitches/Overlaps:** **FAIL**\n    *   **Overlap Issue:** The floating bottom navigation bar (\"Home\", \"Create\", etc.) is overlapping the content of the \"AI Credits\" card (specifically the \"Get more\" button area).\n    *   **Clipping:** As noted above, the \"Appearance\" section is severely clipped at the bottom.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1789719021,
+  "id": "202609181610133581577a397c40d2",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202609181610133581577a397c40d2",
+  "usage": {
+    "completion_tokens": 303,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 991,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1294
+  }
+}

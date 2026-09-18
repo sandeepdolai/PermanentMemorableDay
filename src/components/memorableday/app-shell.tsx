@@ -14,9 +14,12 @@ import {
   type SharePayload,
   type Sheet,
   type Tab,
+  type ThemeMode,
+  type UserDraft,
 } from "./md-context";
 import type { ExploreItem } from "@/lib/mock-data";
 import { SearchBar } from "./search-bar";
+import { SideNav } from "./side-nav";
 import { BottomNav } from "./bottom-nav";
 import { BottomSheet } from "./bottom-sheet";
 import { MomentPlayer } from "./moment-player";
@@ -47,7 +50,7 @@ function GlassToast({ message }: { message: string }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -14, scale: 0.96 }}
         transition={{ type: "spring", stiffness: 420, damping: 30 }}
-        className="relative flex max-w-full items-center gap-2 overflow-hidden rounded-full bg-[#1D1D1F]/88 px-4 py-2.5 shadow-[0_16px_40px_-10px_rgba(29,29,31,0.5)]"
+        className="relative flex max-w-full items-center gap-2 overflow-hidden rounded-full bg-[#1D1D1F]/88 px-4 py-2.5 shadow-[0_16px_40px_-10px_rgba(29,29,31,0.5)] md:max-w-[520px]"
         style={{ WebkitBackdropFilter: "blur(20px)", backdropFilter: "blur(20px)" }}
       >
         <Info size={14} className="shrink-0 text-[#64D2FF]" aria-hidden />
@@ -229,6 +232,8 @@ export function AppShell() {
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [tourOpen, setTourOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [theme, setThemeState] = useState<ThemeMode>("system");
+  const [drafts, setDrafts] = useState<UserDraft[]>([]);
   const aiInsertRef = useRef<AiInsertFn | null>(null);
   const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -241,11 +246,54 @@ export function AppShell() {
         if (!window.localStorage.getItem("md-onboarded")) setTourOpen(true);
         const saved = window.localStorage.getItem("md-saved");
         if (saved) setSavedIds(JSON.parse(saved) as string[]);
+        const storedTheme = window.localStorage.getItem("md-theme");
+        if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
+          setThemeState(storedTheme);
+        }
+        const storedDrafts = window.localStorage.getItem("md-drafts");
+        if (storedDrafts) setDrafts(JSON.parse(storedDrafts) as UserDraft[]);
       } catch {
         // storage unavailable — skip the tour
       }
     });
     return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Apply the resolved theme to <html> and follow OS changes while in "system".
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const resolved = theme === "system" ? (mql.matches ? "dark" : "light") : theme;
+      document.documentElement.classList.toggle("dark", resolved === "dark");
+    };
+    apply();
+    if (theme === "system") {
+      mql.addEventListener("change", apply);
+      return () => mql.removeEventListener("change", apply);
+    }
+  }, [theme]);
+
+  /** Sets the appearance mode (persisted in localStorage) */
+  const setTheme = useCallback((mode: ThemeMode) => {
+    setThemeState(mode);
+    try {
+      window.localStorage.setItem("md-theme", mode);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  /** Creates or updates a draft (deduped by id, newest first, persisted) */
+  const saveDraft = useCallback((draft: UserDraft) => {
+    setDrafts((prev) => {
+      const next = [draft, ...prev.filter((d) => d.id !== draft.id)].slice(0, 12);
+      try {
+        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
   }, []);
 
   const closeTour = useCallback(() => {
@@ -404,36 +452,61 @@ export function AppShell() {
           closeTour,
           savedIds,
           toggleSaved,
+          theme,
+          setTheme,
+          drafts,
+          saveDraft,
         }}
       >
-      <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05]">
-        {/* Top chrome: signature search pill + bell (Home/Explore) or compact title + bell on scroll */}
+      {/*
+        Responsive app frame —
+        · below `md`: phone column (max 480px, centered, hairline edges)
+        · from `md`: iPad-style layout — glass sidebar rail + content area,
+          capped at 1560px and framed with hairlines from `lg`
+        All overlays (chrome, nav, sheets, builder, player, toast) are scoped
+        to the content area, so the rail stays live beside them — like iPadOS.
+      */}
+      <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05] md:max-w-none md:flex-row md:border-x-0 md:bg-transparent lg:max-w-[1560px] lg:border-x lg:border-[#1D1D1F]/[0.05]">
+        <SideNav
+          unreadCount={unreadCount}
+          onNotifications={() => openSheet("notifications")}
+          onAccount={() => openSettings("account")}
+          onNewMoment={() => openSheet("create")}
+        />
+
+        <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        {/* Top chrome: signature search pill + bell (Home/Explore) or compact title + bell on scroll.
+            From `md` the pill centers with a sensible max width and the bell
+            moves into the sidebar; the compact title yields to the always-
+            visible Large Titles in the content. */}
         <div
           className={cn(
-            "absolute inset-x-0 top-0 z-50 px-5 pb-5 pt-4 transition-colors duration-200",
+            "absolute inset-x-0 top-0 z-50 px-5 pb-5 pt-4 transition-colors duration-200 md:px-8",
             scrolled && !isSearchTab
               ? "border-b border-[#1D1D1F]/[0.06] glass-panel"
-              : "bg-gradient-to-b from-[#F5F5F7] via-[#F5F5F7]/80 to-transparent"
+              : "bg-gradient-to-b from-[#F5F5F7] via-[#F5F5F7]/80 to-transparent dark:from-[#0A0A0C] dark:via-[#0A0A0C]/80"
           )}
         >
           {isSearchTab ? (
-            <div className="flex items-center gap-2.5">
-              <div className="min-w-0 flex-1">
+            <div className="relative flex items-center gap-2.5">
+              <div className="min-w-0 flex-1 md:mx-auto md:max-w-[560px]">
                 <SearchBar />
               </div>
-              <BellButton count={unreadCount} onClick={() => openSheet("notifications")} />
+              <div className="shrink-0 md:hidden">
+                <BellButton count={unreadCount} onClick={() => openSheet("notifications")} />
+              </div>
             </div>
           ) : (
             <div className="relative flex h-[46px] items-center justify-center">
               <span
                 className={cn(
-                  "text-[16px] font-semibold tracking-[-0.02em] text-[#1D1D1F] transition-opacity duration-200",
+                  "text-[16px] font-semibold tracking-[-0.02em] text-[#1D1D1F] transition-opacity duration-200 md:opacity-0",
                   scrolled ? "opacity-100" : "opacity-0"
                 )}
               >
                 {TAB_TITLES[tab]}
               </span>
-              <div className="absolute right-0">
+              <div className="absolute right-0 md:hidden">
                 <BellButton count={unreadCount} onClick={() => openSheet("notifications")} />
               </div>
             </div>
@@ -463,7 +536,7 @@ export function AppShell() {
           </AnimatePresence>
         </main>
 
-        {/* Floating pill navigation */}
+        {/* Floating pill navigation — phone only (sidebar takes over ≥ md) */}
         <BottomNav />
 
         {/* Toast — topmost layer, above sheets and the player */}
@@ -609,6 +682,7 @@ export function AppShell() {
             window.setTimeout(() => openAuth("signin"), 300);
           }}
         />
+        </div>
       </div>
       </MDContext.Provider>
     </MotionConfig>

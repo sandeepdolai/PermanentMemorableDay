@@ -5,6 +5,7 @@ import type { RefObject } from "react";
 import type { ExploreItem, InsightRange } from "@/lib/mock-data";
 
 export type Tab = "home" | "create" | "explore" | "gallery" | "profile";
+export type ThemeMode = "light" | "dark" | "system";
 export type Sheet =
   | "create"
   | "pricing"
@@ -35,12 +36,25 @@ export interface SharePayload {
   title: string;
 }
 
+/** A moment draft saved by the user from the builder (persisted in localStorage) */
+export interface UserDraft {
+  id: string;
+  title: string;
+  /** Cover-art palette index (0–9) */
+  cover: number;
+  scenes: number;
+  blocks: number;
+  editedAt: string;
+}
+
 /** Options when opening the Experience Builder */
 export interface BuilderOptions {
   /** Draft title (defaults to "Untitled Experience") */
   title?: string;
   /** Cover variant for scene art */
   cover?: number;
+  /** Draft id — lets "Save Draft" update an existing draft instead of duplicating */
+  draftId?: string;
   /** Pre-seeded scene count */
   scenes?: number;
   /** AI-assisted start (pre-sketches scenes, shows the AI badge) */
@@ -106,6 +120,14 @@ export interface MDContextValue {
   savedIds: string[];
   /** Toggles a template in the saved collection (persisted in localStorage) */
   toggleSaved: (id: string) => void;
+  /** Selected appearance mode (persisted in localStorage, "system" follows the OS) */
+  theme: ThemeMode;
+  /** Sets the appearance mode */
+  setTheme: (mode: ThemeMode) => void;
+  /** Drafts the user saved from the builder (persisted in localStorage) */
+  drafts: UserDraft[];
+  /** Creates or updates a draft (deduped by id, newest first) */
+  saveDraft: (draft: UserDraft) => void;
 }
 
 export const MDContext = createContext<MDContextValue | null>(null);

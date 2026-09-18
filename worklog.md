@@ -366,3 +366,43 @@ Stage Summary:
 - Known tooling quirks (not app bugs): document.querySelector('[aria-modal=true]') matches the BUILDER before the player — target the player via [aria-label^="Experience:"]; player advance must click the scenes container or the Continue button (root-div clicks don't reach the child handler); fresh browser sessions re-trigger the first-run tour (dismiss before QA).
 - Next-phase candidates: Prisma models + real CRUD (UI feature-complete across all surfaces), scene-level cover art picker in builder, insights export/share card, dark mode pass, drag-to-dismiss sheets with drag handles, e2e harness.
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+
+---
+Task ID: 9
+Agent: Z.ai Code (main orchestrator — user-requested responsive round)
+Task: User approved the UI ("I like the UI and Is Beautiful") and requested: make the website responsive for Desktop / Laptop / Tablet, then Review & Iteration.
+
+Work Log:
+- Status assessment: dev server healthy, lint clean, worklog reviewed (rounds 0-8 complete; app was a centered 480px phone column on all screens ≥ sm). No bugs found in the existing build.
+- RESPONSIVE ARCHITECTURE (Apple-style adaptive layout):
+  - app-shell.tsx restructured: root is still the 480px phone column below md; from md it becomes a flex-row app frame — NEW SideNav rail (248px, 264px at xl) + a content-area wrapper that scopes ALL overlays (chrome, nav, sheets, builder, player, toast, tour) so the rail stays live beside them, exactly like iPadOS. From lg the frame is capped at 1560px and hairline-framed; root turns bg-transparent ≥ md so the ambient blobs bleed through the glass sidebar (content area carries its own bg-background).
+  - NEW side-nav.tsx: liquid-glass rail (glass-panel + bg-white/70) — LogoMark brand, "New moment" primary pill, MENU nav (5 items, macOS-tinted active state with layoutId sliding highlight), bottom notifications card (unread badge, opens sheet) + account card (opens Account settings). All base utilities → dark bridge covers it with only one new rule (.dark .bg-white/70).
+  - bottom-nav.tsx: md:hidden (phone-only). Chrome: search pill centers with max-w-560 ≥ md; bell moves into the sidebar (md:hidden in chrome); compact tab title md:opacity-0 (Large Titles in content own the hierarchy). Toast capped md:max-w-520.
+- ADAPTIVE SHEET (bottom-sheet.tsx): ≥ md the sheet becomes an iPad-style form sheet — centered (left-1/2 + ml-[-220px], deliberately NOT translate utilities so framer-motion's inline y-transform never fights centering), w-440, fully rounded, floating 32px above the bottom, stronger shadow. Phone bottom-sheet behavior unchanged (verified: left=0, width=390, rounded top only).
+- VIEW GRIDS (all views get mx-auto content containers; pb-36 → md:pb-16 since no floating nav):
+  - Home (max-w-1040): hero + stats side-by-side from lg (1.55fr/1fr; stats stack vertically with value+label rows); Continue Creating scrolls on phone → 3-col grid at lg; Recent Moments divided list → 2-col card grid at lg (per-item card-shadow/hairline); Loved promo goes horizontal at lg.
+  - Explore & Gallery (max-w-1120): cards 2-col → 3-col at lg → 4-col at xl (initially md:3-col was too snug at 520px content → refined to lg:3-col after tablet QA); skeleton grids match; Explore segmented control capped md:max-w-520.
+  - Create (max-w-900): New Experience + AI Creator side-by-side at lg (DOM order preserved via lg:order-1/2/3 + col-span-2); Scene Blocks 3 → 4 (sm) → 5 (lg) columns; cards stretch with mt-auto CTAs.
+  - Profile (max-w-880): credits + appearance side-by-side at lg; five settings groups in a 2-col grid at lg; identity/upgrade/sign-out stay full-width.
+- BUILDER: workspace + footer constrained to a centered 720px column (DOM-verified 720px at 1440); block palette wraps into rows at lg (11 chips → 2 rows, verified) instead of scrolling; everything else untouched (undo/redo, reorder, local sheets all inherit the adaptive BottomSheet).
+- PLAYER: desktop text scaling — intro 40→56px, message 27→36px, quiz 26→36px + max-w 300→480, gift 22→30 / 28→38px, CTA stack max-w 380 (white-on-dark, no bridge needed).
+- WELCOME TOUR: full-bleed on phone; ≥ md a centered floating 500px card (rounded-[44px], deep shadow) over an ink scrim, height min(640, 100dvh-48) — DOM-verified fits at 768×1024 (card 192→832 in 1024 viewport; VLM "cut-off" claim disproven by bounding boxes — known VLM quirk).
+- DARK MODE EXTENSIONS (globals.css): bridge rules for responsive-prefixed utilities (.dark .md:border-[#1D1D1F]/[0.08] @48rem; .lg:border-[#1D1D1F]/[0.05], .lg:bg-white, .lg:card-shadow, .lg:hairline @64rem; .bg-white/70 for the rail) + desktop cursor:pointer for buttons/role=button/role=tab on pointer-fine devices.
+- ITERATION EXTRAS: "/" keyboard shortcut focuses the search pill from anywhere (guards: not while typing, not when a dialog/builder/player is open; DOM-verified focus + suggestions open).
+- VERIFICATION (agent-browser at 390×844, 768×1024, 834×1112, 1024×768, 1440×900, 1920×1080 + VLM):
+  - Phone regression: bottom nav visible + sidebar hidden; pill nav active states; explore 2-col @167px; sheet edge-to-edge (390w, rounded top); like toggle works. ZERO layout regressions.
+  - Tablet portrait 768: sidebar + content 520px; home hero full-width; explore 2-col @250px; tour card centered; notifications sheet centered floating card (VLM PASS, DOM-confirmed fit).
+  - iPad Air 834: explore 2-col @253px.
+  - Laptop 1024: sidebar + 3-col explore @218px; hero+stats 2-col composition active (stats 1-col stack @263px); builder palette wraps 2 rows; New moment sidebar button → create sheet → builder flow works.
+  - Desktop 1440/1920: 4-col explore @265px (grid capped 1120px); stats vertical @398px; builder workspace + footer both 720px; search dropdown centered in content area (852px center = content area center accounting for 264px rail); dark mode fully flips (VLM PASS on home + sheet — "no light-mode leftovers").
+  - Sheet flow, builder open (via sheet Start Creating), player preview (large centered text), Escape chains — all pass. ZERO page errors; console clean (only HMR logs; the `errors` command's 3 empty ✗ marks were investigated via in-page error/rejection hooks across reload → captured NOTHING, and network has zero failures → tooling artifact, not app errors). Lint exit 0.
+
+Stage Summary:
+- The app is now genuinely responsive across phone → tablet → laptop → desktop with an authentic Apple adaptive pattern (phone column → iPadOS rail + content → framed desktop app), and every existing surface (5 tabs, builder, player, all 10+ sheets, tour, toast) adapts correctly with zero phone regressions.
+- Still UI-only with mock data per the user's standing instruction; localStorage keys unchanged (md-onboarded, md-saved, md-drafts, md-theme).
+- Files: NEW side-nav.tsx; MODIFIED app-shell (frame + chrome + toast), bottom-nav (md:hidden), bottom-sheet (iPad form sheet), search-bar (/ shortcut), welcome-tour (card), moment-player (text scale), builder (720px column + palette wrap + footer), all 5 views (containers + grids), globals.css (responsive dark-bridge + cursor affordance).
+- Layer stack unchanged: content z-10 < chrome z-50 < builder z-60 < player z-70 < sheets z-80/81 < toast z-90 < tour z-95. Sidebar z-50 sits OUTSIDE the overlay container (sibling), so overlays never cover it.
+- Known tooling quirks (not app bugs): agent-browser `errors` prints empty ✗ marks (artifact); VLM occasionally reports phantom cut-offs (verify with bounding boxes); SearchBar's suggestion backdrop can swallow text= clicks (dismiss first or use eval); `location.reload()` inside eval loses installed hooks.
+- Responsive numbers reference: sidebar 248px (md-lg) / 264px (xl+); frame max-w 1560 (lg+); content containers: home 1040, explore/gallery 1120, create 900, profile 880, builder 720; sheet 440px centered (md+); grids: explore/gallery 2→3(lg)→4(xl), scene blocks 3→4(sm)→5(lg), recent moments 2(lg), settings 2(lg).
+- Next-phase candidates: Prisma models + real CRUD (UI feature-complete at every breakpoint), recipient route /e/[slug] (blocked — single-route constraint), desktop keyboard shortcuts beyond "/" (e.g. g+h navigation, ⌘K palette), sidebar collapse/expand on md, print/export styles.
+- Reminder: user should rotate the GitHub token shared earlier in chat.

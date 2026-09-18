@@ -17,6 +17,20 @@ const PALETTES: Array<[string, string, string]> = [
   ["#FFD60A", "#FF9F0A", "#FF6482"], // sunset
 ];
 
+/** Display names for each palette (same order as PALETTES) */
+export const COVER_NAMES = [
+  "System Sky",
+  "Rose Peach",
+  "Mint Tide",
+  "Steel Blue",
+  "Amber Glow",
+  "Midnight Chrome",
+  "Neon Rosé",
+  "Glacier",
+  "Ultraviolet",
+  "Sunset Fade",
+] as const;
+
 interface CoverArtProps {
   variant: number;
   className?: string;

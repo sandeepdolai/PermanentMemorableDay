@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { SOUNDTRACKS, formatDuration, type Soundtrack } from "@/lib/mock-data";
-import { CoverArt } from "./cover-art";
+import { CoverArt, COVER_NAMES } from "./cover-art";
 import { BottomSheet } from "./bottom-sheet";
 import { useMD, type BuilderOptions } from "./md-context";
 import { cn } from "@/lib/utils";
@@ -112,6 +112,7 @@ interface Snapshot {
   title: string;
   scenes: Scene[];
   trackId: string | null;
+  cover: number;
 }
 
 /* Block editor option catalogues (abstract, no themed content) */
@@ -1046,6 +1047,63 @@ function SoundtrackContent({
 }
 
 /* ------------------------------------------------------------------ */
+/* Cover art picker (palette grid, sheet content)                       */
+/* ------------------------------------------------------------------ */
+
+function CoverArtContent({
+  selected,
+  onSelect,
+}: {
+  selected: number;
+  onSelect: (variant: number) => void;
+}) {
+  return (
+    <div className="pb-2">
+      <div className="grid grid-cols-2 gap-3">
+        {COVER_NAMES.map((name, v) => {
+          const selectedTile = selected === v;
+          return (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={selectedTile}
+              onClick={() => onSelect(v)}
+              className={cn(
+                "group relative overflow-hidden rounded-[18px] border-2 bg-white p-1.5 text-left transition-transform active:scale-[0.97]",
+                selectedTile ? "border-[#007AFF]" : "border-transparent"
+              )}
+            >
+              <span className="relative block">
+                <CoverArt variant={v} className="aspect-[4/3] w-full rounded-[13px]" />
+                <AnimatePresence>
+                  {selectedTile ? (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                      className="absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-[#007AFF] text-white shadow-[0_4px_12px_-2px_rgba(0,122,255,0.6)] ring-2 ring-white"
+                    >
+                      <Check size={14} strokeWidth={3.2} aria-hidden />
+                    </motion.span>
+                  ) : null}
+                </AnimatePresence>
+              </span>
+              <span className="block truncate px-1.5 pb-1 pt-2 text-[12.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+                {name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-3 px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+        The palette colors every scene. Changes apply instantly — undo with ⌘Z.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Schedule send (date + time picker, sheet content)                  */
 /* ------------------------------------------------------------------ */
 
@@ -1227,7 +1285,7 @@ function SceneRow({
 /* ------------------------------------------------------------------ */
 
 export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onClose: () => void }) {
-  const { notify, openMoment, openShare, sheet, player, aiInsertRef, openComposer } = useMD();
+  const { notify, openMoment, openShare, sheet, player, aiInsertRef, openComposer, saveDraft } = useMD();
   const [title, setTitle] = useState(opts.title ?? "Untitled Experience");
   const [editing, setEditing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>(() => seedScenes(opts));
@@ -1240,24 +1298,25 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const [editBlockId, setEditBlockId] = useState<string | null>(null);
   const [musicOpen, setMusicOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
   const idRef = useRef(100);
   const blocksEndRef = useRef<HTMLDivElement>(null);
   const blockDragStarted = useRef(false);
   const sceneDragStarted = useRef(false);
-  const cover = opts.cover ?? 5;
+  const [cover, setCover] = useState(opts.cover ?? 5);
 
   const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
   const scenePos = sceneIdx + 1;
   const track: Soundtrack | null = trackId ? (SOUNDTRACKS.find((t) => t.id === trackId) ?? null) : null;
   const editBlock = editBlockId ? (scenes.flatMap((s) => s.blocks).find((b) => b.id === editBlockId) ?? null) : null;
   /** Any builder-local sheet open? (Escape / ⌘Z defer to it) */
-  const localSheet = editBlock !== null || musicOpen || scheduleOpen;
+  const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen;
 
   /* ---------- Undo / redo ---------- */
 
   const snapshot = useCallback(
-    (label: string): Snapshot => ({ label, title, scenes, trackId }),
-    [title, scenes, trackId]
+    (label: string): Snapshot => ({ label, title, scenes, trackId, cover }),
+    [title, scenes, trackId, cover]
   );
 
   /** Push the CURRENT state onto the past stack (call before every mutation) */
@@ -1273,6 +1332,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
     setTitle(s.title);
     setScenes(s.scenes);
     setTrackId(s.trackId);
+    setCover(s.cover);
     setSceneIdx((i) => Math.min(i, s.scenes.length - 1));
     setSelectedBlock(null);
   }, []);
@@ -1383,6 +1443,15 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
     setTrackId(id);
     const name = id ? SOUNDTRACKS.find((t) => t.id === id)?.title ?? "Track" : null;
     notify(name ? `“${name}” set as soundtrack` : "Soundtrack removed");
+  };
+
+  /* ---------- Cover art ---------- */
+
+  const selectCover = (variant: number) => {
+    if (cover === variant) return;
+    pushHistory("Cover art changed");
+    setCover(variant);
+    notify(`“${COVER_NAMES[variant]}” cover applied`);
   };
 
   /** Record the pre-edit title once, at edit start */
@@ -1558,9 +1627,9 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
         </div>
       </header>
 
-      {/* ---------- Scrollable workspace ---------- */}
+      {/* ---------- Scrollable workspace (centered column on wide screens) ---------- */}
       <main className="no-scrollbar relative flex-1 overflow-y-auto overscroll-contain">
-        <div className="space-y-5 px-5 pb-6 pt-5">
+        <div className="mx-auto w-full max-w-[720px] space-y-5 px-5 pb-6 pt-5">
           {/* Scene storyboard / reorder mode */}
           <section aria-label="Scenes">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
@@ -1762,6 +1831,29 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             )}
           </section>
 
+          {/* Cover art */}
+          <section aria-label="Cover art">
+            <div className="card-shadow hairline flex items-center gap-3 rounded-[20px] bg-white p-3">
+              <span className="relative shrink-0">
+                <CoverArt variant={cover} className="h-[56px] w-[72px] rounded-[14px]" />
+                <span className="absolute inset-0 rounded-[14px] ring-1 ring-[#1D1D1F]/[0.08] ring-inset" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Cover art</p>
+                <p className="mt-0.5 truncate text-[11.5px] font-medium text-[#AAAAAA]">
+                  {COVER_NAMES[cover]} · colors every scene
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCoverOpen(true)}
+                className="shrink-0 rounded-full bg-[#1D1D1F]/[0.06] px-3.5 py-1.5 text-[12px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-95"
+              >
+                Browse
+              </button>
+            </div>
+          </section>
+
           {/* Soundtrack */}
           <section aria-label="Soundtrack">
             <div className="card-shadow hairline flex items-center gap-3 rounded-[20px] bg-white p-3">
@@ -1825,7 +1917,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               </h2>
               <p className="text-[11.5px] font-medium text-[#AAAAAA]">Tap to drop a block</p>
             </div>
-            <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-1 no-scrollbar">
+            <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-1 no-scrollbar lg:mx-0 lg:flex-wrap lg:px-0 lg:overflow-visible">
               <button
                 type="button"
                 onClick={() => openComposer()}
@@ -1874,10 +1966,22 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
       </main>
 
       {/* ---------- Bottom action bar ---------- */}
-      <footer className="relative z-10 flex items-center gap-2.5 border-t border-[#1D1D1F]/[0.07] bg-white/85 px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3.5 backdrop-blur-xl">
+      <footer className="relative z-10 border-t border-[#1D1D1F]/[0.07] bg-white/85 px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3.5 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[720px] items-center gap-2.5">
         <button
           type="button"
-          onClick={() => notify("Draft saved to your Gallery")}
+          onClick={() => {
+            saveDraft({
+              id: opts.draftId ?? `d${Date.now()}`,
+              title: title || "Untitled Experience",
+              cover,
+              scenes: scenes.length,
+              blocks: scenes.reduce((n, s) => n + s.blocks.length, 0),
+              editedAt: "Just now",
+            });
+            notify("Draft saved to your Gallery");
+            onClose();
+          }}
           className="flex-1 rounded-full bg-[#1D1D1F]/[0.06] py-3 text-[14.5px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97]"
         >
           Save Draft
@@ -1898,6 +2002,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
         >
           Send
         </button>
+        </div>
       </footer>
 
       {/* ---------- Builder-local sheets (above builder, below app sheets) ---------- */}
@@ -1916,6 +2021,10 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
       <BottomSheet open={musicOpen} onClose={() => setMusicOpen(false)} title="Soundtrack">
         <SoundtrackContent selected={trackId} onSelect={selectTrack} />
+      </BottomSheet>
+
+      <BottomSheet open={coverOpen} onClose={() => setCoverOpen(false)} title="Cover art">
+        <CoverArtContent selected={cover} onSelect={selectCover} />
       </BottomSheet>
 
       <BottomSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Schedule send">

@@ -112,7 +112,7 @@ function SceneDots({ total, current, light }: { total: number; current: number; 
     <div
       className={cn(
         "flex items-center gap-1.5 rounded-full px-2.5 py-2",
-        light ? "bg-[#1D1D1F]/[0.06]" : "bg-[#1D1D1F]/35"
+        light ? "bg-black/[0.06]" : "bg-[#1D1D1F]/35"
       )}
       style={{ WebkitBackdropFilter: "blur(12px)", backdropFilter: "blur(12px)" }}
     >
@@ -124,10 +124,10 @@ function SceneDots({ total, current, light }: { total: number; current: number; 
             "h-[6px] rounded-full transition-all duration-300",
             i === current
               ? light
-                ? "w-5 bg-[#1D1D1F]"
+                ? "w-5 bg-black"
                 : "w-5 bg-white"
               : light
-                ? "w-[6px] bg-[#1D1D1F]/30"
+                ? "w-[6px] bg-black/30"
                 : "w-[6px] bg-white/40"
           )}
         />
@@ -274,7 +274,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                   initial={{ opacity: 0, y: 18, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ delay: 0.25, type: "spring", stiffness: 200, damping: 20 }}
-                  className="mt-3 text-[40px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-lg"
+                  className="mt-3 text-[40px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-lg md:text-[56px]"
                 >
                   {moment.title}
                 </motion.h1>
@@ -282,7 +282,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.45 }}
-                  className="mt-3 text-[16px] font-medium text-white/85"
+                  className="mt-3 text-[16px] font-medium text-white/85 md:text-[19px]"
                 >
                   {moment.dedication}
                 </motion.p>
@@ -316,7 +316,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12 }}
-                  className="text-[27px] font-bold leading-[1.25] tracking-[-0.02em] text-white"
+                  className="text-[27px] font-bold leading-[1.25] tracking-[-0.02em] text-white md:max-w-[560px] md:text-[36px]"
                 >
                   Some moments deserve more than a text message.
                 </motion.p>
@@ -324,7 +324,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
-                  className="mt-4 text-[15px] leading-relaxed text-white/60"
+                  className="mt-4 text-[15px] leading-relaxed text-white/60 md:text-[17px]"
                 >
                   This one is interactive — keep going.
                 </motion.p>
@@ -365,12 +365,12 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12 }}
-                  className="mt-3 max-w-[300px] text-[26px] font-bold leading-[1.2] tracking-[-0.02em] text-white"
+                  className="mt-3 max-w-[300px] text-[26px] font-bold leading-[1.2] tracking-[-0.02em] text-white md:max-w-[480px] md:text-[36px]"
                 >
                   Who is this moment for?
                 </motion.h2>
 
-                <div className="mt-9 flex w-full max-w-[280px] flex-col gap-3" role="group" aria-label="Quiz answers">
+                <div className="mt-9 flex w-full max-w-[280px] flex-col gap-3 md:max-w-[400px]" role="group" aria-label="Quiz answers">
                   {QUIZ_OPTIONS.map((o, i) => {
                     const isCorrectPick = quizSolved && o.correct;
                     const isWrongPick = wrongPick === i;
@@ -469,7 +469,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 }}
-                      className="mb-10 mt-2 text-[22px] font-bold tracking-[-0.02em] text-white"
+                      className="mb-10 mt-2 text-[22px] font-bold tracking-[-0.02em] text-white md:text-[30px]"
                     >
                       There&apos;s something for you.
                     </motion.p>
@@ -497,7 +497,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                       initial={{ opacity: 0, y: 18 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.18, type: "spring", stiffness: 220, damping: 20 }}
-                      className="mt-6 text-[28px] font-extrabold leading-tight tracking-[-0.025em] text-white drop-shadow-md"
+                      className="mt-6 text-[28px] font-extrabold leading-tight tracking-[-0.025em] text-white drop-shadow-md md:text-[38px]"
                     >
                       You are unforgettable.
                     </motion.h2>
@@ -570,7 +570,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                   initial={{ opacity: 0, y: 18 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5 }}
-                  className="mt-9 flex w-full max-w-[300px] flex-col gap-3"
+                  className="mt-9 flex w-full max-w-[300px] flex-col gap-3 md:max-w-[380px]"
                 >
                   <button
                     type="button"

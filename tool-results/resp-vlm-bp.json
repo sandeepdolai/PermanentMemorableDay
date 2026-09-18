@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "**Image 1 (Experience Builder):**\n*   **Centered Column:** Yes, the main content area (scenes and blocks) is contained within a centered column with margins on both sides; it is not stretched to the full width of the viewport.\n*   **Sidebar:** Yes, the dark navigation sidebar with \"Home,\" \"Create,\" etc., is fully visible on the left.\n*   **Defects:** No obvious visual defects or layout breaks are present.\n\n**Image 2 (Recipient Player Preview):**\n*   **Large & Centered Text:** Yes, the title \"Untitled Experience\" is large, bold, and perfectly centered on the screen.\n*   **Full-screen Dark Canvas:** Yes, the background is a full-screen dark gradient canvas.\n*   **Defects:** No obvious visual defects. The layout correctly mimics a mobile-style preview within the desktop interface.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1789720962,
+  "id": "2026091816423426eeeddf4181489b",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026091816423426eeeddf4181489b",
+  "usage": {
+    "completion_tokens": 181,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3420,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 3601
+  }
+}

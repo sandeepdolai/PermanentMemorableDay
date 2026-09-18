@@ -6,6 +6,7 @@ import {
   Bell,
   BookOpen,
   ChartPie,
+  Check,
   ChevronRight,
   CreditCard,
   Crown,
@@ -15,16 +16,19 @@ import {
   Lock,
   LogOut,
   Mail,
+  MonitorSmartphone,
+  Moon,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Sun,
   User,
   Zap,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { USER } from "@/lib/mock-data";
 import { CountUp, LargeTitle } from "../bits";
-import { useMD } from "../md-context";
+import { useMD, type ThemeMode } from "../md-context";
 import { cn } from "@/lib/utils";
 
 interface RowBase {
@@ -97,6 +101,85 @@ function CreditRing({ used, total }: { used: number; total: number }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Appearance (theme mode) picker                                       */
+/* ------------------------------------------------------------------ */
+
+const THEME_MODES: Array<{
+  value: ThemeMode;
+  label: string;
+  caption: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+}> = [
+  { value: "light", label: "Light", caption: "Bright canvas", icon: Sun },
+  { value: "dark", label: "Dark", caption: "Low light", icon: Moon },
+  { value: "system", label: "Auto", caption: "Match device", icon: MonitorSmartphone },
+];
+
+function AppearanceSection() {
+  const { theme, setTheme } = useMD();
+  return (
+    <section aria-label="Appearance">
+      <div className="card-shadow hairline rounded-[26px] bg-white p-4">
+        <h2 className="mb-3 px-1 text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+          Appearance
+        </h2>
+        <div className="grid grid-cols-3 gap-2.5">
+          {THEME_MODES.map((m) => {
+            const active = theme === m.value;
+            const Icon = m.icon;
+            return (
+              <button
+                key={m.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setTheme(m.value)}
+                className={cn(
+                  "relative flex flex-col items-center gap-2 rounded-[20px] border-2 px-2 pb-3 pt-3.5 transition-all active:scale-[0.96]",
+                  active ? "border-[#007AFF] bg-[#007AFF]/[0.05]" : "border-[#1D1D1F]/[0.06] bg-[#F5F5F7]"
+                )}
+              >
+                {active ? (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                    className="absolute right-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#007AFF] text-white"
+                  >
+                    <Check size={12} strokeWidth={3.2} aria-hidden />
+                  </motion.span>
+                ) : null}
+                {/* Mini preview swatch — mirrors the mode's canvas/card pairing */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-[34px] w-[34px] rounded-[11px] border border-[#1D1D1F]/[0.08]",
+                    m.value === "light"
+                      ? "bg-gradient-to-br from-[#FFFFFF] to-[#E9E9EE]"
+                      : m.value === "dark"
+                        ? "bg-gradient-to-br from-[#2C2C2E] to-[#0A0A0C]"
+                        : "bg-[linear-gradient(135deg,#F5F5F7_0%,#F5F5F7_49%,#1C1C1E_51%,#0A0A0C_100%)]"
+                  )}
+                />
+                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-[#FFFFFF] text-[#007AFF] shadow-[0_4px_10px_-4px_rgba(29,29,31,0.25)] dark:bg-[#3A3A3C]">
+                  <Icon size={15} strokeWidth={2.2} />
+                </span>
+                <span className="text-center">
+                  <span className="block text-[12.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{m.label}</span>
+                  <span className="mt-0.5 block text-[10px] font-medium text-[#AAAAAA]">{m.caption}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 px-1 text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+          Auto follows your device's light & dark schedule.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Profile view                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -146,7 +229,8 @@ export function ProfileView() {
   ];
 
   return (
-    <div className="space-y-6 px-5 pb-36 pt-[88px]">
+    <div className="px-5 pb-36 pt-[88px] md:px-8 md:pb-16 lg:px-10">
+      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6">
       <header>
         <LargeTitle>Profile</LargeTitle>
       </header>
@@ -191,8 +275,10 @@ export function ProfileView() {
         </button>
       </section>
 
+      {/* AI credits + appearance — side by side from `lg` */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-stretch lg:gap-6">
       {/* AI credits */}
-      <section aria-label="AI credits">
+      <section aria-label="AI credits" className="lg:flex lg:flex-col">
         <div className="card-shadow hairline flex items-center gap-4 rounded-[26px] bg-white p-4">
           <CreditRing used={64} total={USER.credits} />
           <div className="min-w-0 flex-1">
@@ -215,6 +301,10 @@ export function ProfileView() {
           </div>
         </div>
       </section>
+
+      {/* Appearance (light / dark / auto) */}
+      <div className="lg:flex lg:flex-col"><AppearanceSection /></div>
+      </div>
 
       {/* Upgrade banner */}
       <button
@@ -246,7 +336,8 @@ export function ProfileView() {
         </div>
       </button>
 
-      {/* Grouped settings */}
+      {/* Grouped settings — two columns from `lg` */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-6 lg:gap-y-6">
       {sections.map((section) => (
         <section key={section.title} aria-label={section.title}>
           <h2 className="mb-2 px-4 text-[12px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
@@ -302,6 +393,7 @@ export function ProfileView() {
           </div>
         </section>
       ))}
+      </div>
 
       {/* Sign out */}
       <section aria-label="Sign out">
@@ -325,6 +417,7 @@ export function ProfileView() {
       <p className="pt-1 text-center text-[11px] font-medium text-[#AAAAAA]">
         MemorableDay · Make Every Moment Memorable
       </p>
+      </div>
     </div>
   );
 }

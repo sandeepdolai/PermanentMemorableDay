@@ -45,7 +45,8 @@ export function ExploreView() {
   }, [segment, query, savedIds]);
 
   return (
-    <div className="space-y-5 px-5 pb-36 pt-[88px]">
+    <div className="px-5 pb-36 pt-[88px] md:px-8 md:pb-16 lg:px-10">
+      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5">
       <header>
         <LargeTitle>Explore</LargeTitle>
         <p className="mt-1.5 text-[15px] text-[#AAAAAA]">
@@ -58,7 +59,7 @@ export function ExploreView() {
         options={SEGMENTS}
         value={segment}
         onChange={setSegment}
-        className="mx-0.5"
+        className="mx-0.5 md:max-w-[520px]"
       />
 
       {query.trim() ? (
@@ -78,7 +79,7 @@ export function ExploreView() {
       ) : null}
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-4" aria-hidden>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4" aria-hidden>
           {Array.from({ length: 4 }, (_, i) => (
             <SkeletonCard key={i} aspect="aspect-[4/3.4]" />
           ))}
@@ -98,7 +99,7 @@ export function ExploreView() {
           />
         )
       ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4">
           {items.map((item, idx) => (
             <ExploreCard
               key={item.id}
@@ -113,6 +114,7 @@ export function ExploreView() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -23,7 +23,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center pb-[max(18px,env(safe-area-inset-bottom))]"
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center pb-[max(18px,env(safe-area-inset-bottom))] md:hidden"
     >
       <div
         className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#1D1D1F]/[0.07] bg-white/80 px-2 py-1.5 float-shadow"

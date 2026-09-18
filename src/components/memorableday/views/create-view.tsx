@@ -35,7 +35,8 @@ export function CreateView() {
   const { openSheet, openBuilder, openComposer } = useMD();
 
   return (
-    <div className="space-y-8 px-5 pb-36 pt-[88px]">
+    <div className="px-5 pb-36 pt-[88px] md:px-8 md:pb-16 lg:px-10">
+      <div className="mx-auto flex w-full max-w-[900px] flex-col gap-8">
       <header>
         <LargeTitle>Create</LargeTitle>
         <p className="mt-1.5 text-[15px] text-[#AAAAAA]">
@@ -43,10 +44,11 @@ export function CreateView() {
         </p>
       </header>
 
-      {/* Start a new experience */}
-      <section aria-label="New experience">
-        <div className="card-shadow hairline overflow-hidden rounded-[28px] bg-white">
-          <div className="relative h-36">
+      {/* Start a new experience + AI promo — side by side from `lg` */}
+      <div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-stretch lg:gap-6">
+      <section aria-label="New experience" className="lg:order-1">
+        <div className="card-shadow hairline flex h-full flex-col overflow-hidden rounded-[28px] bg-white">
+          <div className="relative h-36 lg:h-44 lg:flex-none">
             <CoverArt variant={5} className="absolute inset-0">
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/25 backdrop-blur-md">
@@ -58,14 +60,14 @@ export function CreateView() {
               </div>
             </CoverArt>
           </div>
-          <div className="p-4">
+          <div className="flex flex-1 flex-col p-4 lg:p-5">
             <p className="text-[14px] leading-relaxed text-[#AAAAAA]">
               Start from a blank canvas or let the AI Creator sketch it for you.
             </p>
             <button
               type="button"
               onClick={() => openSheet("create")}
-              className="mt-3.5 w-full rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+              className="mt-3.5 w-full rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98] lg:mt-auto"
             >
               Start Creating
             </button>
@@ -74,9 +76,9 @@ export function CreateView() {
       </section>
 
       {/* Scene blocks */}
-      <section aria-label="Scene blocks">
+      <section aria-label="Scene blocks" className="lg:order-3 lg:col-span-2">
         <SectionHeader title="Scene Blocks" sub="Tap a block to drop it into a new scene" />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
           {SCENE_BLOCKS.map((b) => {
             const Icon = b.icon;
             return (
@@ -100,11 +102,11 @@ export function CreateView() {
       </section>
 
       {/* AI Creator promo */}
-      <section aria-label="AI Creator">
-        <div className="md-gradient-drift relative overflow-hidden rounded-[26px] p-5 text-white" style={{ background: "linear-gradient(135deg, #007AFF 0%, #40A9FF 60%, #64D2FF 100%)" }}>
+      <section aria-label="AI Creator" className="lg:order-2 lg:flex lg:flex-col">
+        <div className="md-gradient-drift relative flex h-full flex-col overflow-hidden rounded-[26px] p-5 text-white lg:p-6" style={{ background: "linear-gradient(135deg, #007AFF 0%, #40A9FF 60%, #64D2FF 100%)" }}>
           <div aria-hidden className="md-float absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/25 blur-2xl" />
           <div aria-hidden className="md-float-slow absolute -bottom-14 -left-8 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
-          <div className="relative">
+          <div className="relative flex flex-1 flex-col">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] backdrop-blur-sm">
               <Sparkles size={11} aria-hidden /> AI Creator
             </span>
@@ -114,7 +116,7 @@ export function CreateView() {
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-white/80">
               One brief in, a complete interactive experience out — scenes, copy and reveals included.
             </p>
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-4 flex items-center gap-3 lg:mt-auto">
               <button
                 type="button"
                 onClick={() => openComposer()}
@@ -129,6 +131,8 @@ export function CreateView() {
           </div>
         </div>
       </section>
+      </div>
+      </div>
     </div>
   );
 }

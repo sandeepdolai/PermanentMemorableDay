@@ -50,8 +50,17 @@
  *   #AAAAAA Cool Gray    → muted / secondary
  *   #F5F5F7 Off-White    → background canvas
  *   #FFFFFF White        → elevated surfaces
+ *
+ * Dark mode follows Apple's dark palette conventions:
+ *   canvas #0A0A0C · elevated #1C1C1E · ink #F5F5F7 · secondary #98989D · primary #0A84FF
  */
 :root {
+  --md-bg: #f5f5f7;
+  --md-card: #ffffff;
+  --md-ink: #1d1d1f;
+  --md-sub: #aaaaaa;
+  --md-primary: #007aff;
+  --md-field: #f5f5f7;
   --radius: 1rem;
   --background: #f5f5f7;
   --foreground: #1d1d1f;
@@ -87,9 +96,15 @@
 }
 
 .dark {
-  --background: #1d1d1f;
+  --md-bg: #0a0a0c;
+  --md-card: #1c1c1e;
+  --md-ink: #f5f5f7;
+  --md-sub: #98989d;
+  --md-primary: #0a84ff;
+  --md-field: #101014;
+  --background: #0a0a0c;
   --foreground: #f5f5f7;
-  --card: #2c2c2e;
+  --card: #1c1c1e;
   --card-foreground: #f5f5f7;
   --popover: #2c2c2e;
   --popover-foreground: #f5f5f7;
@@ -312,5 +327,211 @@
   }
   50% {
     transform: scaleY(1);
+  }
+}
+
+/* ================================================================== */
+/* DARK-MODE BRIDGE                                                    */
+/* The app styles with the exact light palette via arbitrary-value     */
+/* utilities (bg-[#F5F5F7] …). These UNLAYERED rules redefine each     */
+/* used utility to a theme variable so `.dark` flips the whole app.    */
+/* Unlayered CSS beats Tailwind's `utilities` layer regardless of      */
+/* specificity — and `.dark` scopes every rule so light mode is        */
+/* untouched. Alpha scrims over cover art (bg-[#1D1D1F]/25+) and      */
+/* white art blobs (bg-white/10–30) are deliberately NOT bridged.      */
+/* ================================================================== */
+
+.dark ::selection {
+  background: rgba(10, 132, 255, 0.35);
+}
+.dark :focus-visible {
+  outline-color: #0a84ff;
+}
+
+/* ---- Ink (text) ---- */
+.dark .text-\[\#1D1D1F\] { color: var(--md-ink); }
+.dark .text-\[\#1D1D1F\]\/25 { color: color-mix(in srgb, var(--md-ink) 25%, transparent); }
+.dark .text-\[\#1D1D1F\]\/50 { color: color-mix(in srgb, var(--md-ink) 50%, transparent); }
+.dark .text-\[\#1D1D1F\]\/70 { color: color-mix(in srgb, var(--md-ink) 70%, transparent); }
+.dark .text-\[\#1D1D1F\]\/75 { color: color-mix(in srgb, var(--md-ink) 75%, transparent); }
+.dark .text-\[\#1D1D1F\]\/80 { color: color-mix(in srgb, var(--md-ink) 80%, transparent); }
+
+/* ---- Secondary text ---- */
+.dark .text-\[\#AAAAAA\] { color: var(--md-sub); }
+.dark .text-\[\#AAAAAA\]\/70 { color: color-mix(in srgb, var(--md-sub) 70%, transparent); }
+.dark .text-\[\#C7C7CC\] { color: #636366; }
+.dark .text-\[\#8E8E93\] { color: #98989d; }
+.dark .text-\[\#8A8A8E\] { color: #98989d; }
+
+/* ---- Primary / accent text ---- */
+.dark .text-\[\#007AFF\] { color: var(--md-primary); }
+.dark .text-\[\#1E9E4A\] { color: #30d158; }
+.dark .text-\[\#1E9E4A\]\/80 { color: rgba(48, 209, 88, 0.8); }
+.dark .text-\[\#B26A00\] { color: #ff9f0a; }
+
+/* ---- Placeholder text ---- */
+.dark .placeholder\:text-\[\#AAAAAA\]::placeholder { color: var(--md-sub); }
+.dark .placeholder\:text-\[\#AAAAAA\]\/70::placeholder { color: color-mix(in srgb, var(--md-sub) 70%, transparent); }
+
+/* ---- Surfaces ---- */
+.dark .bg-\[\#F5F5F7\] { background-color: var(--md-field); }
+.dark .bg-white { background-color: var(--md-card); }
+.dark .bg-white\/80 { background-color: rgba(24, 24, 27, 0.8); }
+.dark .bg-white\/85 { background-color: rgba(24, 24, 27, 0.85); }
+.dark .bg-white\/90 { background-color: rgba(24, 24, 27, 0.9); }
+.dark .bg-white\/95 { background-color: rgba(20, 20, 23, 0.96); }
+
+/* Solid ink surfaces (dark feature cards, ink buttons, player base) */
+.dark .bg-\[\#1D1D1F\] { background-color: #2c2c2e; }
+
+/* Ink-tinted chips on cards → white-tinted in dark */
+.dark .bg-\[\#1D1D1F\]\/\[0\.04\] { background-color: rgba(255, 255, 255, 0.05); }
+.dark .bg-\[\#1D1D1F\]\/\[0\.05\] { background-color: rgba(255, 255, 255, 0.06); }
+.dark .bg-\[\#1D1D1F\]\/\[0\.06\] { background-color: rgba(255, 255, 255, 0.07); }
+.dark .bg-\[\#1D1D1F\]\/\[0\.07\] { background-color: rgba(255, 255, 255, 0.08); }
+.dark .bg-\[\#1D1D1F\]\/\[0\.08\] { background-color: rgba(255, 255, 255, 0.09); }
+.dark .bg-\[\#1D1D1F\]\/\[0\.14\] { background-color: rgba(255, 255, 255, 0.16); }
+.dark .bg-\[\#1D1D1F\]\/\[0\.15\] { background-color: rgba(255, 255, 255, 0.17); }
+
+/* Primary tint chips */
+.dark .bg-\[\#007AFF\] { background-color: var(--md-primary); }
+.dark .bg-\[\#007AFF\]\/\[0\.04\] { background-color: color-mix(in srgb, var(--md-primary) 6%, transparent); }
+.dark .bg-\[\#007AFF\]\/\[0\.05\] { background-color: color-mix(in srgb, var(--md-primary) 8%, transparent); }
+.dark .bg-\[\#007AFF\]\/\[0\.06\] { background-color: color-mix(in srgb, var(--md-primary) 9%, transparent); }
+.dark .bg-\[\#007AFF\]\/\[0\.07\] { background-color: color-mix(in srgb, var(--md-primary) 10%, transparent); }
+.dark .bg-\[\#007AFF\]\/\[0\.08\] { background-color: color-mix(in srgb, var(--md-primary) 11%, transparent); }
+.dark .bg-\[\#007AFF\]\/\[0\.09\] { background-color: color-mix(in srgb, var(--md-primary) 13%, transparent); }
+.dark .bg-\[\#007AFF\]\/\[0\.12\] { background-color: color-mix(in srgb, var(--md-primary) 17%, transparent); }
+.dark .bg-\[\#007AFF\]\/\[0\.14\] { background-color: color-mix(in srgb, var(--md-primary) 19%, transparent); }
+.dark .bg-\[\#007AFF\]\/25 { background-color: color-mix(in srgb, var(--md-primary) 32%, transparent); }
+
+/* Neutral tint chips */
+.dark .bg-\[\#AAAAAA\]\/\[0\.18\] { background-color: rgba(152, 152, 157, 0.22); }
+.dark .bg-\[\#8E8E93\]\/\[0\.12\] { background-color: rgba(142, 142, 147, 0.16); }
+
+/* ---- Hairlines / borders ---- */
+.dark .border-\[\#1D1D1F\]\/\[0\.04\] { border-color: rgba(255, 255, 255, 0.06); }
+.dark .border-\[\#1D1D1F\]\/\[0\.05\] { border-color: rgba(255, 255, 255, 0.07); }
+.dark .border-\[\#1D1D1F\]\/\[0\.06\] { border-color: rgba(255, 255, 255, 0.08); }
+.dark .border-\[\#1D1D1F\]\/\[0\.07\] { border-color: rgba(255, 255, 255, 0.09); }
+.dark .border-\[\#1D1D1F\]\/\[0\.08\] { border-color: rgba(255, 255, 255, 0.1); }
+.dark .border-\[\#1D1D1F\]\/\[0\.09\] { border-color: rgba(255, 255, 255, 0.11); }
+.dark .border-\[\#1D1D1F\]\/\[0\.1\] { border-color: rgba(255, 255, 255, 0.12); }
+.dark .border-\[\#1D1D1F\]\/\[0\.12\] { border-color: rgba(255, 255, 255, 0.14); }
+.dark .border-\[\#1D1D1F\]\/\[0\.15\] { border-color: rgba(255, 255, 255, 0.17); }
+.dark .border-\[\#007AFF\] { border-color: var(--md-primary); }
+.dark .border-\[\#007AFF\]\/40 { border-color: color-mix(in srgb, var(--md-primary) 45%, transparent); }
+.dark .border-\[\#D1D1D6\] { border-color: #38383a; }
+.dark .border-white\/70 { border-color: rgba(255, 255, 255, 0.12); }
+
+/* ---- Dividers ---- */
+.dark .divide-\[\#1D1D1F\]\/\[0\.05\] > :not(:last-child) { border-color: rgba(255, 255, 255, 0.07); }
+.dark .divide-\[\#1D1D1F\]\/\[0\.06\] > :not(:last-child) { border-color: rgba(255, 255, 255, 0.08); }
+
+/* ---- Focus rings ---- */
+.dark .ring-\[\#007AFF\] { --tw-ring-color: var(--md-primary); }
+.dark .ring-\[\#007AFF\]\/25 { --tw-ring-color: color-mix(in srgb, var(--md-primary) 35%, transparent); }
+.dark .ring-\[\#007AFF\]\/40 { --tw-ring-color: color-mix(in srgb, var(--md-primary) 50%, transparent); }
+.dark .ring-\[\#1D1D1F\] { --tw-ring-color: var(--md-ink); }
+.dark .ring-offset-\[\#F5F5F7\] { --tw-ring-offset-color: #0a0a0c; }
+
+/* ---- Variant interactions ---- */
+.dark .hover\:bg-\[\#1D1D1F\]\/\[0\.04\]:hover { background-color: rgba(255, 255, 255, 0.07); }
+.dark .hover\:text-\[\#1D1D1F\]\/50:hover { color: color-mix(in srgb, var(--md-ink) 50%, transparent); }
+.dark .hover\:text-\[\#007AFF\]:hover { color: var(--md-primary); }
+.dark .hover\:border-\[\#007AFF\]\/40:hover { border-color: color-mix(in srgb, var(--md-primary) 45%, transparent); }
+.dark .active\:text-\[\#1D1D1F\]:active { color: var(--md-ink); }
+.dark .active\:bg-\[\#007AFF\]\/\[0\.04\]:active { background-color: color-mix(in srgb, var(--md-primary) 7%, transparent); }
+.dark .active\:bg-\[\#007AFF\]\/\[0\.05\]:active { background-color: color-mix(in srgb, var(--md-primary) 8%, transparent); }
+.dark .active\:bg-\[\#007AFF\]\/\[0\.06\]:active { background-color: color-mix(in srgb, var(--md-primary) 9%, transparent); }
+.dark .focus\:border-\[\#007AFF\]:focus { border-color: var(--md-primary); }
+.dark .focus\:ring-\[\#007AFF\]\/25:focus { --tw-ring-color: color-mix(in srgb, var(--md-primary) 35%, transparent); }
+@media (min-width: 40rem) {
+  .dark .sm\:border-\[\#1D1D1F\]\/\[0\.05\] { border-color: rgba(255, 255, 255, 0.06); }
+}
+
+/* ---- Custom utility materials in dark ---- */
+.dark .glass-panel {
+  background: rgba(18, 18, 21, 0.72);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  backdrop-filter: blur(28px) saturate(1.6);
+}
+.dark .glass-scrim {
+  background: rgba(18, 18, 21, 0.55);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.5);
+}
+.dark .card-shadow {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 16px 40px -16px rgba(0, 0, 0, 0.6);
+}
+.dark .float-shadow {
+  box-shadow:
+    0 24px 60px -18px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.dark .pill-shadow {
+  box-shadow: 0 10px 24px -8px rgba(10, 132, 255, 0.5);
+}
+.dark .hairline {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.dark .skeleton {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.06) 40%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.06) 60%
+  );
+  background-size: 200% 100%;
+}
+.dark .md-scroll {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+.dark .md-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+}
+.dark .md-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+/* Ring hairline around cover previews */
+.dark .ring-\[\#1D1D1F\]\/\[0\.08\] { --tw-ring-color: rgba(255, 255, 255, 0.12); }
+
+/* ================================================================== */
+/* RESPONSIVE LAYOUT — desktop/tablet additions                        */
+/* (md = 48rem, lg = 64rem). The dark bridge above targets base class  */
+/* names only, so responsive-prefixed surface utilities need their     */
+/* own scoped rules to flip in dark mode.                              */
+/* ================================================================== */
+
+/* Sidebar rail glass (base utility — rail is hidden below md) */
+.dark .bg-white\/70 { background-color: rgba(24, 24, 27, 0.72); }
+
+@media (min-width: 48rem) {
+  /* iPad-style form sheet border */
+  .dark .md\:border-\[\#1D1D1F\]\/\[0\.08\] { border-color: rgba(255, 255, 255, 0.12); }
+}
+
+@media (min-width: 64rem) {
+  /* App frame hairlines */
+  .dark .lg\:border-\[\#1D1D1F\]\/\[0\.05\] { border-color: rgba(255, 255, 255, 0.07); }
+  /* Home "Recent moments" cards on desktop (list → grid) */
+  .dark .lg\:bg-white { background-color: var(--md-card); }
+  .dark .lg\:card-shadow {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 16px 40px -16px rgba(0, 0, 0, 0.6);
+  }
+  .dark .lg\:hairline { border: 1px solid rgba(255, 255, 255, 0.1); }
+}
+
+/* Desktop pointer affordance — buttons get a hand cursor on precise pointers */
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  [role="tab"] {
+    cursor: pointer;
   }
 }
