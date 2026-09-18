@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChartPie, Eye, Heart, Share2 } from "lucide-react";
+import { ChartPie, Eye, Heart, Share2, Trash2 } from "lucide-react";
 import { MOMENTS, USER } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
 import { CountUp, SectionHeader, StatusBadge } from "../bits";
-import { useMD } from "../md-context";
+import { useMD, type UserDraft } from "../md-context";
 
 const STATS = [
   { label: "Moments sent", value: String(USER.stats.sent) },
@@ -14,9 +14,21 @@ const STATS = [
 ];
 
 export function HomeView() {
-  const { setTab, openMoment, openShare, openBuilder, openInsights, drafts: userDrafts } = useMD();
+  const { setTab, openMoment, openShare, openBuilder, openInsights, drafts: userDrafts, deleteDraft, saveDraft, notify } = useMD();
   const [greeting, setGreeting] = useState("Hello");
   const [dateLine, setDateLine] = useState("");
+
+  /** Deletes one of the user's own drafts — toast offers Undo (re-inserts it) */
+  const removeDraft = (d: UserDraft) => {
+    deleteDraft(d.id);
+    notify(`“${d.title}” deleted`, {
+      label: "Undo",
+      onClick: () => {
+        saveDraft(d);
+        notify(`“${d.title}” restored`);
+      },
+    });
+  };
 
   useEffect(() => {
     // Update greeting + date after paint (avoids hydration mismatch, keeps render stable)
@@ -138,10 +150,13 @@ export function HomeView() {
       <section aria-label="Continue creating">
         <SectionHeader title="Continue Creating" action="See all" onAction={() => setTab("gallery")} />
         <div className="-mx-5 flex gap-3.5 overflow-x-auto px-5 pb-1 no-scrollbar lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0">
-          {drafts.map((d) => (
-            <button
+          {drafts.map((d) => {
+            const draft = d.isUser ? userDrafts.find((x) => x.id === d.id) : undefined;
+            return (
+            <div
               key={d.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               aria-label={`Continue editing ${d.title}`}
               onClick={() =>
                 openBuilder({
@@ -151,13 +166,40 @@ export function HomeView() {
                   ...(d.isUser ? { draftId: d.id } : {}),
                 })
               }
-              className="card-shadow hairline lift w-[168px] shrink-0 rounded-[22px] bg-white p-2.5 text-left transition-transform active:scale-[0.97] lg:w-auto"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  (e.currentTarget as HTMLDivElement).click();
+                }
+              }}
+              className="card-shadow hairline lift w-[168px] shrink-0 cursor-pointer rounded-[22px] bg-white p-2.5 text-left transition-transform active:scale-[0.97] lg:w-auto"
             >
               <span className="relative block">
                 <CoverArt variant={d.cover} className="aspect-[4/3] w-full rounded-[15px]" />
                 {d.isUser ? (
-                  <span className="absolute right-1.5 top-1.5 rounded-full bg-[#007AFF] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-[0_4px_10px_-2px_rgba(0,122,255,0.55)]">
+                  <span className="absolute left-1.5 top-1.5 rounded-full bg-[#007AFF] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-[0_4px_10px_-2px_rgba(0,122,255,0.55)]">
                     Mine
+                  </span>
+                ) : null}
+                {d.isUser && draft ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Delete draft ${d.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeDraft(draft);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        removeDraft(draft);
+                      }
+                    }}
+                    className="absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white/85 text-[#8A8A8E] shadow-[0_6px_16px_-6px_rgba(29,29,31,0.4)] backdrop-blur-md transition-all hover:bg-[#FF375F] hover:text-white active:scale-90"
+                  >
+                    <Trash2 size={13} strokeWidth={2.2} aria-hidden />
                   </span>
                 ) : null}
               </span>
@@ -175,8 +217,9 @@ export function HomeView() {
                   />
                 </div>
               </div>
-            </button>
-          ))}
+            </div>
+            );
+          })}
         </div>
       </section>
 

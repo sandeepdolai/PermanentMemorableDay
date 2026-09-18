@@ -32,9 +32,12 @@ export function ExploreView() {
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return EXPLORE_ITEMS.filter((i) =>
+    // While searching, the query spans ALL categories (Spotlight model) —
+    // the segment chips below become inert until the search is cleared.
+    const base = q ? EXPLORE_ITEMS : EXPLORE_ITEMS.filter((i) =>
       segment === "saved" ? savedIds.includes(i.id) : i.segments.includes(segment)
-    ).filter((i) => {
+    );
+    return base.filter((i) => {
       if (!q) return true;
       return (
         i.title.toLowerCase().includes(q) ||
@@ -43,6 +46,8 @@ export function ExploreView() {
       );
     });
   }, [segment, query, savedIds]);
+
+  const searching = Boolean(query.trim());
 
   return (
     <div className="px-5 pb-36 pt-[88px] md:px-8 md:pb-16 lg:px-10">
@@ -54,19 +59,22 @@ export function ExploreView() {
         </p>
       </header>
 
-      <SegmentedControl
-        id="explore-segments"
-        options={SEGMENTS}
-        value={segment}
-        onChange={setSegment}
-        className="mx-0.5 md:max-w-[520px]"
-      />
+      <div className={cn("transition-opacity duration-200", searching && "pointer-events-none opacity-40")}>
+        <SegmentedControl
+          id="explore-segments"
+          options={SEGMENTS}
+          value={segment}
+          onChange={setSegment}
+          className="mx-0.5 md:max-w-[520px]"
+        />
+      </div>
 
-      {query.trim() ? (
+      {searching ? (
         <div className="flex items-center justify-between gap-3 px-0.5">
           <p className="truncate text-[13px] text-[#AAAAAA]">
             Showing results for{" "}
-            <span className="font-semibold text-[#1D1D1F]">“{query.trim()}”</span>
+            <span className="font-semibold text-[#1D1D1F]">“{query.trim()}”</span>{" "}
+            <span className="whitespace-nowrap">· all categories</span>
           </p>
           <button
             type="button"
@@ -85,17 +93,17 @@ export function ExploreView() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        segment === "saved" ? (
-          <EmptyState
-            icon={<Bookmark size={26} aria-hidden />}
-            title="Nothing saved yet"
-            sub="Tap the bookmark on any template to keep it here for later."
-          />
-        ) : (
+        searching || segment !== "saved" ? (
           <EmptyState
             icon={<SearchX size={26} aria-hidden />}
             title="Nothing found"
             sub={`No experiences match “${query.trim()}”. Try a different search.`}
+          />
+        ) : (
+          <EmptyState
+            icon={<Bookmark size={26} aria-hidden />}
+            title="Nothing saved yet"
+            sub="Tap the bookmark on any template to keep it here for later."
           />
         )
       ) : (

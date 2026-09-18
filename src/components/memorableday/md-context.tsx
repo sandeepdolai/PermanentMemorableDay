@@ -65,6 +65,12 @@ export interface BuilderOptions {
   seedText?: string;
 }
 
+/** Optional action button rendered inside a toast (e.g. "Undo") */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 /** Inserts a composed AI message into the open builder's current scene */
 export type AiInsertFn = (message: string) => void;
 
@@ -74,7 +80,7 @@ export interface MDContextValue {
   query: string;
   setQuery: (q: string) => void;
   submitSearch: (q?: string) => void;
-  notify: (message: string) => void;
+  notify: (message: string, action?: ToastAction) => void;
   openSheet: (sheet: Exclude<Sheet, null>) => void;
   /** Currently open sheet (lets layered UI e.g. the player defer Escape) */
   sheet: Sheet;
@@ -128,6 +134,8 @@ export interface MDContextValue {
   drafts: UserDraft[];
   /** Creates or updates a draft (deduped by id, newest first) */
   saveDraft: (draft: UserDraft) => void;
+  /** Deletes a draft — returns the removed draft so callers can offer Undo */
+  deleteDraft: (id: string) => UserDraft | null;
   /** Spotlight-style command palette (⌘K) visibility */
   paletteOpen: boolean;
   /** Opens the command palette */

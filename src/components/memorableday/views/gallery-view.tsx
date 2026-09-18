@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { Archive, Eye, Sparkles } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Archive, Eye, Sparkles, Trash2 } from "lucide-react";
 import { MOMENTS, type MomentStatus } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
 import { EmptyState, LargeTitle, SkeletonCard, StatusBadge } from "../bits";
@@ -25,9 +25,21 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 
 export function GalleryView() {
-  const { openMoment, openBuilder, drafts: userDrafts } = useMD();
+  const { openMoment, openBuilder, drafts: userDrafts, deleteDraft, saveDraft, notify } = useMD();
   const [filter, setFilter] = useState<Filter>("all");
   const loading = useSkeleton(filter);
+
+  /** Deletes one of the user's own drafts — toast offers Undo (re-inserts it) */
+  const removeDraft = (d: UserDraft) => {
+    deleteDraft(d.id);
+    notify(`“${d.title}” deleted`, {
+      label: "Undo",
+      onClick: () => {
+        saveDraft(d);
+        notify(`“${d.title}” restored`);
+      },
+    });
+  };
 
   const items = useMemo<GalleryItem[]>(() => {
     const user: GalleryItem[] = userDrafts.map((d) => ({ kind: "user-draft", ...d }));
@@ -87,6 +99,7 @@ export function GalleryView() {
         />
       ) : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4">
+          <AnimatePresence initial={false}>
           {items.map((it, idx) => {
             const isUser = it.kind === "user-draft";
             const isDraft = isUser || (it.kind === "moment" && it.status === "draft");
@@ -96,12 +109,15 @@ export function GalleryView() {
             const scenes = isUser ? Math.max(1, it.scenes) : it.scenes;
             const dateLine = isUser ? `${it.blocks} blocks · ${it.editedAt}` : `${it.date} · ${it.scenes} scenes`;
             return (
-              <motion.button
+              <motion.div
                 key={it.id}
-                type="button"
+                layout
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, transition: { duration: 0.22 } }}
                 transition={{ delay: Math.min(idx * 0.035, 0.25), duration: 0.3, ease: "easeOut" }}
+                role="button"
+                tabIndex={0}
                 onClick={() =>
                   isDraft
                     ? openBuilder({
@@ -112,8 +128,14 @@ export function GalleryView() {
                       })
                     : openMoment({ id: it.id, title: it.title, cover: it.cover, dedication: `For ${it.recipient}` })
                 }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    (e.currentTarget as HTMLDivElement).click();
+                  }
+                }}
                 aria-label={`${title}, ${isDraft ? "continue editing" : "play moment"}`}
-                className="card-shadow hairline lift overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.97]"
+                className="card-shadow hairline lift cursor-pointer overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.97]"
               >
                 <CoverArt variant={cover} className="aspect-square w-full">
                   {isUser ? (
@@ -128,6 +150,27 @@ export function GalleryView() {
                       <Eye size={11} aria-hidden /> {it.views}
                     </span>
                   ) : null}
+                  {isUser ? (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Delete draft ${title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeDraft(it);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          removeDraft(it);
+                        }
+                      }}
+                      className="absolute right-2.5 top-2.5 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white/85 text-[#8A8A8E] shadow-[0_6px_16px_-6px_rgba(29,29,31,0.4)] backdrop-blur-md transition-all hover:bg-[#FF375F] hover:text-white active:scale-90"
+                    >
+                      <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+                    </span>
+                  ) : null}
                 </CoverArt>
                 <div className="p-3">
                   <p className="truncate text-[14.5px] font-bold tracking-[-0.015em] text-[#1D1D1F]">
@@ -135,9 +178,10 @@ export function GalleryView() {
                   </p>
                   <p className="mt-0.5 truncate text-[12px] text-[#AAAAAA]">{dateLine}</p>
                 </div>
-              </motion.button>
+              </motion.div>
             );
           })}
+          </AnimatePresence>
         </div>
       )}
       </div>

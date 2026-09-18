@@ -15,6 +15,7 @@ import {
   type Sheet,
   type Tab,
   type ThemeMode,
+  type ToastAction,
   type UserDraft,
 } from "./md-context";
 import type { ExploreItem } from "@/lib/mock-data";
@@ -42,8 +43,8 @@ const TAB_TITLES: Record<Tab, string> = {
   profile: "Profile",
 };
 
-/** iOS-style dark glass toast */
-function GlassToast({ message }: { message: string }) {
+/** iOS-style dark glass toast — optional action button (e.g. Undo) */
+function GlassToast({ message, action, onAction }: { message: string; action?: ToastAction; onAction: () => void }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-[70px] z-[90] flex justify-center px-6">
       <motion.div
@@ -51,17 +52,32 @@ function GlassToast({ message }: { message: string }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -14, scale: 0.96 }}
         transition={{ type: "spring", stiffness: 420, damping: 30 }}
-        className="relative flex max-w-full items-center gap-2 overflow-hidden rounded-full bg-[#1D1D1F]/88 px-4 py-2.5 shadow-[0_16px_40px_-10px_rgba(29,29,31,0.5)] md:max-w-[520px]"
+        className="pointer-events-auto relative flex max-w-full items-center gap-2 overflow-hidden rounded-full bg-[#1D1D1F]/88 px-4 py-2.5 shadow-[0_16px_40px_-10px_rgba(29,29,31,0.5)] md:max-w-[520px]"
         style={{ WebkitBackdropFilter: "blur(20px)", backdropFilter: "blur(20px)" }}
       >
         <Info size={14} className="shrink-0 text-[#64D2FF]" aria-hidden />
         <span className="truncate text-[13px] font-medium text-white">{message}</span>
-        {/* auto-dismiss progress hairline */}
+        {action ? (
+          <>
+            <span aria-hidden className="h-3.5 w-px shrink-0 bg-white/20" />
+            <button
+              type="button"
+              onClick={() => {
+                onAction();
+                action.onClick();
+              }}
+              className="shrink-0 rounded-full bg-white/[0.14] px-3 py-1 text-[12px] font-bold tracking-[-0.01em] text-white transition-colors hover:bg-white/25 active:scale-95"
+            >
+              {action.label}
+            </button>
+          </>
+        ) : null}
+        {/* auto-dismiss progress hairline — longer when an action needs a click */}
         <motion.span
           aria-hidden
           initial={{ scaleX: 1 }}
           animate={{ scaleX: 0 }}
-          transition={{ duration: 2.4, ease: "linear" }}
+          transition={{ duration: action ? 4.2 : 2.4, ease: "linear" }}
           className="absolute inset-x-0 bottom-0 h-[2.5px] origin-left rounded-full bg-[#64D2FF]/60"
         />
       </motion.div>
@@ -222,7 +238,7 @@ export function AppShell() {
   const [tab, setTabState] = useState<Tab>("home");
   const [query, setQuery] = useState("");
   const [scrolled, setScrolled] = useState(false);
-  const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
+  const [toast, setToast] = useState<{ id: number; message: string; action?: ToastAction } | null>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [player, setPlayer] = useState<PlayerPayload | null>(null);
   const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
@@ -298,6 +314,22 @@ export function AppShell() {
     });
   }, []);
 
+  /** Deletes a draft — returns the removed draft so callers can offer Undo */
+  const deleteDraft = useCallback((id: string): UserDraft | null => {
+    let removed: UserDraft | null = null;
+    setDrafts((prev) => {
+      removed = prev.find((d) => d.id === id) ?? null;
+      const next = prev.filter((d) => d.id !== id);
+      try {
+        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    return removed;
+  }, []);
+
   const closeTour = useCallback(() => {
     setTourOpen(false);
     try {
@@ -330,13 +362,13 @@ export function AppShell() {
     });
   }, []);
 
-  const notify = useCallback((message: string) => {
-    setToast({ id: Date.now(), message });
+  const notify = useCallback((message: string, action?: ToastAction) => {
+    setToast({ id: Date.now(), message, ...(action ? { action } : {}) });
   }, []);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2400);
+    const t = setTimeout(() => setToast(null), toast.action ? 4300 : 2400);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -461,6 +493,7 @@ export function AppShell() {
           setTheme,
           drafts,
           saveDraft,
+          deleteDraft,
           paletteOpen,
           openPalette,
           closePalette,
@@ -550,7 +583,14 @@ export function AppShell() {
 
         {/* Toast — topmost layer, above sheets and the player */}
         <AnimatePresence>
-          {toast ? <GlassToast key={toast.id} message={toast.message} /> : null}
+          {toast ? (
+            <GlassToast
+              key={toast.id}
+              message={toast.message}
+              action={toast.action}
+              onAction={() => setToast(null)}
+            />
+          ) : null}
         </AnimatePresence>
 
         {/* Sheets */}

@@ -449,3 +449,42 @@ Stage Summary:
 - Known tooling quirks (not app bugs): agent-browser `errors` prints empty ✗ marks; eval variable redeclaration across calls needs IIFEs; exit animations need ~1s before absent-checks; Preview button is icon-only (aria-label match required).
 - Next-phase candidates: Prisma models + real CRUD (UI is feature-complete at every breakpoint incl. power layer), scene-level cover art picker in builder, insights export/share card, e2e harness, print styles.
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+---
+Task ID: 11
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 11)
+Task: Assess project status, QA via agent-browser, then continue development — focus: draft management (delete + Undo) and global search in Explore, per the round mandate (more features + more styling detail).
+
+Work Log:
+- Status assessment: dev server healthy (all GET / 200), lint clean, round-10 build stable (sidebar 264px at 1440, home renders, zero errors on hooks). Worklog's "scene-level cover art picker" candidate was checked and found ALREADY BUILT (builder has a Cover art card + picker sheet with all 10 palettes) — candidate list was stale.
+- QA gap hunt found two real issues:
+  1. Drafts could never be deleted — user-saved drafts accumulate in localStorage (cap 12) with no removal path anywhere in the UI.
+  2. Explore search only filtered the ACTIVE segment — a query matching only "picks"/"new" items showed a false "Nothing found" while on "trending" (e.g. "Paper Moon" is picks-only).
+- NEW FEATURE — Toast action buttons (enables Undo patterns app-wide):
+  - md-context: notify(message, action?: ToastAction) + ToastAction type {label, onClick}.
+  - GlassToast: hairline divider + action pill (bg-white/14, hover 25, bold white text) between message and progress hairline; auto-dismiss extends 2.4s → 4.3s when an action needs a click (progress hairline animates over the same duration). Toast container gains pointer-events-auto on the pill itself so it stays clickable over content.
+- NEW FEATURE — Draft deletion with Undo (Gallery + Home):
+  - md-context + app-shell: deleteDraft(id) — removes from state + localStorage, returns the removed UserDraft for undo.
+  - Gallery "Mine" cards: cards restructured from <motion.button> to <motion.div role="button" tabIndex={0}> (ExploreCard precedent) with keyboard activation; glassy white/85 trash pill (30px, backdrop-blur, hover → #FF375F red with white icon, active:scale-90) at the cover's top-right; stopPropagation so the card's open-builder click never fires. Grid items wrapped in <AnimatePresence initial={false}> with layout + exit {opacity:0, scale:0.92} — deleted cards animate out and siblings reflow smoothly.
+  - Home "Continue Creating" cards: same treatment (26px trash, "Mine" badge moved to top-LEFT to make room); delete handler resolves the full UserDraft from context so Undo restores it exactly.
+  - Undo flow: delete → toast "“title” deleted" with Undo → click → saveDraft re-inserts (dedupe-safe) → confirmation toast "“title” restored". Verified end-to-end twice at desktop (card exits, storage 0→1, card returns on Undo).
+- FIX — Explore global search:
+  - When a query is active, the filter base becomes ALL EXPLORE_ITEMS (Spotlight model) instead of the current segment; the SegmentedControl dims (opacity-40 + pointer-events-none, 200ms fade) and the results bar reads "Showing results for “q” · all categories" + Clear.
+  - Empty state corrected: while searching, the SearchX "Nothing found" state shows even on the Saved segment (previously showed the bookmark empty-state).
+  - Verified: on Trending, searching "paper" now finds picks-only "Paper Moon" (2 results incl. @paperlab creator match); gibberish shows "Nothing found"; Clear un-dims the control and restores the 6 trending cards.
+- STYLING details: trash pills (glass + hover-red + spring press), toast divider + action pill, segment dim transition, gallery exit/layout animations, card cursor-pointer affordance.
+
+- VERIFICATION (agent-browser at 1440×900 and 390×844 + VLM):
+  - Gallery: seeded draft card renders with trash; delete → card gone + storage empty + "deleted" toast with Undo; Undo → card back + "restored" toast + storage restored. Repeat on Home Continue Creating — identical result.
+  - Explore: "paper" on Trending → Paper Moon + Static Bloom (creator match), "all categories" note, dimmed control; "zzzqx" → Nothing found; Clear → control live, 6 trending cards.
+  - Phone regression: draft card + trash visible at 390; 5 tabs cycle; zero page errors, zero console errors. Toast expiry between separate CLI calls is expected (4.3s window vs. process latency) — the flow was verified with immediate clicks.
+  - VLM visual QA: search results view PASS (cards clean, search bar + results bar visible); undo toast PASS (readable, well-positioned, "distinct and interactive-looking"). No defects in either.
+  - lint exit 0; dev.log only 200s; HTTP 200.
+
+Stage Summary:
+- Round 11 complete — drafts are now a managed lifecycle (create → edit → delete → undo) and Explore search behaves like a real global search. The toast system gained a reusable action-button primitive (Undo pattern) usable by any future feature.
+- Still UI-only with mock data per the user's standing instruction. localStorage keys unchanged: md-onboarded, md-saved, md-drafts, md-theme, md-rail.
+- Files: MODIFIED md-context.tsx (ToastAction + notify action param + deleteDraft), app-shell.tsx (GlassToast action UI + toast timing + deleteDraft + provider), gallery-view.tsx (role=button cards + trash + AnimatePresence exits), home-view.tsx (Continue Creating trash + role=button cards), explore-view.tsx (global search + segment dim + empty-state fix).
+- Layer stack unchanged: content z-10 < chrome z-50 < builder z-60 < player z-70 < sheets z-80/81 < toast z-90 < tour z-95 < palette z-96 < shortcuts help z-97.
+- Known tooling quirks (not app bugs): agent-browser `errors` empty ✗ marks; MultiEdit applies sequentially and aborts on first mismatch (verify partial application); toast Undo clicks must land within the 4.3s window (combine delete+click in back-to-back evals); `#explore-segments` id is not directly queryable (verify dim via the wrapper's opacity-40 class).
+- Next-phase candidates: Prisma models + real CRUD (UI feature-complete), insights export/share card, notification swipe-to-dismiss, draft rename, e2e harness, print styles.
+- Reminder: user should rotate the GitHub token shared earlier in chat.
