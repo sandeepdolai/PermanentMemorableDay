@@ -4,12 +4,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Bell, Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
 import { NOTIFICATIONS, PRICING_PLANS } from "@/lib/mock-data";
-import { MDContext, type PlayerPayload, type SharePayload, type Sheet, type Tab } from "./md-context";
+import {
+  MDContext,
+  type BuilderOptions,
+  type PlayerPayload,
+  type SettingsTopic,
+  type SharePayload,
+  type Sheet,
+  type Tab,
+} from "./md-context";
+import type { ExploreItem } from "@/lib/mock-data";
 import { SearchBar } from "./search-bar";
 import { BottomNav } from "./bottom-nav";
 import { BottomSheet } from "./bottom-sheet";
 import { MomentPlayer } from "./moment-player";
-import { NotificationsContent, ShareContent } from "./sheet-contents";
+import { ExperienceBuilder } from "./builder";
+import { ExploreContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent } from "./sheet-contents";
 import { HomeView } from "./views/home-view";
 import { CreateView } from "./views/create-view";
 import { ExploreView } from "./views/explore-view";
@@ -201,6 +211,9 @@ export function AppShell() {
   const [sheet, setSheet] = useState<Sheet>(null);
   const [player, setPlayer] = useState<PlayerPayload | null>(null);
   const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
+  const [builder, setBuilder] = useState<BuilderOptions | null>(null);
+  const [settingsTopic, setSettingsTopic] = useState<SettingsTopic | null>(null);
+  const [exploreItem, setExploreItem] = useState<ExploreItem | null>(null);
   const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -246,6 +259,22 @@ export function AppShell() {
 
   const closeMoment = useCallback(() => setPlayer(null), []);
 
+  const openBuilder = useCallback((opts?: BuilderOptions) => {
+    setBuilder(opts ?? {});
+  }, []);
+
+  const closeBuilder = useCallback(() => setBuilder(null), []);
+
+  const openSettings = useCallback((topic: SettingsTopic) => {
+    setSettingsTopic(topic);
+    setSheet("settings");
+  }, []);
+
+  const openExplore = useCallback((item: ExploreItem) => {
+    setExploreItem(item);
+    setSheet("explore");
+  }, []);
+
   const openShare = useCallback((m: SharePayload) => {
     setSharePayload(m);
     setSheet("share");
@@ -261,7 +290,29 @@ export function AppShell() {
   return (
     <MotionConfig reducedMotion="user">
       <MDContext.Provider
-        value={{ tab, setTab, query, setQuery, submitSearch, notify, openSheet, sheet, openMoment, openShare, unreadCount, markAllRead }}
+        value={{
+          tab,
+          setTab,
+          query,
+          setQuery,
+          submitSearch,
+          notify,
+          openSheet,
+          sheet,
+          openMoment,
+          player,
+          closePlayer: closeMoment,
+          openShare,
+          unreadCount,
+          markAllRead,
+          openBuilder,
+          builder,
+          closeBuilder,
+          openSettings,
+          settingsTopic,
+          openExplore,
+          exploreItem,
+        }}
       >
       <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05]">
         {/* Top chrome: signature search pill + bell (Home/Explore) or compact title + bell on scroll */}
@@ -333,11 +384,7 @@ export function AppShell() {
           <CreateStartContent
             onStart={(mode) => {
               setSheet(null);
-              notify(
-                mode === "ai"
-                  ? "AI Creator will open here — UI preview"
-                  : "The experience builder will open here — UI preview"
-              );
+              openBuilder(mode === "ai" ? { ai: true, cover: 9, title: "Untitled Experience" } : { cover: 5 });
             }}
           />
         </BottomSheet>
@@ -371,6 +418,60 @@ export function AppShell() {
         >
           {sharePayload ? <ShareContent moment={sharePayload} onNotify={notify} /> : null}
         </BottomSheet>
+
+        {/* Settings detail sheet */}
+        <BottomSheet
+          open={sheet === "settings"}
+          onClose={() => setSheet(null)}
+          title={settingsTopic ? SETTINGS_TITLES[settingsTopic] : "Settings"}
+        >
+          {settingsTopic ? (
+            <SettingsContent
+              key={settingsTopic}
+              topic={settingsTopic}
+              onOpenPricing={() => {
+                setSheet(null);
+                window.setTimeout(() => setSheet("pricing"), 260);
+              }}
+              onNotify={notify}
+            />
+          ) : null}
+        </BottomSheet>
+
+        {/* Explore template preview sheet */}
+        <BottomSheet
+          open={sheet === "explore"}
+          onClose={() => setSheet(null)}
+          ariaLabel={exploreItem ? `Template: ${exploreItem.title}` : "Template"}
+        >
+          {exploreItem ? (
+            <ExploreContent
+              item={exploreItem}
+              onPreview={() => {
+                const it = exploreItem;
+                setSheet(null);
+                window.setTimeout(
+                  () => openMoment({ id: it.id, title: it.title, cover: it.cover, dedication: `By ${it.creator}` }),
+                  220
+                );
+              }}
+              onUseLayout={() => {
+                const it = exploreItem;
+                setSheet(null);
+                window.setTimeout(
+                  () => openBuilder({ title: it.title, cover: it.cover, scenes: 3 }),
+                  260
+                );
+              }}
+              onNotify={notify}
+            />
+          ) : null}
+        </BottomSheet>
+
+        {/* Experience builder layer */}
+        <AnimatePresence>
+          {builder ? <ExperienceBuilder key="builder" opts={builder} onClose={closeBuilder} /> : null}
+        </AnimatePresence>
 
         {/* Recipient experience player */}
         <AnimatePresence>

@@ -21,7 +21,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 
 export function GalleryView() {
-  const { openMoment } = useMD();
+  const { openMoment, openBuilder } = useMD();
   const [filter, setFilter] = useState<Filter>("all");
   const loading = useSkeleton(filter);
 
@@ -85,7 +85,12 @@ export function GalleryView() {
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(idx * 0.035, 0.25), duration: 0.3, ease: "easeOut" }}
-              onClick={() => openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` })}
+              onClick={() =>
+                m.status === "draft"
+                  ? openBuilder({ title: m.title, cover: m.cover, scenes: m.scenes })
+                  : openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` })
+              }
+              aria-label={`${m.title}, ${m.status === "draft" ? "continue editing" : "play moment"}`}
               className="card-shadow hairline overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.97]"
             >
               <CoverArt variant={m.cover} className="aspect-square w-full">

@@ -17,22 +17,22 @@ import { CoverArt } from "../cover-art";
 import { LargeTitle, SectionHeader } from "../bits";
 import { useMD } from "../md-context";
 
-/** Scene block types from the PRD Experience Builder */
+/** Scene block types from the PRD Experience Builder (type ids match the builder) */
 const SCENE_BLOCKS = [
-  { label: "Text", icon: Type },
-  { label: "Photo", icon: ImagesIcon },
-  { label: "Video", icon: Video },
-  { label: "Audio", icon: Music },
-  { label: "3D Gift", icon: Gift },
-  { label: "Countdown", icon: Clock },
-  { label: "Quiz", icon: ListChecks },
-  { label: "Reward", icon: Award },
-  { label: "Button", icon: MousePointerClick },
-  { label: "Confetti", icon: PartyPopper },
+  { label: "Text", type: "text", icon: Type },
+  { label: "Photo", type: "photo", icon: ImagesIcon },
+  { label: "Video", type: "video", icon: Video },
+  { label: "Audio", type: "audio", icon: Music },
+  { label: "3D Gift", type: "gift", icon: Gift },
+  { label: "Countdown", type: "countdown", icon: Clock },
+  { label: "Quiz", type: "quiz", icon: ListChecks },
+  { label: "Reward", type: "reward", icon: Award },
+  { label: "Button", type: "cta", icon: MousePointerClick },
+  { label: "Confetti", type: "confetti", icon: PartyPopper },
 ];
 
 export function CreateView() {
-  const { openSheet, notify } = useMD();
+  const { openSheet, openBuilder } = useMD();
 
   return (
     <div className="space-y-8 px-5 pb-36 pt-[88px]">
@@ -75,7 +75,7 @@ export function CreateView() {
 
       {/* Scene blocks */}
       <section aria-label="Scene blocks">
-        <SectionHeader title="Scene Blocks" sub="Drop-ready blocks for your story" />
+        <SectionHeader title="Scene Blocks" sub="Tap a block to drop it into a new scene" />
         <div className="grid grid-cols-3 gap-3">
           {SCENE_BLOCKS.map((b) => {
             const Icon = b.icon;
@@ -83,7 +83,8 @@ export function CreateView() {
               <button
                 key={b.label}
                 type="button"
-                onClick={() => notify(`“${b.label}” block — builder UI preview`)}
+                aria-label={`Start a scene with a ${b.label} block`}
+                onClick={() => openBuilder({ initialBlock: b.type, cover: 5 })}
                 className="card-shadow hairline flex flex-col items-center gap-2 rounded-[20px] bg-white px-2 py-4 transition-transform active:scale-[0.94]"
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#007AFF]/[0.1] text-[#007AFF]">
@@ -100,9 +101,9 @@ export function CreateView() {
 
       {/* AI Creator promo */}
       <section aria-label="AI Creator">
-        <div className="relative overflow-hidden rounded-[26px] p-5 text-white" style={{ background: "linear-gradient(135deg, #007AFF 0%, #40A9FF 60%, #64D2FF 100%)" }}>
-          <div aria-hidden className="absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/25 blur-2xl" />
-          <div aria-hidden className="absolute -bottom-14 -left-8 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
+        <div className="md-gradient-drift relative overflow-hidden rounded-[26px] p-5 text-white" style={{ background: "linear-gradient(135deg, #007AFF 0%, #40A9FF 60%, #64D2FF 100%)" }}>
+          <div aria-hidden className="md-float absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/25 blur-2xl" />
+          <div aria-hidden className="md-float-slow absolute -bottom-14 -left-8 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
           <div className="relative">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] backdrop-blur-sm">
               <Sparkles size={11} aria-hidden /> AI Creator
@@ -116,7 +117,7 @@ export function CreateView() {
             <div className="mt-4 flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => notify("AI Creator opens here — UI preview")}
+                onClick={() => openBuilder({ ai: true, cover: 9, title: "Untitled Experience" })}
                 className="rounded-full bg-white px-5 py-2.5 text-[14px] font-semibold text-[#007AFF] shadow-[0_8px_20px_-6px_rgba(0,0,0,0.25)] transition-transform active:scale-95"
               >
                 Try it

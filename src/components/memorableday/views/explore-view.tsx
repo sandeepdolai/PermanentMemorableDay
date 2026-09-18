@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Eye, Heart, SearchX } from "lucide-react";
-import { EXPLORE_ITEMS } from "@/lib/mock-data";
+import { EXPLORE_ITEMS, type ExploreItem } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
 import { EmptyState, LargeTitle, SkeletonCard } from "../bits";
 import { SegmentedControl } from "../segmented-control";
 import { useSkeleton } from "../use-skeleton";
 import { useMD } from "../md-context";
+import { cn } from "@/lib/utils";
 
 type Segment = "trending" | "new" | "picks";
 
@@ -23,8 +24,9 @@ function formatCount(n: number): string {
 }
 
 export function ExploreView() {
-  const { query, setQuery, openMoment } = useMD();
+  const { query, setQuery, openExplore } = useMD();
   const [segment, setSegment] = useState<Segment>("trending");
+  const [liked, setLiked] = useState<Record<string, boolean>>({});
   const loading = useSkeleton(segment);
 
   const items = useMemo(() => {
@@ -90,36 +92,11 @@ export function ExploreView() {
             <ExploreCard
               key={item.id}
               idx={idx}
-              onClick={() =>
-                openMoment({ id: item.id, title: item.title, cover: item.cover, dedication: `By ${item.creator}` })
-              }
-            >
-              <CoverArt variant={item.cover} className="aspect-[4/3.4] w-full rounded-t-[22px]">
-                <span className="absolute bottom-2.5 right-2.5 flex items-center gap-1 rounded-full bg-[#1D1D1F]/30 px-2 py-1 text-[10.5px] font-semibold text-white backdrop-blur-md">
-                  <Eye size={11} aria-hidden /> {formatCount(item.views)}
-                </span>
-              </CoverArt>
-              <div className="p-3">
-                <p className="truncate text-[14.5px] font-bold tracking-[-0.015em] text-[#1D1D1F]">
-                  {item.title}
-                </p>
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span
-                      aria-hidden
-                      className="h-[18px] w-[18px] shrink-0 rounded-full"
-                      style={{
-                        background: `linear-gradient(135deg, hsl(${(item.cover * 37) % 360} 70% 55%), hsl(${(item.cover * 37 + 60) % 360} 70% 65%))`,
-                      }}
-                    />
-                    <span className="truncate text-[12px] text-[#AAAAAA]">{item.creator}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1 text-[12px] font-medium text-[#AAAAAA]">
-                    <Heart size={11} aria-hidden /> {formatCount(item.likes)}
-                  </span>
-                </div>
-              </div>
-            </ExploreCard>
+              item={item}
+              liked={Boolean(liked[item.id])}
+              onOpen={() => openExplore(item)}
+              onToggleLike={() => setLiked((l) => ({ ...l, [item.id]: !l[item.id] }))}
+            />
           ))}
         </div>
       )}
@@ -127,26 +104,95 @@ export function ExploreView() {
   );
 }
 
-/** Card wrapper with entrance animation */
+/** Card with entrance animation, like toggle + template preview */
 function ExploreCard({
   idx,
-  onClick,
-  children,
+  item,
+  liked,
+  onOpen,
+  onToggleLike,
 }: {
   idx: number;
-  onClick: () => void;
-  children: React.ReactNode;
+  item: ExploreItem;
+  liked: boolean;
+  onOpen: () => void;
+  onToggleLike: () => void;
 }) {
   return (
-    <motion.button
-      type="button"
-      onClick={onClick}
+    <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(idx * 0.04, 0.3), duration: 0.3, ease: "easeOut" }}
       className="card-shadow hairline overflow-hidden rounded-[22px] bg-white text-left"
     >
-      {children}
-    </motion.button>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`${item.title} by ${item.creator}. Open template preview`}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        className="cursor-pointer transition-transform active:scale-[0.97]"
+      >
+        <CoverArt variant={item.cover} className="aspect-[4/3.4] w-full rounded-t-[22px]">
+          <span className="absolute bottom-2.5 right-2.5 flex items-center gap-1 rounded-full bg-[#1D1D1F]/30 px-2 py-1 text-[10.5px] font-semibold text-white backdrop-blur-md">
+            <Eye size={11} aria-hidden /> {formatCount(item.views)}
+          </span>
+        </CoverArt>
+        <div className="p-3">
+          <p className="truncate text-[14.5px] font-bold tracking-[-0.015em] text-[#1D1D1F]">
+            {item.title}
+          </p>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span
+                aria-hidden
+                className="h-[18px] w-[18px] shrink-0 rounded-full"
+                style={{
+                  background: `linear-gradient(135deg, hsl(${(item.cover * 37) % 360} 70% 55%), hsl(${(item.cover * 37 + 60) % 360} 70% 65%))`,
+                }}
+              />
+              <span className="truncate text-[12px] text-[#AAAAAA]">{item.creator}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Like row */}
+      <div className="flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3 py-2">
+        <button
+          type="button"
+          onClick={onToggleLike}
+          aria-pressed={liked}
+          aria-label={liked ? `Unlike ${item.title}` : `Like ${item.title}`}
+          className={cn(
+            "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-all active:scale-90",
+            liked ? "bg-[#FF375F]/[0.1] text-[#FF375F]" : "text-[#AAAAAA] hover:bg-[#1D1D1F]/[0.04]"
+          )}
+        >
+          <motion.span
+            key={String(liked)}
+            initial={{ scale: liked ? 0.5 : 1 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 500, damping: 18 }}
+            className="flex items-center"
+          >
+            <Heart size={13} fill={liked ? "currentColor" : "none"} aria-hidden />
+          </motion.span>
+          {formatCount(item.likes + (liked ? 1 : 0))}
+        </button>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="rounded-full bg-[#007AFF]/[0.08] px-3 py-1 text-[11.5px] font-semibold text-[#007AFF] transition-transform active:scale-95"
+        >
+          View
+        </button>
+      </div>
+    </motion.div>
   );
 }

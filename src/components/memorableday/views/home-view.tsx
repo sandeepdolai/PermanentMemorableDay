@@ -14,7 +14,7 @@ const STATS = [
 ];
 
 export function HomeView() {
-  const { setTab, notify, openMoment, openShare } = useMD();
+  const { setTab, openMoment, openShare, openBuilder } = useMD();
   const [greeting, setGreeting] = useState("Hello");
 
   useEffect(() => {
@@ -92,7 +92,8 @@ export function HomeView() {
             <button
               key={d.id}
               type="button"
-              onClick={() => notify("The experience builder opens here — UI preview")}
+              aria-label={`Continue editing ${d.title}`}
+              onClick={() => openBuilder({ title: d.title, cover: d.cover, scenes: d.scenes })}
               className="card-shadow hairline w-[168px] shrink-0 rounded-[22px] bg-white p-2.5 text-left transition-transform active:scale-[0.97]"
             >
               <CoverArt variant={d.cover} className="aspect-[4/3] w-full rounded-[15px]" />
@@ -176,7 +177,7 @@ export function HomeView() {
         <div className="relative overflow-hidden rounded-[24px] bg-[#1D1D1F] p-5">
           <div
             aria-hidden
-            className="absolute -right-10 -top-14 h-40 w-40 rounded-full opacity-60 blur-2xl"
+            className="md-float absolute -right-10 -top-14 h-40 w-40 rounded-full opacity-60 blur-2xl"
             style={{ background: "radial-gradient(circle, rgba(0,122,255,0.55), transparent 70%)" }}
           />
           <div className="relative">

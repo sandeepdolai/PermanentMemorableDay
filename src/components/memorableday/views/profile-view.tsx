@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   Bell,
   ChevronRight,
@@ -13,11 +14,14 @@ import {
   LogOut,
   Mail,
   ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  User,
   Zap,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { USER } from "@/lib/mock-data";
-import { LargeTitle } from "../bits";
+import { CountUp, LargeTitle } from "../bits";
 import { useMD } from "../md-context";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +34,7 @@ interface RowBase {
 
 interface LinkRow extends RowBase {
   kind: "link";
+  action: () => void;
 }
 interface ToggleRow extends RowBase {
   kind: "toggle";
@@ -38,40 +43,9 @@ interface ToggleRow extends RowBase {
 interface ValueRow extends RowBase {
   kind: "value";
   value: string;
+  action: () => void;
 }
 type Row = LinkRow | ToggleRow | ValueRow;
-
-const SECTIONS: Array<{ title: string; rows: Row[] }> = [
-  {
-    title: "Notifications",
-    rows: [
-      { kind: "toggle", icon: Bell, tint: "#FF375F", label: "Push notifications", initial: true },
-      { kind: "toggle", icon: Mail, tint: "#007AFF", label: "Email updates", initial: false },
-    ],
-  },
-  {
-    title: "Billing",
-    rows: [
-      { kind: "value", icon: CreditCard, tint: "#30D158", label: "AI credits", value: `${USER.credits} left` },
-      { kind: "link", icon: FileText, tint: "#FF9F0A", label: "Invoices" },
-      { kind: "link", icon: ShieldCheck, tint: "#007AFF", label: "Payment method" },
-    ],
-  },
-  {
-    title: "Preferences",
-    rows: [
-      { kind: "value", icon: Globe, tint: "#007AFF", label: "Language", value: "English" },
-      { kind: "toggle", icon: Lock, tint: "#8E8E93", label: "Password protect moments", initial: false },
-    ],
-  },
-  {
-    title: "Support",
-    rows: [
-      { kind: "link", icon: LifeBuoy, tint: "#FF9F0A", label: "Help center" },
-      { kind: "link", icon: Mail, tint: "#007AFF", label: "Contact support" },
-    ],
-  },
-];
 
 const STATS = [
   { label: "Created", value: String(USER.stats.created) },
@@ -80,13 +54,87 @@ const STATS = [
   { label: "Loves", value: String(USER.stats.loves) },
 ];
 
-export function ProfileView() {
-  const { notify, openSheet } = useMD();
-  const [toggles, setToggles] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(
-      SECTIONS.flatMap((s) => s.rows).map((r, i) => [`${r.kind}-${r.label}-${i}`, r.kind === "toggle" ? r.initial : false])
-    )
+/* ------------------------------------------------------------------ */
+/* AI credits ring                                                     */
+/* ------------------------------------------------------------------ */
+
+function CreditRing({ used, total }: { used: number; total: number }) {
+  const R = 36;
+  const C = 2 * Math.PI * R;
+  const frac = Math.max(0, Math.min(1, (total - used) / total));
+  return (
+    <div className="relative h-[92px] w-[92px] shrink-0" role="img" aria-label={`${total - used} of ${total} AI credits remaining`}>
+      <svg width="92" height="92" viewBox="0 0 92 92" className="-rotate-90">
+        <circle cx="46" cy="46" r={R} fill="none" stroke="rgba(0,122,255,0.12)" strokeWidth="9" />
+        <motion.circle
+          cx="46"
+          cy="46"
+          r={R}
+          fill="none"
+          stroke="url(#md-credit-grad)"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeDasharray={C}
+          initial={{ strokeDashoffset: C }}
+          animate={{ strokeDashoffset: C * (1 - frac) }}
+          transition={{ duration: 1.15, ease: [0.22, 1, 0.36, 1] }}
+        />
+        <defs>
+          <linearGradient id="md-credit-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#007AFF" />
+            <stop offset="100%" stopColor="#64D2FF" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <span className="absolute inset-0 flex flex-col items-center justify-center">
+        <CountUp value={String(total - used)} className="text-[24px] font-bold tabular-nums tracking-[-0.03em] text-[#1D1D1F]" />
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-[#AAAAAA]">left</span>
+      </span>
+    </div>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Profile view                                                        */
+/* ------------------------------------------------------------------ */
+
+export function ProfileView() {
+  const { notify, openSheet, openSettings } = useMD();
+  const [toggles, setToggles] = useState<Record<string, boolean>>({});
+
+  const sections: Array<{ title: string; rows: Row[] }> = [
+    {
+      title: "Notifications",
+      rows: [
+        { kind: "toggle", icon: Bell, tint: "#FF375F", label: "Push notifications", initial: true },
+        { kind: "toggle", icon: Mail, tint: "#007AFF", label: "Email updates", initial: false },
+        { kind: "link", icon: SlidersHorizontal, tint: "#5E5CE6", label: "Notification preferences", action: () => openSettings("notifications") },
+      ],
+    },
+    {
+      title: "Billing",
+      rows: [
+        { kind: "value", icon: CreditCard, tint: "#30D158", label: "AI credits", value: `${USER.credits - 64} left`, action: () => openSheet("pricing") },
+        { kind: "link", icon: FileText, tint: "#FF9F0A", label: "Invoices", action: () => notify("Invoices — UI preview") },
+        { kind: "link", icon: ShieldCheck, tint: "#007AFF", label: "Payment method", action: () => notify("Payment method — UI preview") },
+      ],
+    },
+    {
+      title: "Preferences",
+      rows: [
+        { kind: "value", icon: Globe, tint: "#007AFF", label: "Language", value: "English", action: () => notify("Language — UI preview") },
+        { kind: "toggle", icon: Lock, tint: "#8E8E93", label: "Password protect moments", initial: false },
+        { kind: "link", icon: ShieldCheck, tint: "#30D158", label: "Privacy & security", action: () => openSettings("privacy") },
+      ],
+    },
+    {
+      title: "Support",
+      rows: [
+        { kind: "link", icon: LifeBuoy, tint: "#FF9F0A", label: "Help center", action: () => openSettings("help") },
+        { kind: "link", icon: Mail, tint: "#007AFF", label: "Contact support", action: () => openSettings("help") },
+      ],
+    },
+  ];
 
   return (
     <div className="space-y-6 px-5 pb-36 pt-[88px]">
@@ -94,33 +142,68 @@ export function ProfileView() {
         <LargeTitle>Profile</LargeTitle>
       </header>
 
-      {/* Identity card */}
-      <section aria-label="Account" className="card-shadow hairline rounded-[26px] bg-white p-5">
-        <div className="flex items-center gap-4">
-          <span
-            aria-hidden
-            className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-full text-[22px] font-bold text-white shadow-[0_10px_24px_-8px_rgba(0,122,255,0.55)]"
-            style={{ background: "linear-gradient(135deg, #007AFF 0%, #40B4FF 60%, #64D2FF 100%)" }}
-          >
-            {USER.initials}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[19px] font-bold tracking-[-0.02em] text-[#1D1D1F]">{USER.name}</h2>
-            <p className="truncate text-[13px] text-[#AAAAAA]">{USER.email}</p>
-            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-[#007AFF]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#007AFF]">
-              <Crown size={11} aria-hidden /> {USER.plan} plan
+      {/* Identity card — opens Account settings */}
+      <section aria-label="Account">
+        <button
+          type="button"
+          onClick={() => openSettings("account")}
+          aria-label="Open account settings"
+          className="card-shadow hairline active:scale-[0.98] w-full rounded-[26px] bg-white p-5 text-left transition-transform"
+        >
+          <div className="flex items-center gap-4">
+            <span
+              aria-hidden
+              className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-full text-[22px] font-bold text-white shadow-[0_10px_24px_-8px_rgba(0,122,255,0.55)]"
+              style={{ background: "linear-gradient(135deg, #007AFF 0%, #40B4FF 60%, #64D2FF 100%)" }}
+            >
+              {USER.initials}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[19px] font-bold tracking-[-0.02em] text-[#1D1D1F]">{USER.name}</h2>
+              <p className="truncate text-[13px] text-[#AAAAAA]">{USER.email}</p>
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-[#007AFF]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#007AFF]">
+                <Crown size={11} aria-hidden /> {USER.plan} plan
+              </span>
+            </div>
+            <span className="flex shrink-0 flex-col items-center gap-1 text-[#C7C7CC]">
+              <User size={17} aria-hidden />
             </span>
           </div>
-        </div>
 
-        {/* Stats */}
-        <div className="mt-5 grid grid-cols-4 gap-2">
-          {STATS.map((s) => (
-            <div key={s.label} className="rounded-[16px] bg-[#F5F5F7] px-2 py-2.5 text-center">
-              <p className="text-[17px] font-bold tracking-[-0.02em] text-[#1D1D1F]">{s.value}</p>
-              <p className="mt-0.5 text-[10.5px] font-medium text-[#AAAAAA]">{s.label}</p>
+          {/* Stats */}
+          <div className="mt-5 grid grid-cols-4 gap-2">
+            {STATS.map((s) => (
+              <div key={s.label} className="rounded-[16px] bg-[#F5F5F7] px-2 py-2.5 text-center">
+                <p className="text-[17px] font-bold tracking-[-0.02em] text-[#1D1D1F]">{s.value}</p>
+                <p className="mt-0.5 text-[10.5px] font-medium text-[#AAAAAA]">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </button>
+      </section>
+
+      {/* AI credits */}
+      <section aria-label="AI credits">
+        <div className="card-shadow hairline flex items-center gap-4 rounded-[26px] bg-white p-4">
+          <CreditRing used={64} total={USER.credits} />
+          <div className="min-w-0 flex-1">
+            <h2 className="flex items-center gap-1.5 text-[16px] font-bold tracking-[-0.02em] text-[#1D1D1F]">
+              <Sparkles size={15} className="text-[#5E5CE6]" aria-hidden /> AI Credits
+            </h2>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
+              Powers the AI Creator, tone adjuster and scene suggester.
+            </p>
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openSheet("pricing")}
+                className="rounded-full bg-[#007AFF] px-4 py-2 text-[13px] font-semibold text-white pill-shadow transition-transform active:scale-95"
+              >
+                Get more
+              </button>
+              <span className="text-[11px] font-medium text-[#AAAAAA]">Resets Nov 1</span>
             </div>
-          ))}
+          </div>
         </div>
       </section>
 
@@ -132,7 +215,7 @@ export function ProfileView() {
       >
         <div
           aria-hidden
-          className="absolute -right-12 -top-16 h-44 w-44 rounded-full opacity-70 blur-2xl"
+          className="md-float absolute -right-12 -top-16 h-44 w-44 rounded-full opacity-70 blur-2xl"
           style={{ background: "radial-gradient(circle, rgba(0,122,255,0.6), transparent 70%)" }}
         />
         <div className="relative">
@@ -155,7 +238,7 @@ export function ProfileView() {
       </button>
 
       {/* Grouped settings */}
-      {SECTIONS.map((section) => (
+      {sections.map((section) => (
         <section key={section.title} aria-label={section.title}>
           <h2 className="mb-2 px-4 text-[12px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
             {section.title}
@@ -187,30 +270,23 @@ export function ProfileView() {
                         aria-label={row.label}
                       />
                     </>
-                  ) : row.kind === "value" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => notify(`${row.label} — settings preview`)}
-                        className="flex-1 text-left text-[15px] font-medium tracking-[-0.01em] text-[#1D1D1F]"
-                      >
-                        {row.label}
-                      </button>
-                      <span className="text-[14px] text-[#AAAAAA]">{row.value}</span>
-                      <ChevronRight size={15} className="text-[#C7C7CC]" aria-hidden />
-                    </>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => notify(`${row.label} — opening soon`)}
-                      className="flex flex-1 items-center text-left text-[15px] font-medium tracking-[-0.01em] text-[#1D1D1F]"
+                      onClick={row.action}
+                      className="flex flex-1 items-center justify-between text-left"
                     >
-                      {row.label}
+                      <span className="text-[15px] font-medium tracking-[-0.01em] text-[#1D1D1F]">
+                        {row.label}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        {row.kind === "value" ? (
+                          <span className="text-[14px] text-[#AAAAAA]">{row.value}</span>
+                        ) : null}
+                        <ChevronRight size={15} className="text-[#C7C7CC]" aria-hidden />
+                      </span>
                     </button>
                   )}
-                  {row.kind === "link" ? (
-                    <ChevronRight size={15} className="shrink-0 text-[#C7C7CC]" aria-hidden />
-                  ) : null}
                 </div>
               );
             })}

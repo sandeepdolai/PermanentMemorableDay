@@ -7,11 +7,13 @@ interface BottomSheetProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  /** Accessible label when no visual title is shown */
+  ariaLabel?: string;
   children: React.ReactNode;
 }
 
 /** iOS-style bottom sheet with grabber + drag-to-dismiss + Escape */
-export function BottomSheet({ open, onClose, title, children }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, ariaLabel, children }: BottomSheetProps) {
   // Escape to close (sheet sits above the player, so it owns the Escape key while open)
   useEffect(() => {
     if (!open) return;
@@ -40,7 +42,7 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label={title}
+            aria-label={ariaLabel ?? title}
             initial={{ y: "102%" }}
             animate={{ y: 0 }}
             exit={{ y: "102%" }}

@@ -196,3 +196,45 @@ Stage Summary:
 - Known tooling quirks (not app bugs): agent-browser snapshot -i doesn't reflect overlay dialog contents; synchronous double-clicks in one eval hit stale React closures (real users unaffected).
 - Next-phase candidates: settings sub-pages, AI credits ring in Profile, onboarding tour, recipient route /e/[id] (real share target), Prisma backend + auth, experience builder canvas.
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+
+---
+Task ID: 5
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 3)
+Task: Assess project status, QA via agent-browser, then continue development (fix bugs + add features + styling polish per round mandate).
+
+Work Log:
+- Status assessment: read worklog, dev server healthy (GET / 200), 0 page/console errors across all 5 tabs + player + notifications + share. VLM flagged a "critical bottom-nav overlap" on Home — INVESTIGATED AND DISMISSED as false positive: floating nav over mid-scroll content is the intended iOS pattern (all views have pb-36 = 144px clearance; measured footer buttons 20→370px within 390px viewport); the "N FAB" is the dev-only Next.js badge. No real bugs → proceeded to feature work.
+- NEW FEATURE — Experience Builder UI (flagship, PRD Experience Builder system), new file src/components/memorableday/builder.tsx (~570 lines):
+  - Full-screen z-[60] layer with iOS push transition (slide-in from right), role=dialog.
+  - Top chrome: back button, tap-to-rename title (inline input, Enter/blur commit, Escape cancels), "Saved" indicator + "AI sketch" badge (AI mode), blue Preview circle (opens MomentPlayer ABOVE the builder), Share circle (share sheet).
+  - Scene storyboard: horizontal scroll cards (CoverArt + scene number + block count + selection ring with offset), "+ Scene" dashed button (max 8).
+  - Scene canvas: stacked blocks with distinct visual previews per type — text (real copy), photo (CoverArt), video (play overlay + duration), audio (waveform bars), gift (gradient tile + "Reveal" chip), countdown (03:12:45 pill), quiz (option pills), reward (dashed green card), CTA (blue pill), confetti (color dots). Selection ring + Remove button, spring layout animations on add/remove, empty state, drag-handle affordance, keyboard accessible (role=button, aria-pressed, Enter/Space).
+  - Block palette: 10 horizontal chips (PRD block types) — tap appends block to current scene, auto-selects, scrolls into view, toasts.
+  - Footer action bar: Save Draft / Schedule (toasts) / Send (opens share sheet with draft payload).
+  - Entry points wired (5): Create sheet blank (1 empty scene) + AI-assisted (3 pre-sketched scenes + AI badge); Create tab block grid (seeds that block type into scene 1); Home "Continue Creating" draft rows (title/cover/scenes from draft); Gallery draft cards; Explore sheet "Use this layout" (copies title + 3 scenes).
+  - Escape chain verified: sheet (owns Esc) > player (defers while sheet open) > builder (defers while sheet OR player open).
+- NEW FEATURE — AI Credits ring (Profile): animated SVG ring (gradient #007AFF→#64D2FF, stroke-dashoffset draw-in 1.15s), CountUp center (176), "Get more" → pricing sheet, "Resets Nov 1", aria-label on ring. Value row kept in sync ("176 left" = USER.credits − 64).
+- NEW FEATURE — Settings detail sheets (sheet-contents.tsx SettingsContent + SETTINGS_TITLES export): 4 topics — Account (identity header card, Plan→pricing handoff, email, change password, export data, delete account destructive row), Notification Preferences (6 iOS toggles), Privacy & Security (3 toggles + policy/terms links), Help Center (4 guide rows + "Still stuck?" contact card with Email us). Wired from Profile: identity card → Account, "Notification preferences" row, "Privacy & security" row, Help center + Contact support rows.
+- NEW FEATURE — Explore template preview sheet (ExploreContent): CoverArt hero + views badge + bookmark toggle (toast), creator row w/ avatar + like button (count increments), segment chips (Trending/Editor's Pick/New) + #tags, "Preview" (→ MomentPlayer) + "Use this layout" (→ builder) buttons, footer note. Explore cards redesigned: card body opens sheet (role=button, keyboard), like row at bottom (heart toggle w/ spring + live count) + "View" chip.
+- CONTEXT REFACTOR (md-context.tsx): Sheet type + "settings" | "explore"; new BuilderOptions, SettingsTopic types; new context fields — player/closePlayer (Escape deferral), builder/openBuilder/closeBuilder, settingsTopic/openSettings, exploreItem/openExplore.
+- STYLING POLISH (globals.css + views):
+  - New utilities: .md-scroll (thin iOS-style scrollbar, notifications feed), .md-float / .md-float-slow (gentle blob drift 7s/11s), .md-gradient-drift (slow gradient shift 9s) — all neutralized by the existing prefers-reduced-motion global rule.
+  - Applied to: AI Creator card (drift + 2 floating blobs), Profile upgrade banner (floating blob), Home promo card (floating blob).
+  - BottomSheet: new ariaLabel prop (dialogs without visual titles stay accessible); explore sheet uses it.
+  - Micro-interactions: builder blocks/cards/toasts active-scale; scene chips hover affordance; explore like spring pop.
+- Fixed during dev: builder block selection overlay originally covered the Remove button (absolute hit-area) — refactored to the accessible row-button pattern w/ stopPropagation; removed unused imports (EXPLORE_ITEMS, ArrowUpRight, notify in home-view).
+- VERIFICATION (agent-browser + VLM, 390×844 + 1440×900):
+  - Builder: opened from all 5 entry points ✓; add Text block (Scene 1: 2→3 blocks, auto-selected w/ Remove) ✓; remove block ✓; add Scene (4→5, empty, auto-selected) ✓; rename title ✓; Preview → player z-70 above builder z-60 ✓; Escape chain: player closes first, builder second ✓; AI mode badge + 5 "Scene N" labels ✓; gift seed ("3D gift box" present) ✓; footer buttons measured fully visible (VLM "cut-off" claim disproven by bounding boxes).
+  - Explore: like toggle (aria Unlike + count +1) ✓; preview sheet (hero/badge/creator/likes/tags/buttons — VLM ALL PASS) ✓; "Use this layout" → builder titled "Velvet Motion" ✓; "Preview" → player (verified via DOM click; the agent-browser "covered element" find failure is the known locator quirk — elementFromPoint hit test proves the button is topmost and clickable) ✓.
+  - Profile: credits ring renders (VLM: ring + 176 + Get more + Resets Nov 1 ALL PASS) ✓; Account/Notifications/Privacy/Help sheets all open w/ correct labels + content ✓.
+  - Regressions: Gallery draft → builder ✓; notifications mark-all-read ✓; share sheet QR ✓; desktop 1440px centered column + ambient blobs (VLM PASS) ✓; all 5 tabs cycle clean.
+  - ZERO page errors, ZERO console errors, lint clean (exit 0).
+
+Stage Summary:
+- Round 3 complete. The app now covers the product's full creator funnel in UI form: discover (Explore + template preview) → create (Builder with scenes/blocks/AI sketch) → share (QR/link/channels) → track (notifications + stats) → account (settings, credits, pricing).
+- Still UI-only with mock data — no backend, no themed content (per user instruction).
+- Files: NEW builder.tsx; MODIFIED md-context, app-shell, sheet-contents, bottom-sheet, globals.css, home/create/explore/gallery/profile views.
+- Layer stack now: content z-10 < top chrome z-50 < builder z-60 < player z-70 < sheet z-80/81 < toast z-90.
+- Known tooling quirks (not app bugs): agent-browser snapshot -i misses overlay dialog contents; `find ... click` intermittently reports "covered element" on sheet buttons (elementFromPoint proves clickable; eval clicks work).
+- Next-phase candidates: recipient route /e/[slug] (blocked — single-route constraint), Prisma models + real CRUD behind the builder, auth screens, onboarding tour, scene reordering (drag), undo/redo in builder, analytics dashboard UI (PRD §analytics funnel).
+- Reminder: user should rotate the GitHub token shared earlier in chat.
