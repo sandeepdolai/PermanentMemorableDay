@@ -74,3 +74,20 @@ Stage Summary:
 - Payment gateway section is now factually accurate for Dodo Payments (real event names, concepts, pricing).
 - Design system now locked to the exact uploaded palette (#007AFF/#1D1D1F/#AAAAAA/#F5F5F7) with reference UI spec.
 - PENDING: git push to github.com/sandeepdolai/NewMemorableday — requires the user to re-provide the GitHub token (previous one was lost in session continuation; also recommend rotating it since it was shared in chat).
+
+---
+Task ID: 1-b
+Agent: Z.ai Code (main orchestrator)
+Task: Push updated PRD to github.com/sandeepdolai/NewMemorableday (user re-provided GitHub token).
+
+Work Log:
+- User re-provided the GitHub Classic Token for account sandeepdolai.
+- Ran /home/z/my-project/docs/push-prd-to-github.sh — cloned the repo, copied the updated PRD over "MemorableDay_docs_prd_ALL_32_FILES (1).md", added design-reference/ images, committed, and pushed to main.
+- Commit: 58019c5 "Update PRD: Dodo Payments (was Lemon Squeezy), memorableday.in domain (was .online), exact color palette (#007AFF/#1D1D1F/#AAAAAA/#F5F5F7), reference UI/UX spec" (3 files changed, 247 insertions, 203 deletions).
+- Verified live on GitHub via API + raw file check: Dodo Payments 56 refs, memorableday.in 96 refs, 0 Lemon Squeezy leftovers, 0 .online leftovers, #007AFF palette 8 refs, §48.1.1 Reference UI section present, design tokens present.
+- Cleaned up the temporary clone (/tmp/NewMemorableday-push). Token NOT stored on disk (passed as script argument only).
+
+Stage Summary:
+- PRD update task 100% COMPLETE and pushed to GitHub (commit 58019c5 on main).
+- Repo now contains: updated PRD (Dodo Payments, memorableday.in, exact palette #007AFF/#1D1D1F/#AAAAAA/#F5F5F7, §48.1.1 reference UI spec, Inter typography) + design-reference/ folder with both reference images.
+- Recommended next step: user to give build instructions (PRD is finalized). Security: recommend user rotate the GitHub token since it was shared in chat.
