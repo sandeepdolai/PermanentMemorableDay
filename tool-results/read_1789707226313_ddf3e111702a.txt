@@ -1,0 +1,602 @@
+  4792→### 36.1 Payment Philosophy
+  4793→
+  4794→Billing must be transparent, reliable, and frictionless. Users should never be surprised by a charge, confused about their plan, or unable to manage their subscription.
+  4795→
+  4796→**Payment principles:**
+  4797→- Transparent pricing (no hidden fees)
+  4798→- Easy upgrade/downgrade
+  4799→- Reliable billing (no failed payment surprises)
+  4800→- Clear invoices and receipts
+  4801→- Easy cancellation (no dark patterns)
+  4802→
+  4803→### 36.2 Payment Provider
+  4804→
+  4805→**Primary payment provider:** Lemon Squeezy
+  4806→
+  4807→Lemon Squeezy is selected because:
+  4808→- It is a Merchant of Record (MoR) — handles sales tax, VAT, and compliance globally
+  4809→- It supports subscription billing with all required lifecycle events
+  4810→- It provides a hosted checkout that is PCI-compliant
+  4811→- It has a developer-friendly API and webhook system
+  4812→- It is cost-effective for early-stage SaaS
+  4813→
+  4814→**What Lemon Squeezy handles:**
+  4815→- Payment processing (credit card, PayPal, etc.)
+  4816→- Subscription management (create, upgrade, downgrade, cancel)
+  4817→- Tax calculation and remittance (as Merchant of Record)
+  4818→- Invoice generation
+  4819→- Failed payment handling and dunning
+  4820→- Refund processing
+  4821→- Customer billing portal
+  4822→
+  4823→**What MemorableDay handles:**
+  4824→- Entitlement enforcement (what features each plan can access)
+  4825→- Usage tracking (AI credits, storage, experiences)
+  4826→- Subscription status synchronization (via webhooks)
+  4827→- Plan display and upgrade prompts in the UI
+  4828→
+  4829→### 36.3 Supported Payment Methods
+  4830→
+  4831→Lemon Squeezy supports:
+  4832→- Credit/debit cards (Visa, Mastercard, American Express, Discover)
+  4833→- PayPal
+  4834→- Apple Pay (where supported)
+  4835→- Google Pay (where supported)
+  4836→
+  4837→**Requirements:**
+  4838→- `PRD-PAY-001`: All payment processing must go through Lemon Squeezy
+  4839→- `PRD-PAY-002`: MemorableDay must never store raw payment card data
+  4840→- `PRD-PAY-003`: Payment forms must be hosted by Lemon Squeezy (not embedded in MemorableDay)
+  4841→
+  4842→### 36.4 Subscription Types
+  4843→
+  4844→| Type | Description |
+  4845→|---|---|
+  4846→| **Monthly** | Billed monthly, cancel anytime |
+  4847→| **Annual** | Billed annually, typically 15–20% discount |
+  4848→| **Free** | No payment required, limited features |
+  4849→
+  4850→### 36.5 Billing Currency
+  4851→
+  4852→**Primary currency:** USD (United States Dollar)
+  4853→
+  4854→All prices are displayed and charged in USD. Lemon Squeezy handles currency conversion for international customers.
+  4855→
+  4856→---
+  4857→
+  4858→## §37 Lemon Squeezy Integration Requirements
+  4859→
+  4860→### 37.1 Lemon Squeezy Concepts
+  4861→
+  4862→Understanding Lemon Squeezy's data model is essential for correct integration:
+  4863→
+  4864→| Concept | Description |
+  4865→|---|---|
+  4866→| **Store** | The MemorableDay Lemon Squeezy store |
+  4867→| **Product** | A plan (e.g., "Personal Plan") |
+  4868→| **Variant** | A billing period for a product (e.g., "Personal Monthly", "Personal Annual") |
+  4869→| **Customer** | A Lemon Squeezy customer record (linked to MemorableDay user) |
+  4870→| **Subscription** | An active subscription to a variant |
+  4871→| **Order** | A completed purchase (subscription or one-time) |
+  4872→| **Checkout** | The hosted checkout page for a variant |
+  4873→| **Webhook** | Event notification from Lemon Squeezy to MemorableDay |
+  4874→
+  4875→### 37.2 Product and Variant Structure
+  4876→
+  4877→Each MemorableDay plan is a Lemon Squeezy Product with two Variants (monthly and annual):
+  4878→
+  4879→| Plan | Product | Variants |
+  4880→|---|---|---|
+  4881→| Personal | Personal Plan | Personal Monthly, Personal Annual |
+  4882→| Pro | Pro Plan | Pro Monthly, Pro Annual |
+  4883→| Business | Business Plan | Business Monthly, Business Annual |
+  4884→| Growth | Growth Plan | Growth Monthly, Growth Annual |
+  4885→| Agency | Agency Plan | Agency Monthly, Agency Annual |
+  4886→| Enterprise | Enterprise Plan | Enterprise Annual (custom) |
+  4887→
+  4888→**Requirements:**
+  4889→- `PRD-PAY-004`: Each plan must have a corresponding Lemon Squeezy Product
+  4890→- `PRD-PAY-005`: Each billing period must be a separate Lemon Squeezy Variant
+  4891→- `PRD-PAY-006`: Variant IDs must be stored in MemorableDay's configuration for entitlement mapping
+  4892→
+  4893→### 37.3 Checkout Flow
+  4894→
+  4895→**Checkout flow:**
+  4896→
+  4897→1. User selects a plan in MemorableDay
+  4898→2. MemorableDay generates a Lemon Squeezy checkout URL for the selected variant
+  4899→3. User is redirected to Lemon Squeezy's hosted checkout
+  4900→4. User completes payment on Lemon Squeezy
+  4901→5. Lemon Squeezy sends `order_created` and `subscription_created` webhooks to MemorableDay
+  4902→6. MemorableDay updates the user's subscription status and entitlements
+  4903→7. User is redirected back to MemorableDay with a success message
+  4904→
+  4905→**Requirements:**
+  4906→- `PRD-PAY-007`: Checkout URL must include the user's email (pre-filled) and a custom redirect URL
+  4907→- `PRD-PAY-008`: Checkout must include a `custom_data` parameter with the MemorableDay user ID for webhook correlation
+  4908→- `PRD-PAY-009`: Checkout redirect must return the user to the correct page after payment
+  4909→- `PRD-PAY-010`: Checkout must support discount codes (for promotions)
+  4910→
+  4911→### 37.4 Webhook Events
+  4912→
+  4913→MemorableDay must handle the following Lemon Squeezy webhook events:
+  4914→
+  4915→| Event | Description | MemorableDay Action |
+  4916→|---|---|---|
+  4917→| `order_created` | New order placed | Record order, update subscription status |
+  4918→| `subscription_created` | New subscription created | Activate plan, grant entitlements |
+  4919→| `subscription_updated` | Subscription changed (upgrade/downgrade) | Update plan, adjust entitlements |
+  4920→| `subscription_cancelled` | Subscription cancelled | Schedule plan downgrade at period end |
+  4921→| `subscription_resumed` | Cancelled subscription resumed | Reactivate plan |
+  4922→| `subscription_expired` | Subscription expired (after cancellation) | Downgrade to free plan |
+  4923→| `subscription_paused` | Subscription paused | Restrict access (maintain data) |
+  4924→| `subscription_unpaused` | Subscription unpaused | Restore access |
+  4925→| `subscription_payment_success` | Renewal payment succeeded | Update renewal date |
+  4926→| `subscription_payment_failed` | Renewal payment failed | Send dunning email, restrict access after grace period |
+  4927→| `subscription_payment_recovered` | Failed payment recovered | Restore full access |
+  4928→| `subscription_payment_refunded` | Payment refunded | Adjust subscription status |
+  4929→
+  4930→**Requirements:**
+  4931→- `PRD-PAY-011`: All Lemon Squeezy webhooks must be verified using the webhook signature
+  4932→- `PRD-PAY-012`: Webhook processing must be idempotent (duplicate events must not cause duplicate actions)
+  4933→- `PRD-PAY-013`: Webhook processing must be asynchronous (respond 200 immediately, process in background)
+  4934→- `PRD-PAY-014`: Failed webhook processing must be retried with exponential backoff
+  4935→- `PRD-PAY-015`: Webhook events must be logged for debugging and audit
+  4936→
+  4937→### 37.5 Subscription Lifecycle Management
+  4938→
+  4939→**Upgrade flow:**
+  4940→1. User selects a higher plan
+  4941→2. MemorableDay redirects to Lemon Squeezy checkout for the new variant
+  4942→3. Lemon Squeezy handles proration (charges the difference)
+  4943→4. `subscription_updated` webhook received
+  4944→5. MemorableDay immediately grants new entitlements
+  4945→
+  4946→**Downgrade flow:**
+  4947→1. User selects a lower plan
+  4948→2. MemorableDay redirects to Lemon Squeezy checkout or customer portal
+  4949→3. Lemon Squeezy schedules the downgrade at the end of the current period
+  4950→4. `subscription_updated` webhook received (with `ends_at` date)
+  4951→5. MemorableDay maintains current entitlements until `ends_at`
+  4952→6. At `ends_at`: `subscription_expired` or `subscription_updated` webhook received
+  4953→7. MemorableDay applies new (lower) entitlements
+  4954→
+  4955→**Cancellation flow:**
+  4956→1. User cancels via Lemon Squeezy customer portal or MemorableDay UI
+  4957→2. `subscription_cancelled` webhook received
+  4958→3. MemorableDay maintains current entitlements until end of billing period
+  4959→4. At period end: `subscription_expired` webhook received
+  4960→5. MemorableDay downgrades to free plan
+  4961→
+  4962→**Failed payment flow:**
+  4963→1. Renewal payment fails
+  4964→2. `subscription_payment_failed` webhook received
+  4965→3. MemorableDay sends dunning email to user
+  4966→4. Lemon Squeezy retries payment (per its dunning schedule)
+  4967→5. If payment recovered: `subscription_payment_recovered` webhook → restore access
+  4968→6. If payment not recovered after grace period: `subscription_expired` webhook → downgrade to free
+  4969→
+  4970→**Requirements:**
+  4971→- `PRD-PAY-016`: Users must not lose access immediately on payment failure (grace period of at least 3 days)
+  4972→- `PRD-PAY-017`: Users must receive email notifications for: payment failure, upcoming renewal, cancellation confirmation
+  4973→- `PRD-PAY-018`: Users must be able to update payment method via Lemon Squeezy customer portal
+  4974→
+  4975→### 37.6 Customer Portal
+  4976→
+  4977→Lemon Squeezy provides a hosted customer portal where users can:
+  4978→- View subscription details
+  4979→- Update payment method
+  4980→- Download invoices
+  4981→- Cancel subscription
+  4982→- Resume cancelled subscription
+  4983→
+  4984→**Requirements:**
+  4985→- `PRD-PAY-019`: Customer portal link must be accessible from the MemorableDay billing settings
+  4986→- `PRD-PAY-020`: Customer portal must be accessible without re-entering payment details
+  4987→
+  4988→### 37.7 Free Trials
+  4989→
+  4990→**Requirements:**
+  4991→- `PRD-PAY-021`: Free trials must be supported via Lemon Squeezy's trial period feature
+  4992→- `PRD-PAY-022`: Trial period must be configurable per plan (recommended: 14 days for Business plans)
+  4993→- `PRD-PAY-023`: Trial users must have full access to plan features during trial
+  4994→- `PRD-PAY-024`: Trial expiration must trigger `subscription_expired` webhook → downgrade to free
+  4995→- `PRD-PAY-025`: Credit card must be required at trial start (Lemon Squeezy standard behavior)
+  4996→
+  4997→### 37.8 Promotional Pricing and Coupons
+  4998→
+  4999→**Requirements:**
+  5000→- `PRD-PAY-026`: Promotional discount codes must be created in Lemon Squeezy
+  5001→- `PRD-PAY-027`: Discount codes must be applicable at checkout
+  5002→- `PRD-PAY-028`: Discount codes must support: percentage off, fixed amount off, one-time or recurring
+  5003→- `PRD-PAY-029`: Discount codes must have configurable expiration and usage limits
+  5004→
+  5005→### 37.9 One-Time Purchases
+  5006→
+  5007→In addition to subscriptions, MemorableDay may offer one-time purchases:
+  5008→- AI credit top-ups
+  5009→- Premium 3D asset packs
+  5010→- Additional storage
+  5011→
+  5012→**Requirements:**
+  5013→- `PRD-PAY-030`: One-time purchases must use Lemon Squeezy's one-time product type
+  5014→- `PRD-PAY-031`: One-time purchase fulfillment must be triggered by `order_created` webhook
+  5015→- `PRD-PAY-032`: One-time purchases must be reflected in the user's account immediately after payment
+  5016→
+  5017→---
+  5018→
+  5019→## §38 Subscription Entitlements
+  5020→
+  5021→### 38.1 Entitlement Architecture
+  5022→
+  5023→The entitlement system enforces what each plan can access. It must be:
+  5024→- **Accurate** — entitlements must match the user's current plan
+  5025→- **Real-time** — entitlement changes must take effect immediately
+  5026→- **Enforceable** — the system must prevent access to features beyond the plan
+  5027→- **Graceful** — users must be informed when they hit a limit, not just blocked
+  5028→
+  5029→**Entitlement data model:**
+  5030→
+  5031→```
+  5032→User
+  5033→└── Workspace
+  5034→    └── Subscription
+  5035→        ├── Plan (Free / Personal / Pro / Business / Growth / Agency / Enterprise)
+  5036→        ├── Status (active / trialing / cancelled / expired / paused)
+  5037→        ├── Period end date
+  5038→        └── Entitlements
+  5039→            ├── Feature flags (what features are enabled)
+  5040→            └── Usage limits (how much of each resource is allowed)
+  5041→```
+  5042→
+  5043→### 38.2 Feature Entitlements
+  5044→
+  5045→| Feature | Free | Personal | Pro | Business | Growth | Agency | Enterprise |
+  5046→|---|---|---|---|---|---|---|---|
+  5047→| Experience creation | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5048→| 3D experiences | Limited | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5049→| AI message generator | 5/mo | 30/mo | 100/mo | 200/mo | 500/mo | 1000/mo | Custom |
+  5050→| AI experience creator | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5051→| Template library | 10 | 50+ | All | All | All | All | All |
+  5052→| Custom templates | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5053→| Photo upload | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5054→| Video upload | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5055→| Voice messages | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5056→| Custom music upload | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5057→| Scheduling | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5058→| Password protection | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5059→| Analytics (basic) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5060→| Analytics (advanced) | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+  5061→| Rewards | — | Personal | Basic | All | All | All | All |
+  5062→| Business automations | — | — | — | ✓ | ✓ | ✓ | ✓ |
+  5063→| E-commerce integrations | — | — | — | ✓ | ✓ | ✓ | ✓ |
+  5064→| Team members | 1 | 1 | 1 | 3 | 10 | 25 | Unlimited |
+  5065→| Multiple brands | — | — | — | — | — | ✓ | ✓ |
+  5066→| White label | — | — | — | — | ✓ | ✓ | ✓ |
+  5067→| Custom domain | — | — | — | — | ✓ | ✓ | ✓ |
+  5068→| API access | — | — | — | ✓ | ✓ | ✓ | ✓ |
+  5069→| Priority support | — | — | — | — | ✓ | ✓ | ✓ |
+  5070→| Dedicated support | — | — | — | — | — | — | ✓ |
+  5071→| SSO | — | — | — | — | — | — | ✓ |
+  5072→| SLA | — | — | — | — | — | — | ✓ |
+  5073→
+  5074→### 38.3 Usage Limits
+  5075→
+  5076→| Limit | Free | Personal | Pro | Business | Growth | Agency | Enterprise |
+  5077→|---|---|---|---|---|---|---|---|
+  5078→| Published experiences | 3 | 20 | Unlimited | Unlimited | Unlimited | Unlimited | Unlimited |
+  5079→| Experience views/month | 500 | 5,000 | 25,000 | 50,000 | 200,000 | 500,000 | Custom |
+  5080→| AI credits/month | 5 | 30 | 100 | 200 | 500 | 1,000 | Custom |
+  5081→| Storage (total) | 100MB | 1.5GB | 7GB | 15GB | 35GB | 70GB | Custom |
+  5082→| Video storage | 0 | 500MB | 2GB | 5GB | 10GB | 20GB | Custom |
+  5083→| Active automations | 0 | 0 | 0 | 3 | 10 | 25/brand | Unlimited |
+  5084→| Connected stores | 0 | 0 | 0 | 1 | 3 | 10 | Unlimited |
+  5085→| Custom domains | 0 | 0 | 0 | 0 | 1 | 5 | Unlimited |
+  5086→| Team members | 1 | 1 | 1 | 3 | 10 | 25 | Unlimited |
+  5087→| Brands | 1 | 1 | 1 | 1 | 1 | 10 | Unlimited |
+  5088→| API requests/minute | 0 | 0 | 0 | 60 | 120 | 300 | Custom |
+  5089→
+  5090→### 38.4 Entitlement Enforcement
+  5091→
+  5092→**Requirements:**
+  5093→- `PRD-PAY-033`: Entitlement checks must be performed server-side (not just client-side)
+  5094→- `PRD-PAY-034`: When a user hits a limit, they must see a clear message explaining the limit and how to upgrade
+  5095→- `PRD-PAY-035`: Upgrade prompts must be contextual (shown at the point of limit, not just in billing settings)
+  5096→- `PRD-PAY-036`: Entitlement changes must take effect within 60 seconds of subscription update
+  5097→- `PRD-PAY-037`: Downgrade must not delete data — data is preserved but access is restricted
+  5098→
+  5099→### 38.5 Usage Tracking
+  5100→
+  5101→**Requirements:**
+  5102→- `PRD-PAY-038`: Usage must be tracked in real-time (or near real-time)
+  5103→- `PRD-PAY-039`: Usage must be visible to users in their account settings
+  5104→- `PRD-PAY-040`: Usage warnings must be sent when user reaches 80% of any limit
+  5105→- `PRD-PAY-041`: Usage resets on the billing cycle date (not calendar month)
+  5106→- `PRD-PAY-042`: Usage history must be retained for at least 12 months
+  5107→
+  5108→### 38.6 Overage Handling
+  5109→
+  5110→| Resource | Overage Behavior |
+  5111→|---|---|
+  5112→| Published experiences | Block creation; prompt to upgrade or archive |
+  5113→| Experience views | Throttle (slow down) or block; prompt to upgrade |
+  5114→| AI credits | Block AI features; prompt to purchase more credits |
+  5115→| Storage | Block uploads; prompt to upgrade or delete files |
+  5116→| Automations | Block new automations; prompt to upgrade |
+  5117→
+  5118→**Requirements:**
+  5119→- `PRD-PAY-043`: Overage must never result in data loss
+  5120→- `PRD-PAY-044`: Overage must never result in a surprise charge (no automatic overage billing)
+  5121→- `PRD-PAY-045`: Overage handling must be graceful — users are informed, not just blocked
+  5122→
+  5123→---
+  5124→
+  5125→*Next: [Pricing Strategy & Free Plan →](18-pricing-strategy-free-plan.md)*
+  5126→
+  5127→# 18 — Pricing Strategy & Free Plan
+  5128→
+  5129→**Sections:** §39 Pricing Strategy · §40 Free Plan  
+  5130→**PRD Index:** [← Payments & Entitlements](17-payments-lemon-squeezy-entitlements.md) | [Next: SEO →](19-seo-content-programmatic-seo.md)
+  5131→
+  5132→---
+  5133→
+  5134→## §39 Pricing Strategy
+  5135→
+  5136→### 39.1 Pricing Philosophy
+  5137→
+  5138→MemorableDay's pricing must:
+  5139→- Be simple enough to understand in 30 seconds
+  5140→- Reflect genuine value (not arbitrary feature gating)
+  5141→- Create a clear upgrade path at every stage
+  5142→- Be competitive with adjacent tools while reflecting the unique value of the platform
+  5143→- Support both personal and business audiences with distinct pricing tracks
+  5144→
+  5145→**Pricing principles:**
+  5146→- Personal pricing is affordable and accessible (impulse-buy range)
+  5147→- Business pricing reflects measurable ROI (subscription to a business tool)
+  5148→- Free plan drives acquisition and viral growth
+  5149→- Annual plans reward commitment with meaningful discounts
+  5150→- No surprise charges or hidden fees
+  5151→
+  5152→### 39.2 Recommended Plan Structure
+  5153→
+  5154→MemorableDay has two pricing tracks: **Personal** and **Business**.
+  5155→
+  5156→#### Personal Track
+  5157→
+  5158→| Plan | Monthly | Annual (per month) | Annual Savings |
+  5159→|---|---|---|---|
+  5160→| **Starter (Free)** | $0 | $0 | — |
+  5161→| **Personal** | $9/mo | $7/mo | 22% |
+  5162→| **Pro** | $19/mo | $15/mo | 21% |
+  5163→
+  5164→#### Business Track
+  5165→
+  5166→| Plan | Monthly | Annual (per month) | Annual Savings |
+  5167→|---|---|---|---|
+  5168→| **Business** | $49/mo | $39/mo | 20% |
+  5169→| **Growth** | $99/mo | $79/mo | 20% |
+  5170→| **Agency** | $249/mo | $199/mo | 20% |
+  5171→| **Enterprise** | Custom | Custom | — |
+  5172→
+  5173→### 39.3 Plan Descriptions
+  5174→
+  5175→#### Starter (Free)
+  5176→**For:** Anyone who wants to try MemorableDay  
+  5177→**Tagline:** "Create your first memorable moment"  
+  5178→**Key features:** 3 published experiences, 5 AI credits, 10 templates, basic analytics, MemorableDay branding
+  5179→
+  5180→#### Personal — $9/month
+  5181→**For:** Individuals who regularly create experiences for people they love  
+  5182→**Tagline:** "For people who make every occasion special"  
+  5183→**Key features:** 20 published experiences, 30 AI credits, all personal templates, scheduling, video upload, 1.5GB storage
+  5184→
+  5185→#### Pro — $19/month
+  5186→**For:** Power users who want the full personal experience  
+  5187→**Tagline:** "The complete personal experience toolkit"  
+  5188→**Key features:** Unlimited experiences, 100 AI credits, all templates, advanced analytics, branching experiences, 7GB storage
+  5189→
+  5190→#### Business — $49/month
+  5191→**For:** Small e-commerce businesses and Shopify merchants  
+  5192→**Tagline:** "Turn every customer touchpoint into a moment they remember"  
+  5193→**Key features:** 3 automations, Shopify integration, all business templates, team (3 members), rewards, 15GB storage
+  5194→
+  5195→#### Growth — $99/month
+  5196→**For:** Growing DTC brands and marketing teams  
+  5197→**Tagline:** "Scale your customer experience without losing the personal touch"  
+  5198→**Key features:** 10 automations, all integrations, white label, custom domain, 10 team members, drip sequences, 35GB storage
+  5199→
+  5200→#### Agency — $249/month
+  5201→**For:** Digital agencies managing multiple client brands  
+  5202→**Tagline:** "One platform for all your clients"  
+  5203→**Key features:** 10 brands, 25 automations per brand, full white label, 25 team members, client management, 70GB storage
+  5204→
+  5205→#### Enterprise — Custom
+  5206→**For:** Large brands and enterprises with custom requirements  
+  5207→**Tagline:** "Built for your scale"  
+  5208→**Key features:** Unlimited everything, SSO, SLA, dedicated support, custom integrations, custom AI credits
+  5209→
+  5210→### 39.4 Pricing Rationale
+  5211→
+  5212→**Why $9 for Personal?**
+  5213→- Below the psychological $10 threshold
+  5214→- Comparable to Netflix, Spotify — familiar subscription price
+  5215→- Covers infrastructure costs with margin
+  5216→- Low enough to be an impulse purchase
+  5217→
+  5218→**Why $49 for Business?**
+  5219→- Entry-level business SaaS pricing
+  5220→- Comparable to Klaviyo's starter plan, Postscript, etc.
+  5221→- Justifiable with a single prevented negative review or one repeat purchase
+  5222→- Low enough for small Shopify merchants to try
+  5223→
+  5224→**Why $99 for Growth?**
+  5225→- Mid-market SaaS pricing
+  5226→- Justifiable with measurable retention improvement
+  5227→- Includes white label (significant value for agencies)
+  5228→
+  5229→**Why $249 for Agency?**
+  5230→- Agency plans command premium pricing
+  5231→- Multi-brand management is a significant value multiplier
+  5232→- Agencies can charge clients $50–$200/month each, making $249 very profitable
+  5233→
+  5234→### 39.5 Pricing Comparison
+  5235→
+  5236→| Competitor | Price | What They Offer |
+  5237→|---|---|---|
+  5238→| Hallmark (digital) | $3–$5/card | Static digital cards |
+  5239→| Moonpig | $5–$10/card | Physical + digital cards |
+  5240→| Evite | $0–$20/event | Digital invitations |
+  5241→| Klaviyo (email) | $45–$700/mo | Email marketing |
+  5242→| AfterShip | $11–$239/mo | Shipment tracking |
+  5243→| Wonderment | $99–$499/mo | Post-purchase experience |
+  5244→| Postscript (SMS) | $100+/mo | SMS marketing |
+  5245→
+  5246→**MemorableDay's pricing advantage:**
+  5247→- More emotionally impactful than any competitor
+  5248→- Combines personal + business use cases
+  5249→- 3D + AI + automation in one platform
+  5250→- Significantly cheaper than building custom post-purchase experiences
+  5251→
+  5252→### 39.6 Pricing Page Requirements
+  5253→
+  5254→**Requirements:**
+  5255→- `PRD-SEO-005`: Pricing page must be publicly accessible at `memorableday.online/pricing`
+  5256→- `PRD-UX-024`: Pricing page must clearly show the difference between personal and business tracks
+  5257→- `PRD-UX-025`: Pricing page must include a plan comparison table
+  5258→- `PRD-UX-026`: Pricing page must include a FAQ section addressing common objections
+  5259→- `PRD-UX-027`: Pricing page must include social proof (testimonials, logos)
+  5260→- `PRD-UX-028`: Annual/monthly toggle must be prominent and easy to use
+  5261→- `PRD-UX-029`: "Most popular" badge must be shown on the recommended plan (Business for business track, Personal for personal track)
+  5262→
+  5263→### 39.7 Upgrade Prompts
+  5264→
+  5265→**Requirements:**
+  5266→- `PRD-UX-030`: Upgrade prompts must appear at the point of limit (not just in billing settings)
+  5267→- `PRD-UX-031`: Upgrade prompts must show the specific benefit of upgrading (not just "upgrade to unlock")
+  5268→- `PRD-UX-032`: Upgrade prompts must include a direct link to the checkout for the recommended plan
+  5269→- `PRD-UX-033`: Upgrade prompts must not be intrusive — they should appear once per session, not on every action
+  5270→
+  5271→### 39.8 Pricing Experiments
+  5272→
+  5273→The pricing structure above is a recommendation, not a final decision. The following should be A/B tested:
+  5274→
+  5275→| Test | Hypothesis |
+  5276→|---|---|
+  5277→| $9 vs $12 for Personal | Higher price may not reduce conversion significantly |
+  5278→| $49 vs $59 for Business | Higher price may not reduce conversion significantly |
+  5279→| 14-day trial vs no trial | Trial may increase Business plan conversion |
+  5280→| Annual discount 20% vs 25% | Higher discount may increase annual plan adoption |
+  5281→| Pay-per-experience vs subscription | Some users may prefer pay-per-experience |
+  5282→
+  5283→---
+  5284→
+  5285→## §40 Free Plan
+  5286→
+  5287→### 40.1 Free Plan Philosophy
+  5288→
+  5289→The free plan is a strategic product decision, not a charity. It must:
+  5290→
+  5291→1. **Drive acquisition** — give users a reason to sign up without a credit card
+  5292→2. **Drive viral growth** — free users create experiences that recipients see
+  5293→3. **Drive conversion** — free users must hit limits that make upgrading obvious
+  5294→4. **Not be economically unsustainable** — free users must not cost more than they're worth
+  5295→
+  5296→**The free plan is not:**
+  5297→- A full-featured product (that would eliminate the upgrade incentive)
+  5298→- A crippled product (that would drive users away)
+  5299→- A marketing trick (that would damage trust)
+  5300→
+  5301→### 40.2 Free Plan Features
+  5302→
+  5303→| Feature | Free Plan |
+  5304→|---|---|
+  5305→| Published experiences | 3 (lifetime, not monthly) |
+  5306→| Experience views/month | 500 |
+  5307→| AI credits/month | 5 |
+  5308→| Templates | 10 (curated selection) |
+  5309→| 3D objects | Limited library (10 objects) |
+  5310→| Photo upload | ✓ (up to 5 photos per experience) |
+  5311→| Video upload | ✗ |
+  5312→| Voice messages | ✗ |
+  5313→| Custom music | ✗ |
+  5314→| Scheduling | ✗ |
+  5315→| Password protection | ✗ |
+  5316→| Analytics | Basic (opened: yes/no) |
+  5317→| Rewards | ✗ |
+  5318→| Business automations | ✗ |
+  5319→| Team members | 1 |
+  5320→| Storage | 100MB |
+  5321→| MemorableDay branding | Required (cannot remove) |
+  5322→| Custom domain | ✗ |
+  5323→
+  5324→### 40.3 Free Plan Limits Rationale
+  5325→
+  5326→**Why 3 published experiences (not monthly)?**
+  5327→- Creates urgency to upgrade without being too restrictive
+  5328→- 3 experiences is enough to experience the product's value
+  5329→- Lifetime limit (not monthly) means free users don't get unlimited experiences by waiting
+  5330→
+  5331→**Why 5 AI credits/month?**
+  5332→- Enough to experience AI value (1–2 complete experiences)
+  5333→- Not enough to rely on AI without upgrading
+  5334→- Resets monthly to keep users engaged
+  5335→
+  5336→**Why no scheduling?**
+  5337→- Scheduling is a key value driver for Personal plan
+  5338→- Removing it creates a clear upgrade reason for occasion-based users
+  5339→
+  5340→**Why no video upload?**
+  5341→- Video is a significant storage cost driver
+  5342→- Removing it keeps free plan infrastructure costs low
+  5343→
+  5344→### 40.4 Free Plan Conversion Strategy
+  5345→
+  5346→**Conversion triggers (moments when free users are most likely to upgrade):**
+  5347→
+  5348→| Trigger | Upgrade Prompt |
+  5349→|---|---|
+  5350→| Creating 3rd experience | "You've used all 3 free experiences. Upgrade to Personal for unlimited experiences." |
+  5351→| Trying to schedule | "Scheduling is available on Personal plan. Upgrade to schedule this experience." |
+  5352→| Trying to upload video | "Video upload is available on Personal plan. Upgrade to add video." |
+  5353→| Running out of AI credits | "You've used all 5 AI credits. Upgrade for 30 credits/month." |
+  5354→| Trying to remove branding | "Remove MemorableDay branding on Pro plan." |
+  5355→| Recipient opens experience | "Your experience was opened! Upgrade to see detailed analytics." |
+  5356→
+  5357→**Requirements:**
+  5358→- `PRD-UX-034`: Conversion prompts must be contextual and specific
+  5359→- `PRD-UX-035`: Conversion prompts must show the exact plan that unlocks the feature
+  5360→- `PRD-UX-036`: Conversion prompts must include a direct checkout link
+  5361→- `PRD-UX-037`: Free users must be able to see what they're missing (feature preview with lock icon)
+  5362→
+  5363→### 40.5 Free Plan Infrastructure Cost
+  5364→
+  5365→**Estimated cost per free user per month:**
+  5366→- Storage (100MB): ~$0.002 (Cloudflare R2)
+  5367→- CDN bandwidth (500 views × ~1MB): ~$0.05 (Cloudflare CDN)
+  5368→- AI credits (5 × ~$0.01): ~$0.05
+  5369→- Compute (Cloudflare Workers): ~$0.01
+  5370→- **Total: ~$0.11/month per free user**
+  5371→
+  5372→At 100,000 free users: ~$11,000/month in infrastructure costs.
+  5373→
+  5374→This is acceptable if free-to-paid conversion rate is ≥ 3% (3,000 paying users × $9/month = $27,000 MRR).
+  5375→
+  5376→**Requirements:**
+  5377→- `PRD-INFRA-001`: Free plan infrastructure costs must be monitored monthly
+  5378→- `PRD-INFRA-002`: If free plan costs exceed 20% of MRR, free plan limits must be reviewed
+  5379→
+  5380→### 40.6 Free Plan Abuse Prevention
+  5381→
+  5382→**Requirements:**
+  5383→- `PRD-SEC-025`: Free plan must require email verification before creating experiences
+  5384→- `PRD-SEC-026`: Free plan must have rate limiting on experience creation (max 3 per day)
+  5385→- `PRD-SEC-027`: Free plan must have rate limiting on AI usage (max 2 per day)
+  5386→- `PRD-SEC-028`: Multiple free accounts from the same IP/device must be detected and flagged
+  5387→- `PRD-SEC-029`: Free plan experiences must be subject to content moderation
+  5388→
+  5389→---
+  5390→
+  5391→*Next: [SEO, Content & Programmatic SEO →](19-seo-content-programmatic-seo.md)*
+
+[showing lines 4792-5391 of 9632; use offset=5392 with limit to continue reading]
