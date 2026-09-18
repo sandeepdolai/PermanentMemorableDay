@@ -91,7 +91,7 @@ export function GalleryView() {
                   : openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` })
               }
               aria-label={`${m.title}, ${m.status === "draft" ? "continue editing" : "play moment"}`}
-              className="card-shadow hairline overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.97]"
+              className="card-shadow hairline lift overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.97]"
             >
               <CoverArt variant={m.cover} className="aspect-square w-full">
                 <StatusBadge status={m.status} className="absolute left-2.5 top-2.5 backdrop-blur-md" />

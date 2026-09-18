@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "PASS: The layout is clean with no overlapping or misaligned elements, and all required components (blue uppercase date, search pill, floating bottom nav) are present.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1789716915,
+  "id": "202609181535134eb2c5d1ebbd454b",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202609181535134eb2c5d1ebbd454b",
+  "usage": {
+    "completion_tokens": 34,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 455,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 489
+  }
+}

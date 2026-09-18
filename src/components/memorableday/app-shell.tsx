@@ -7,6 +7,7 @@ import { NOTIFICATIONS, PRICING_PLANS, type InsightRange } from "@/lib/mock-data
 import {
   MDContext,
   type AiInsertFn,
+  type AuthMode,
   type BuilderOptions,
   type PlayerPayload,
   type SettingsTopic,
@@ -20,7 +21,8 @@ import { BottomNav } from "./bottom-nav";
 import { BottomSheet } from "./bottom-sheet";
 import { MomentPlayer } from "./moment-player";
 import { ExperienceBuilder } from "./builder";
-import { ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, AIComposerContent } from "./sheet-contents";
+import { WelcomeTour } from "./welcome-tour";
+import { AuthContent, ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, AIComposerContent } from "./sheet-contents";
 import { HomeView } from "./views/home-view";
 import { CreateView } from "./views/create-view";
 import { ExploreView } from "./views/explore-view";
@@ -45,11 +47,19 @@ function GlassToast({ message }: { message: string }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -14, scale: 0.96 }}
         transition={{ type: "spring", stiffness: 420, damping: 30 }}
-        className="flex max-w-full items-center gap-2 rounded-full bg-[#1D1D1F]/88 px-4 py-2.5 shadow-[0_16px_40px_-10px_rgba(29,29,31,0.5)]"
+        className="relative flex max-w-full items-center gap-2 overflow-hidden rounded-full bg-[#1D1D1F]/88 px-4 py-2.5 shadow-[0_16px_40px_-10px_rgba(29,29,31,0.5)]"
         style={{ WebkitBackdropFilter: "blur(20px)", backdropFilter: "blur(20px)" }}
       >
         <Info size={14} className="shrink-0 text-[#64D2FF]" aria-hidden />
         <span className="truncate text-[13px] font-medium text-white">{message}</span>
+        {/* auto-dismiss progress hairline */}
+        <motion.span
+          aria-hidden
+          initial={{ scaleX: 1 }}
+          animate={{ scaleX: 0 }}
+          transition={{ duration: 2.4, ease: "linear" }}
+          className="absolute inset-x-0 bottom-0 h-[2.5px] origin-left rounded-full bg-[#64D2FF]/60"
+        />
       </motion.div>
     </div>
   );
@@ -216,9 +226,40 @@ export function AppShell() {
   const [settingsTopic, setSettingsTopic] = useState<SettingsTopic | null>(null);
   const [exploreItem, setExploreItem] = useState<ExploreItem | null>(null);
   const [insightsRange, setInsightsRange] = useState<InsightRange>("7d");
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const [tourOpen, setTourOpen] = useState(false);
   const aiInsertRef = useRef<AiInsertFn | null>(null);
   const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // First-run welcome tour (shown once, remembered in localStorage).
+  // Checked after paint — async so the render stays stable (and SSR-safe).
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      try {
+        if (!window.localStorage.getItem("md-onboarded")) setTourOpen(true);
+      } catch {
+        // storage unavailable — skip the tour
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const closeTour = useCallback(() => {
+    setTourOpen(false);
+    try {
+      window.localStorage.setItem("md-onboarded", "1");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const openTour = useCallback(() => setTourOpen(true), []);
+
+  const openAuth = useCallback((mode?: AuthMode) => {
+    setAuthMode(mode ?? "signin");
+    setSheet("auth");
+  }, []);
 
   const notify = useCallback((message: string) => {
     setToast({ id: Date.now(), message });
@@ -341,6 +382,10 @@ export function AppShell() {
           openComposer,
           aiInsertRef,
           insertAiMessage,
+          openAuth,
+          tourOpen,
+          openTour,
+          closeTour,
         }}
       >
       <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05]">
@@ -462,6 +507,10 @@ export function AppShell() {
                 setSheet(null);
                 window.setTimeout(() => setSheet("pricing"), 260);
               }}
+              onOpenTour={() => {
+                setSheet(null);
+                window.setTimeout(openTour, 300);
+              }}
               onNotify={notify}
             />
           ) : null}
@@ -507,6 +556,18 @@ export function AppShell() {
           <AIComposerContent onInsert={insertAiMessage} onNotify={notify} />
         </BottomSheet>
 
+        {/* Auth sheet (sign in / create account) */}
+        <BottomSheet open={sheet === "auth"} onClose={() => setSheet(null)} ariaLabel="Sign in or create an account">
+          <AuthContent
+            initialMode={authMode}
+            onDone={(mode) => {
+              setSheet(null);
+              notify(mode === "signin" ? "Signed in — UI preview" : "Account created — UI preview");
+            }}
+            onNotify={notify}
+          />
+        </BottomSheet>
+
         {/* Experience builder layer */}
         <AnimatePresence>
           {builder ? <ExperienceBuilder key="builder" opts={builder} onClose={closeBuilder} /> : null}
@@ -518,6 +579,16 @@ export function AppShell() {
             <MomentPlayer key={player.id} moment={player} onClose={closeMoment} />
           ) : null}
         </AnimatePresence>
+
+        {/* First-run welcome tour — topmost layer */}
+        <WelcomeTour
+          open={tourOpen}
+          onClose={closeTour}
+          onSignIn={() => {
+            closeTour();
+            window.setTimeout(() => openAuth("signin"), 300);
+          }}
+        />
       </div>
       </MDContext.Provider>
     </MotionConfig>

@@ -16,12 +16,16 @@ const STATS = [
 export function HomeView() {
   const { setTab, openMoment, openShare, openBuilder, openInsights } = useMD();
   const [greeting, setGreeting] = useState("Hello");
+  const [dateLine, setDateLine] = useState("");
 
   useEffect(() => {
-    // Update greeting after paint (avoids hydration mismatch, keeps render stable)
+    // Update greeting + date after paint (avoids hydration mismatch, keeps render stable)
     const id = requestAnimationFrame(() => {
       const h = new Date().getHours();
       setGreeting(h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
+      setDateLine(
+        new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(new Date())
+      );
     });
     return () => cancelAnimationFrame(id);
   }, []);
@@ -34,7 +38,10 @@ export function HomeView() {
       {/* Greeting */}
       <header className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[15px] font-medium text-[#AAAAAA]">{greeting}, Sandeep</p>
+          {dateLine ? (
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#007AFF]">{dateLine}</p>
+          ) : null}
+          <p className="mt-1 text-[15px] font-medium text-[#AAAAAA]">{greeting}, Sandeep</p>
           <h1 className="mt-1 text-[32px] font-bold leading-[1.08] tracking-[-0.035em] text-[#1D1D1F]">
             Make every
             <br />
@@ -45,7 +52,7 @@ export function HomeView() {
 
       {/* Featured hero — reference layout: art left, uppercase headline right */}
       <section aria-label="Featured">
-        <article className="card-shadow hairline flex gap-3.5 rounded-[28px] bg-white p-3.5">
+        <article className="card-shadow hairline lift flex gap-3.5 rounded-[28px] bg-white p-3.5">
           <CoverArt variant={0} className="h-auto w-[42%] shrink-0 rounded-[20px]" >
             <span className="absolute left-3 top-3 rounded-full bg-white/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white backdrop-blur-sm">
               Featured
@@ -76,7 +83,7 @@ export function HomeView() {
           type="button"
           onClick={() => openInsights("7d")}
           aria-label="Open insights dashboard"
-          className="w-full rounded-[24px] transition-transform active:scale-[0.98]"
+          className="lift w-full rounded-[24px] transition-transform active:scale-[0.98]"
         >
           <div className="grid grid-cols-3 gap-3">
             {STATS.map((s) => (
@@ -105,7 +112,7 @@ export function HomeView() {
               type="button"
               aria-label={`Continue editing ${d.title}`}
               onClick={() => openBuilder({ title: d.title, cover: d.cover, scenes: d.scenes })}
-              className="card-shadow hairline w-[168px] shrink-0 rounded-[22px] bg-white p-2.5 text-left transition-transform active:scale-[0.97]"
+              className="card-shadow hairline lift w-[168px] shrink-0 rounded-[22px] bg-white p-2.5 text-left transition-transform active:scale-[0.97]"
             >
               <CoverArt variant={d.cover} className="aspect-[4/3] w-full rounded-[15px]" />
               <div className="px-1 pb-1 pt-2.5">

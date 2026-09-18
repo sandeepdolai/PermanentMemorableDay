@@ -12,10 +12,12 @@ import {
   Check,
   CheckCheck,
   ChevronRight,
+  Clock,
   Copy,
   CreditCard,
   Crown,
   Eye,
+  EyeOff,
   Feather,
   Heart,
   LifeBuoy,
@@ -51,8 +53,9 @@ import {
   type ExploreItem,
   USER,
 } from "@/lib/mock-data";
-import type { PlayerPayload, SettingsTopic } from "./md-context";
+import type { AuthMode, PlayerPayload, SettingsTopic } from "./md-context";
 import { CoverArt } from "./cover-art";
+import { LogoMark } from "./bits";
 import { SegmentedControl } from "./segmented-control";
 import { cn } from "@/lib/utils";
 
@@ -327,10 +330,12 @@ export const SETTINGS_TITLES: Record<SettingsTopic, string> = Object.fromEntries
 export function SettingsContent({
   topic,
   onOpenPricing,
+  onOpenTour,
   onNotify,
 }: {
   topic: SettingsTopic;
   onOpenPricing: () => void;
+  onOpenTour: () => void;
   onNotify: (message: string) => void;
 }) {
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
@@ -364,7 +369,7 @@ export function SettingsContent({
         ];
       case "help":
         return [
-          { kind: "link", icon: Sparkles, tint: "#64D2FF", label: "Getting started guide", action: () => onNotify("Guide opens here — UI preview") },
+          { kind: "link", icon: Sparkles, tint: "#64D2FF", label: "Getting started guide", action: onOpenTour },
           { kind: "link", icon: FileText, tint: "#007AFF", label: "Blocks & scenes explained", action: () => onNotify("Guide opens here — UI preview") },
           { kind: "link", icon: Share2, tint: "#30D158", label: "Sharing & delivery", action: () => onNotify("Guide opens here — UI preview") },
           { kind: "link", icon: CreditCard, tint: "#FF9F0A", label: "Billing & Dodo Payments", action: () => onNotify("Guide opens here — UI preview") },
@@ -734,6 +739,13 @@ export function InsightsContent({
   const funnelMax = data.funnel[0].value;
   const rangeLabel = range === "7d" ? "last 7 days" : range === "30d" ? "last 30 days" : "last 90 days";
 
+  const KPI_ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+    "Open rate": Eye,
+    Completion: CheckCheck,
+    "Avg time": Clock,
+    Loves: Heart,
+  };
+
   return (
     <div className="pb-2">
       {/* Range switcher */}
@@ -762,7 +774,13 @@ export function InsightsContent({
             className="card-shadow hairline rounded-[20px] bg-white px-3.5 py-3"
           >
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#AAAAAA]">{k.label}</p>
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-[#AAAAAA]">
+                {(() => {
+                  const KIcon = KPI_ICONS[k.label];
+                  return KIcon ? <KIcon size={11} strokeWidth={2.4} aria-hidden /> : null;
+                })()}
+                {k.label}
+              </p>
               <span
                 className={cn(
                   "flex items-center gap-0.5 text-[11px] font-bold tabular-nums",
@@ -1051,6 +1069,183 @@ export function AIComposerContent({
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Auth sheet — Sign in / Create account (UI preview)                   */
+/* ------------------------------------------------------------------ */
+
+function AppleIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.08ZM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25Z" />
+    </svg>
+  );
+}
+
+function GoogleIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="#4285F4"
+        d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.58-5.17 3.58-8.81Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.96-1.08 7.94-2.91l-3.88-3c-1.08.72-2.45 1.15-4.06 1.15-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09A12 12 0 0 0 12 24Z"
+      />
+      <path fill="#FBBC05" d="M5.27 14.28a7.2 7.2 0 0 1 0-4.56V6.63H1.29a12 12 0 0 0 0 10.74l3.98-3.09Z" />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42A11.97 11.97 0 0 0 12 0 12 12 0 0 0 1.29 6.63l3.98 3.09c.95-2.85 3.6-4.97 6.73-4.97Z"
+      />
+    </svg>
+  );
+}
+
+export function AuthContent({
+  initialMode,
+  onDone,
+  onNotify,
+}: {
+  initialMode: AuthMode;
+  onDone: (mode: AuthMode) => void;
+  onNotify: (message: string) => void;
+}) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+
+  const isSignIn = mode === "signin";
+  const field =
+    "w-full rounded-[16px] border border-[#1D1D1F]/[0.09] bg-white py-3 pl-11 pr-11 text-[15px] tracking-[-0.01em] text-[#1D1D1F] outline-none placeholder:text-[#AAAAAA]/70 focus:border-[#007AFF] focus:ring-2 focus:ring-[#007AFF]/25";
+
+  return (
+    <div className="pb-2">
+      {/* Brand */}
+      <div className="mb-4 flex flex-col items-center pt-1">
+        <LogoMark size={52} />
+        <h3 className="mt-3 text-[20px] font-bold tracking-[-0.02em] text-[#1D1D1F]">
+          {isSignIn ? "Welcome back" : "Create your account"}
+        </h3>
+        <p className="mt-0.5 text-[13px] text-[#AAAAAA]">
+          {isSignIn ? "Sign in to keep making moments" : "Make every moment memorable"}
+        </p>
+      </div>
+
+      <SegmentedControl
+        id="auth-mode"
+        options={[
+          { value: "signin", label: "Sign In" },
+          { value: "signup", label: "Create Account" },
+        ]}
+        value={mode}
+        onChange={setMode}
+      />
+
+      {/* Fields */}
+      <div className="mt-4 space-y-2.5">
+        {!isSignIn ? (
+          <div className="relative">
+            <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#AAAAAA]" aria-hidden />
+            <input
+              type="text"
+              value={name}
+              maxLength={40}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              aria-label="Your name"
+              autoComplete="name"
+              className={field}
+            />
+          </div>
+        ) : null}
+        <div className="relative">
+          <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#AAAAAA]" aria-hidden />
+          <input
+            type="email"
+            value={email}
+            maxLength={60}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email address"
+            aria-label="Email address"
+            autoComplete="email"
+            className={field}
+          />
+        </div>
+        <div className="relative">
+          <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#AAAAAA]" aria-hidden />
+          <input
+            type={showPw ? "text" : "password"}
+            value={password}
+            maxLength={60}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            aria-label="Password"
+            autoComplete={isSignIn ? "current-password" : "new-password"}
+            className={field}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPw((s) => !s)}
+            aria-label={showPw ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#AAAAAA] transition-transform active:scale-90"
+          >
+            {showPw ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+          </button>
+        </div>
+      </div>
+
+      {isSignIn ? (
+        <button
+          type="button"
+          onClick={() => onNotify("Reset link sent — UI preview")}
+          className="mt-2.5 px-1 text-[13px] font-semibold text-[#007AFF] transition-opacity active:opacity-60"
+        >
+          Forgot password?
+        </button>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={() => onDone(mode)}
+        className="mt-4 w-full rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+      >
+        {isSignIn ? "Sign In" : "Create Account"}
+      </button>
+
+      {/* Social */}
+      <div className="mt-5 flex items-center gap-3" aria-hidden>
+        <span className="h-px flex-1 bg-[#1D1D1F]/[0.08]" />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#AAAAAA]">or continue with</span>
+        <span className="h-px flex-1 bg-[#1D1D1F]/[0.08]" />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <button
+          type="button"
+          onClick={() => onDone(mode)}
+          className="flex items-center justify-center gap-2 rounded-full bg-[#1D1D1F] py-3 text-[14.5px] font-semibold text-white transition-transform active:scale-[0.97]"
+        >
+          <AppleIcon size={16} /> Apple
+        </button>
+        <button
+          type="button"
+          onClick={() => onDone(mode)}
+          className="hairline flex items-center justify-center gap-2 rounded-full bg-white py-3 text-[14.5px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97]"
+        >
+          <GoogleIcon size={16} /> Google
+        </button>
+      </div>
+
+      {!isSignIn ? (
+        <p className="mt-4 px-2 text-center text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+          By continuing you agree to MemorableDay&apos;s Terms of Service and Privacy Policy.
+        </p>
+      ) : null}
     </div>
   );
 }

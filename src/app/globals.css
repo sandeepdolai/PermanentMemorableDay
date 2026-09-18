@@ -235,6 +235,45 @@
     background-size: 180% 180%;
     animation: md-drift 9s ease-in-out infinite;
   }
+  /* Desktop-only hover lift for tappable cards (pointer devices) */
+  @media (hover: hover) and (pointer: fine) {
+    .lift {
+      transition:
+        transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .lift:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 2px 4px rgba(29, 29, 31, 0.05),
+        0 24px 52px -18px rgba(29, 29, 31, 0.22);
+    }
+  }
+  /* Mini equalizer bars (soundtrack playing state) */
+  .md-eq {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .md-eq > span {
+    width: 3px;
+    border-radius: 999px;
+    background: currentColor;
+    transform-origin: bottom;
+    animation: md-eq 0.9s ease-in-out infinite;
+  }
+  .md-eq > span:nth-child(1) {
+    height: 6px;
+    animation-delay: 0s;
+  }
+  .md-eq > span:nth-child(2) {
+    height: 11px;
+    animation-delay: 0.18s;
+  }
+  .md-eq > span:nth-child(3) {
+    height: 8px;
+    animation-delay: 0.36s;
+  }
 }
 
 @keyframes md-shimmer {
@@ -263,5 +302,15 @@
   }
   50% {
     background-position: 100% 50%;
+  }
+}
+
+@keyframes md-eq {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
   }
 }

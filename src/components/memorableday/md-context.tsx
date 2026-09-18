@@ -14,8 +14,10 @@ export type Sheet =
   | "explore"
   | "insights"
   | "composer"
+  | "auth"
   | null;
 export type SettingsTopic = "account" | "notifications" | "privacy" | "help";
+export type AuthMode = "signin" | "signup";
 
 /** Payload for the recipient experience player */
 export interface PlayerPayload {
@@ -90,6 +92,14 @@ export interface MDContextValue {
   aiInsertRef: RefObject<AiInsertFn | null>;
   /** Inserts an AI-composed message: into the open builder, or opens one seeded with it */
   insertAiMessage: (message: string) => void;
+  /** Opens the sign-in / create-account sheet */
+  openAuth: (mode?: AuthMode) => void;
+  /** First-run welcome tour visibility */
+  tourOpen: boolean;
+  /** Re-opens the welcome tour (Help → guide, Profile) */
+  openTour: () => void;
+  /** Dismisses the tour and marks it seen */
+  closeTour: () => void;
 }
 
 export const MDContext = createContext<MDContextValue | null>(null);

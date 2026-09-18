@@ -123,7 +123,7 @@ function ExploreCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(idx * 0.04, 0.3), duration: 0.3, ease: "easeOut" }}
-      className="card-shadow hairline overflow-hidden rounded-[22px] bg-white text-left"
+      className="card-shadow hairline lift overflow-hidden rounded-[22px] bg-white text-left"
     >
       <div
         role="button"

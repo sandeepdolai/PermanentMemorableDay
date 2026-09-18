@@ -387,6 +387,39 @@ export const INSIGHTS: Record<InsightRange, InsightSnapshot> = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Soundtrack library (PRD audio system — abstract tracks, UI only)    */
+/* ------------------------------------------------------------------ */
+
+export interface Soundtrack {
+  id: string;
+  title: string;
+  artist: string;
+  /** seconds */
+  duration: number;
+  bpm: number;
+  mood: string;
+  /** vibe gradient endpoints */
+  vibe: string;
+  vibe2: string;
+}
+
+export const SOUNDTRACKS: Soundtrack[] = [
+  { id: "t1", title: "Slow Orbit", artist: "Auralux", duration: 154, bpm: 72, mood: "Calm", vibe: "#007AFF", vibe2: "#64D2FF" },
+  { id: "t2", title: "Paper Skies", artist: "Mono Studio", duration: 132, bpm: 84, mood: "Dreamy", vibe: "#5E5CE6", vibe2: "#B4A7FF" },
+  { id: "t3", title: "Neon Rainfall", artist: "Grid Nine", duration: 141, bpm: 96, mood: "Bold", vibe: "#FF375F", vibe2: "#FF9F0A" },
+  { id: "t4", title: "First Light", artist: "Softserve", duration: 168, bpm: 64, mood: "Warm", vibe: "#FF9F0A", vibe2: "#FFD60A" },
+  { id: "t5", title: "Glasswork", artist: "Lightfield", duration: 122, bpm: 90, mood: "Fresh", vibe: "#30D158", vibe2: "#64D2FF" },
+  { id: "t6", title: "Low Tide", artist: "Mono Studio", duration: 187, bpm: 58, mood: "Calm", vibe: "#007AFF", vibe2: "#5E5CE6" },
+  { id: "t7", title: "Static Bloom", artist: "Paperlab", duration: 138, bpm: 104, mood: "Bold", vibe: "#FF375F", vibe2: "#5E5CE6" },
+  { id: "t8", title: "Quiet Machine", artist: "Auralux", duration: 149, bpm: 78, mood: "Minimal", vibe: "#8E8E93", vibe2: "#C7C7CC" },
+];
+
+/** mm:ss */
+export function formatDuration(s: number): string {
+  return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+}
+
+/* ------------------------------------------------------------------ */
 /* AI message composer (PRD AI system — tones + 3 options, abstract)    */
 /* ------------------------------------------------------------------ */
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bell,
+  BookOpen,
   ChartPie,
   ChevronRight,
   CreditCard,
@@ -100,7 +101,7 @@ function CreditRing({ used, total }: { used: number; total: number }) {
 /* ------------------------------------------------------------------ */
 
 export function ProfileView() {
-  const { notify, openSheet, openSettings, openInsights } = useMD();
+  const { notify, openSheet, openSettings, openInsights, openAuth, openTour } = useMD();
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
 
   const sections: Array<{ title: string; rows: Row[] }> = [
@@ -139,6 +140,7 @@ export function ProfileView() {
       rows: [
         { kind: "link", icon: LifeBuoy, tint: "#FF9F0A", label: "Help center", action: () => openSettings("help") },
         { kind: "link", icon: Mail, tint: "#007AFF", label: "Contact support", action: () => openSettings("help") },
+        { kind: "link", icon: BookOpen, tint: "#5E5CE6", label: "Replay welcome tour", action: openTour },
       ],
     },
   ];
@@ -155,7 +157,7 @@ export function ProfileView() {
           type="button"
           onClick={() => openSettings("account")}
           aria-label="Open account settings"
-          className="card-shadow hairline active:scale-[0.98] w-full rounded-[26px] bg-white p-5 text-left transition-transform"
+          className="card-shadow hairline lift active:scale-[0.98] w-full rounded-[26px] bg-white p-5 text-left transition-transform"
         >
           <div className="flex items-center gap-4">
             <span
@@ -306,7 +308,10 @@ export function ProfileView() {
         <div className="card-shadow hairline overflow-hidden rounded-[22px] bg-white">
           <button
             type="button"
-            onClick={() => notify("Sign out — UI preview")}
+            onClick={() => {
+              notify("You signed out — UI preview");
+              openAuth("signin");
+            }}
             className={cn(
               "flex w-full items-center justify-center gap-2 py-3.5 text-[15px] font-semibold text-[#FF375F]",
               "transition-colors active:bg-[#FF375F]/[0.06]"

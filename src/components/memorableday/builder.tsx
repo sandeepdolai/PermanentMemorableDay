@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, Reorder, motion, useDragControls } from "framer-motion";
 import {
   Award,
+  CalendarDays,
   Check,
   ChevronLeft,
   Clock,
@@ -13,7 +14,9 @@ import {
   ListChecks,
   MousePointerClick,
   Music,
+  Pause,
   PartyPopper,
+  Pencil,
   Play,
   Plus,
   Redo2,
@@ -24,7 +27,10 @@ import {
   Undo2,
   Video,
 } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { SOUNDTRACKS, formatDuration, type Soundtrack } from "@/lib/mock-data";
 import { CoverArt } from "./cover-art";
+import { BottomSheet } from "./bottom-sheet";
 import { useMD, type BuilderOptions } from "./md-context";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +67,38 @@ interface Block {
   type: string;
   /** Optional composed copy (AI messages render here) */
   text?: string;
+  /** Per-type configuration set in the block editor */
+  data?: BlockData;
+}
+
+/** Per-type block configuration (all optional — unset fields fall back to defaults) */
+interface BlockData {
+  /** text: message body */
+  body?: string;
+  /** photo */
+  caption?: string;
+  filter?: string;
+  /** video: clip length seconds */
+  duration?: number;
+  /** audio: library track */
+  trackId?: string;
+  /** gift */
+  message?: string;
+  wrap?: string;
+  /** countdown: unlock delay minutes */
+  minutes?: number;
+  /** quiz */
+  question?: string;
+  options?: string[];
+  answer?: number;
+  /** reward */
+  rewardKind?: string;
+  code?: string;
+  /** cta */
+  label?: string;
+  action?: string;
+  /** confetti */
+  style?: string;
 }
 
 interface Scene {
@@ -73,7 +111,39 @@ interface Snapshot {
   label: string;
   title: string;
   scenes: Scene[];
+  trackId: string | null;
 }
+
+/* Block editor option catalogues (abstract, no themed content) */
+const PHOTO_FILTERS = ["Original", "Warm", "Mono", "Fade", "Vivid"];
+const GIFT_WRAPS = ["#007AFF", "#FF375F", "#5E5CE6", "#30D158", "#FF9F0A"];
+const COUNTDOWN_PRESETS = [
+  { label: "1 min", minutes: 1 },
+  { label: "10 min", minutes: 10 },
+  { label: "1 hour", minutes: 60 },
+  { label: "6 hours", minutes: 360 },
+  { label: "24 hours", minutes: 1440 },
+  { label: "3 days", minutes: 4320 },
+];
+const REWARD_KINDS = ["Coupon", "Gift card", "Download"];
+const CTA_ACTIONS = ["Open link", "Claim", "Reply"];
+const CONFETTI_STYLES = ["Burst", "Rain", "Hearts"];
+const SCHEDULE_TIMES = ["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "9:00 PM", "12:00 AM"];
+
+/** Pretty countdown label from a minutes value */
+function countdownLabel(minutes?: number): string | null {
+  if (!minutes) return null;
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 1440) {
+    const h = minutes / 60;
+    return `${h} hour${h > 1 ? "s" : ""}`;
+  }
+  const d = minutes / 1440;
+  return `${d} day${d > 1 ? "s" : ""}`;
+}
+
+const fieldInput =
+  "w-full rounded-[14px] border border-[#1D1D1F]/[0.09] bg-white px-3.5 py-2.5 text-[14.5px] tracking-[-0.01em] text-[#1D1D1F] outline-none placeholder:text-[#AAAAAA]/70 focus:border-[#007AFF] focus:ring-2 focus:ring-[#007AFF]/25";
 
 const MAX_SCENES = 8;
 const HISTORY_CAP = 30;
@@ -124,18 +194,21 @@ function seedScenes(opts: BuilderOptions): Scene[] {
 /* Block visual previews                                               */
 /* ------------------------------------------------------------------ */
 
-function BlockPreview({ type, cover, text }: { type: string; cover: number; text?: string }) {
+function BlockPreview({ block, cover }: { block: Block; cover: number }) {
+  const type = block.type;
+  const d = block.data;
   switch (type) {
-    case "text":
+    case "text": {
+      const body = d?.body?.trim();
       return (
         <div className="flex items-start gap-3">
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#007AFF]/[0.1] text-[#007AFF]">
             <Type size={16} strokeWidth={2.2} aria-hidden />
           </span>
-          {text ? (
+          {block.text ? (
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-medium italic leading-relaxed tracking-[-0.01em] text-[#1D1D1F]">
-                “{text}”
+                “{block.text}”
               </p>
               <p className="mt-1.5 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#5E5CE6]">
                 <Sparkles size={10} aria-hidden /> AI composed
@@ -143,26 +216,53 @@ function BlockPreview({ type, cover, text }: { type: string; cover: number; text
             </div>
           ) : (
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F]">
-                A few words that land.
-              </p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
-                Your message renders here — big type, generous spacing, one idea per scene.
-              </p>
+              {body ? (
+                <>
+                  <p className="text-[14px] font-semibold leading-relaxed tracking-[-0.01em] text-[#1D1D1F]">
+                    {body}
+                  </p>
+                  <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[#AAAAAA]">
+                    {body.length} characters
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F]">
+                    A few words that land.
+                  </p>
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
+                    Your message renders here — big type, generous spacing, one idea per scene.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>
       );
-    case "photo":
+    }
+    case "photo": {
+      const filtered = d?.filter && d.filter !== "Original" ? d.filter : null;
       return (
         <div className="flex items-center gap-3">
-          <CoverArt variant={cover} className="h-16 w-24 shrink-0 rounded-[12px]" />
+          <span className="relative block shrink-0">
+            <CoverArt variant={filtered ? (cover + 1) % 10 : cover} className="h-16 w-24 rounded-[12px]" />
+            {filtered ? (
+              <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[#1D1D1F]/45 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur-md">
+                {filtered}
+              </span>
+            ) : null}
+          </span>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Photo block</p>
-            <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Full-bleed image with a soft caption</p>
+            {d?.caption?.trim() ? (
+              <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{d.caption.trim()}”</p>
+            ) : (
+              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Full-bleed image with a soft caption</p>
+            )}
           </div>
         </div>
       );
+    }
     case "video":
       return (
         <div className="relative overflow-hidden rounded-[14px]">
@@ -172,12 +272,37 @@ function BlockPreview({ type, cover, text }: { type: string; cover: number; text
               <Play size={18} className="ml-0.5 text-white" fill="white" aria-hidden />
             </span>
           </span>
-          <span className="absolute bottom-2 right-2 rounded-full bg-[#1D1D1F]/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md">
-            0:12
+          <span className="absolute bottom-2 right-2 rounded-full bg-[#1D1D1F]/45 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur-md">
+            {formatDuration(d?.duration ?? 12)}
           </span>
         </div>
       );
-    case "audio":
+    case "audio": {
+      const track = d?.trackId ? SOUNDTRACKS.find((t) => t.id === d.trackId) : null;
+      if (track) {
+        return (
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-white"
+              style={{ background: `linear-gradient(135deg, ${track.vibe}, ${track.vibe2})` }}
+            >
+              <Music size={15} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+                {track.title}
+              </p>
+              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">
+                {track.artist} · {track.mood}
+              </p>
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#AAAAAA]">
+              {formatDuration(track.duration)}
+            </span>
+          </div>
+        );
+      }
       return (
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.12] text-[#FF375F]">
@@ -195,86 +320,138 @@ function BlockPreview({ type, cover, text }: { type: string; cover: number; text
           <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#AAAAAA]">0:34</span>
         </div>
       );
-    case "gift":
+    }
+    case "gift": {
+      const wrap = d?.wrap ?? "#5E5CE6";
+      const message = d?.message?.trim();
       return (
         <div className="flex items-center gap-3">
           <span
             aria-hidden
             className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] text-white"
-            style={{ background: "linear-gradient(135deg, #5E5CE6 0%, #7D7AFF 60%, #B4A7FF 100%)" }}
+            style={{ background: `linear-gradient(135deg, ${wrap} 0%, ${wrap}C4 60%, ${wrap}8C 100%)` }}
           >
             <Gift size={22} strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D gift box</p>
-            <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Recipient taps to open — confetti included</p>
+            {message ? (
+              <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{message}”</p>
+            ) : (
+              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Recipient taps to open — confetti included</p>
+            )}
           </div>
-          <span className="shrink-0 rounded-full bg-[#5E5CE6]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#5E5CE6]">
-            Reveal
+          <span className="flex shrink-0 items-center gap-1.5">
+            {d?.wrap ? (
+              <span aria-hidden className="h-3.5 w-3.5 rounded-full ring-2 ring-white" style={{ backgroundColor: wrap }} />
+            ) : null}
+            <span className="rounded-full bg-[#5E5CE6]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#5E5CE6]">
+              Reveal
+            </span>
           </span>
         </div>
       );
-    case "countdown":
+    }
+    case "countdown": {
+      const label = countdownLabel(d?.minutes);
       return (
         <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[#FF9F0A]/[0.08] px-4 py-3">
           <div className="flex items-center gap-2.5">
             <Clock size={16} className="text-[#B26A00]" aria-hidden />
             <p className="text-[13px] font-semibold text-[#B26A00]">Unlocks in</p>
           </div>
-          <p className="text-[17px] font-bold tabular-nums tracking-wide text-[#1D1D1F]">03 : 12 : 45</p>
+          <p className="text-[17px] font-bold tabular-nums tracking-wide text-[#1D1D1F]">
+            {label ?? "03 : 12 : 45"}
+          </p>
         </div>
       );
-    case "quiz":
+    }
+    case "quiz": {
+      const question = d?.question?.trim() || "Pick the answer that fits —";
+      const options = d?.options?.length ? d.options : ["Option A", "Option B"];
+      const answer = d?.answer ?? -1;
       return (
         <div>
-          <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
-            Pick the answer that fits —
-          </p>
-          <div className="mt-2.5 flex gap-2.5">
-            <span className="flex-1 rounded-full border border-[#007AFF]/25 bg-[#007AFF]/[0.06] py-2 text-center text-[12.5px] font-semibold text-[#007AFF]">
-              Option A
-            </span>
-            <span className="flex-1 rounded-full border border-[#1D1D1F]/[0.08] bg-white py-2 text-center text-[12.5px] font-semibold text-[#1D1D1F]/70">
-              Option B
-            </span>
+          <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">{question}</p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {options.map((o, i) => {
+              const correct = i === answer;
+              return (
+                <span
+                  key={i}
+                  className={cn(
+                    "flex items-center gap-1 rounded-full border py-2 pl-3 pr-2.5 text-center text-[12.5px] font-semibold",
+                    correct
+                      ? "border-[#30D158]/45 bg-[#30D158]/[0.1] text-[#1E9E4A]"
+                      : "border-[#1D1D1F]/[0.08] bg-white text-[#1D1D1F]/70"
+                  )}
+                >
+                  {o}
+                  {correct ? <Check size={12} strokeWidth={3} aria-hidden /> : null}
+                </span>
+              );
+            })}
           </div>
         </div>
       );
-    case "reward":
+    }
+    case "reward": {
+      const kind = d?.rewardKind;
+      const code = d?.code?.trim();
       return (
         <div className="flex items-center gap-3 rounded-[14px] border border-dashed border-[#30D158]/40 bg-[#30D158]/[0.06] px-4 py-3">
           <Award size={20} className="shrink-0 text-[#1E9E4A]" aria-hidden />
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1E9E4A]">Reward reveal</p>
-            <p className="text-[12px] text-[#AAAAAA]">Attach a coupon, gift card or download</p>
+            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1E9E4A]">
+              {kind ? `${kind} reveal` : "Reward reveal"}
+            </p>
+            {code ? (
+              <p className="mt-0.5 font-mono text-[12px] font-semibold tracking-[0.08em] text-[#1E9E4A]/80">
+                {code}
+              </p>
+            ) : (
+              <p className="text-[12px] text-[#AAAAAA]">Attach a coupon, gift card or download</p>
+            )}
           </div>
         </div>
       );
-    case "cta":
+    }
+    case "cta": {
+      const label = d?.label?.trim();
+      const action = d?.action;
       return (
         <div className="flex flex-col items-center py-1">
           <span className="rounded-full bg-[#007AFF] px-7 py-2.5 text-[14px] font-semibold text-white pill-shadow">
-            Continue
+            {label || "Continue"}
           </span>
-          <p className="mt-2 text-[11px] font-medium text-[#AAAAAA]">Opens a link, claim or reply</p>
+          <p className="mt-2 text-[11px] font-medium text-[#AAAAAA]">{action ?? "Opens a link, claim or reply"}</p>
         </div>
       );
-    case "confetti":
+    }
+    case "confetti": {
+      const style = d?.style;
       return (
         <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#FF375F]/[0.1] text-[#FF375F]">
             <PartyPopper size={16} strokeWidth={2.2} aria-hidden />
           </span>
           <p className="flex-1 text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
-            Celebration burst
+            {style ? `${style} celebration` : "Celebration burst"}
           </p>
           <span className="flex shrink-0 items-center gap-1" aria-hidden>
-            {["#FF375F", "#FF9F0A", "#30D158", "#007AFF", "#5E5CE6"].map((c) => (
-              <span key={c} className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+            {[
+              style === "Hearts" ? "#FF375F" : "#FF375F",
+              style === "Rain" ? "#64D2FF" : "#FF9F0A",
+              "#30D158",
+              "#007AFF",
+              "#5E5CE6",
+            ].map((c, i) => (
+              <span key={i} className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
             ))}
           </span>
         </div>
       );
+    }
     default:
       return null;
   }
@@ -291,6 +468,7 @@ function BlockCard({
   active,
   onSelect,
   onRemove,
+  onEdit,
   onGripDown,
 }: {
   block: Block;
@@ -299,6 +477,7 @@ function BlockCard({
   active: boolean;
   onSelect: () => void;
   onRemove: () => void;
+  onEdit: () => void;
   onGripDown: (e: React.PointerEvent) => void;
 }) {
   const controls = useDragControls();
@@ -348,11 +527,11 @@ function BlockCard({
           <GripVertical size={15} strokeWidth={2.2} aria-hidden />
         </button>
         <div className="min-w-0 flex-1">
-          <BlockPreview type={block.type} cover={cover} text={block.text} />
+          <BlockPreview block={block} cover={cover} />
         </div>
       </div>
 
-      {/* Block meta + delete */}
+      {/* Block meta + edit / delete */}
       <div className="mt-3 flex items-center justify-between border-t border-[#1D1D1F]/[0.05] pt-2.5">
         <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
           {def ? (
@@ -361,21 +540,605 @@ function BlockCard({
           {def?.label ?? block.type}
         </span>
         {active ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-            aria-label={`Remove ${def?.label ?? "block"}`}
-            className="relative z-10 flex items-center gap-1 rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#FF375F] transition-transform active:scale-90"
-          >
-            <Trash2 size={11} strokeWidth={2.4} aria-hidden /> Remove
-          </button>
+          <span className="relative z-10 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              aria-label={`Edit ${def?.label ?? "block"} content`}
+              className="flex items-center gap-1 rounded-full bg-[#007AFF]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#007AFF] transition-transform active:scale-90"
+            >
+              <Pencil size={11} strokeWidth={2.4} aria-hidden /> Edit
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              aria-label={`Remove ${def?.label ?? "block"}`}
+              className="flex items-center gap-1 rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[11px] font-semibold text-[#FF375F] transition-transform active:scale-90"
+            >
+              <Trash2 size={11} strokeWidth={2.4} aria-hidden /> Remove
+            </button>
+          </span>
         ) : null}
       </div>
     </Reorder.Item>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Block editor — per-type configuration (sheet content)               */
+/* ------------------------------------------------------------------ */
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <p className="mb-2 px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">{children}</p>;
+}
+
+function ChipGroup<T extends string | number>({
+  options,
+  value,
+  onChange,
+  groupLabel,
+}: {
+  options: Array<{ value: T; label: string }>;
+  value: T | undefined;
+  onChange: (v: T) => void;
+  groupLabel: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label={groupLabel}>
+      {options.map((o) => {
+        const active = value === o.value;
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-[0.96]",
+              active
+                ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BlockEditorContent({
+  block,
+  onChange,
+}: {
+  block: Block;
+  onChange: (data: BlockData) => void;
+}) {
+  const d: BlockData = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+
+  switch (block.type) {
+    case "text":
+      return (
+        <div className="pb-2">
+          <label htmlFor="md-block-text" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+            Message
+          </label>
+          <textarea
+            id="md-block-text"
+            rows={4}
+            maxLength={240}
+            value={d.body ?? ""}
+            onChange={(e) => set({ body: e.target.value })}
+            placeholder="Type the words your recipient will land on…"
+            className={cn(fieldInput, "resize-none leading-relaxed")}
+          />
+          <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">
+            {(d.body ?? "").length}/240
+          </p>
+          <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+            One idea per scene keeps recipients tapping through.
+          </p>
+        </div>
+      );
+    case "photo":
+      return (
+        <div className="space-y-4 pb-2">
+          <div>
+            <FieldLabel>Filter</FieldLabel>
+            <ChipGroup
+              options={PHOTO_FILTERS.map((f) => ({ value: f, label: f }))}
+              value={d.filter ?? "Original"}
+              onChange={(v) => set({ filter: v })}
+              groupLabel="Photo filter"
+            />
+          </div>
+          <div>
+            <label htmlFor="md-photo-caption" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+              Caption
+            </label>
+            <input
+              id="md-photo-caption"
+              maxLength={60}
+              value={d.caption ?? ""}
+              onChange={(e) => set({ caption: e.target.value })}
+              placeholder="A soft line under the photo"
+              className={fieldInput}
+            />
+          </div>
+        </div>
+      );
+    case "video":
+      return (
+        <div className="pb-2">
+          <div className="flex items-baseline justify-between">
+            <FieldLabel>Clip length</FieldLabel>
+            <span className="text-[13px] font-bold tabular-nums text-[#1D1D1F]">{formatDuration(d.duration ?? 12)}</span>
+          </div>
+          <Slider
+            value={[d.duration ?? 12]}
+            min={5}
+            max={60}
+            step={1}
+            onValueChange={(v) => set({ duration: v[0] })}
+            aria-label="Clip length in seconds"
+            className="mt-1"
+          />
+          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+            Short clips hold attention — aim under 20 seconds.
+          </p>
+        </div>
+      );
+    case "audio":
+      return (
+        <div className="pb-2">
+          <FieldLabel>Track</FieldLabel>
+          <div className="space-y-2" role="radiogroup" aria-label="Audio track">
+            {SOUNDTRACKS.map((t) => {
+              const selected = d.trackId === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => set({ trackId: selected ? undefined : t.id })}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-[18px] border-2 bg-white p-3 text-left transition-all active:scale-[0.98]",
+                    selected ? "border-[#007AFF] bg-[#007AFF]/[0.04]" : "border-[#1D1D1F]/[0.07]"
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-white"
+                    style={{ background: `linear-gradient(135deg, ${t.vibe}, ${t.vibe2})` }}
+                  >
+                    <Music size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{t.title}</span>
+                    <span className="mt-0.5 block text-[12px] text-[#AAAAAA]">
+                      {t.artist} · {t.mood}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-[#AAAAAA]">
+                    {formatDuration(t.duration)}
+                  </span>
+                  <span
+                    className={cn(
+                      "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2",
+                      selected ? "border-[#007AFF] bg-[#007AFF]" : "border-[#D1D1D6]"
+                    )}
+                  >
+                    {selected ? <Check size={13} strokeWidth={3} className="text-white" /> : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    case "gift":
+      return (
+        <div className="space-y-4 pb-2">
+          <div>
+            <label htmlFor="md-gift-note" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+              Note inside the gift
+            </label>
+            <textarea
+              id="md-gift-note"
+              rows={2}
+              maxLength={90}
+              value={d.message ?? ""}
+              onChange={(e) => set({ message: e.target.value })}
+              placeholder="Shown when the box opens"
+              className={cn(fieldInput, "resize-none leading-relaxed")}
+            />
+          </div>
+          <div>
+            <FieldLabel>Wrap</FieldLabel>
+            <div className="flex gap-2.5" role="radiogroup" aria-label="Gift wrap color">
+              {GIFT_WRAPS.map((c) => {
+                const active = (d.wrap ?? "#5E5CE6") === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={`Wrap color ${c}`}
+                    onClick={() => set({ wrap: c })}
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+                      active && "ring-2 ring-[#1D1D1F] ring-offset-2 ring-offset-white"
+                    )}
+                    style={{ backgroundColor: c }}
+                  >
+                    {active ? <Check size={15} strokeWidth={3} className="text-white drop-shadow" aria-hidden /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    case "countdown":
+      return (
+        <div className="pb-2">
+          <FieldLabel>Unlocks after</FieldLabel>
+          <ChipGroup
+            options={COUNTDOWN_PRESETS.map((p) => ({ value: p.minutes, label: p.label }))}
+            value={d.minutes}
+            onChange={(v) => set({ minutes: v })}
+            groupLabel="Countdown duration"
+          />
+          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+            The scene stays sealed until the timer runs out — perfect for a timed reveal.
+          </p>
+        </div>
+      );
+    case "quiz": {
+      const options = d.options?.length ? d.options : ["Option A", "Option B"];
+      const answer = d.answer ?? 0;
+      const setOptions = (next: string[]) =>
+        set({ options: next, answer: Math.min(answer, next.length - 1) });
+      return (
+        <div className="space-y-4 pb-2">
+          <div>
+            <label htmlFor="md-quiz-q" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+              Question
+            </label>
+            <input
+              id="md-quiz-q"
+              maxLength={80}
+              value={d.question ?? ""}
+              onChange={(e) => set({ question: e.target.value })}
+              placeholder="Ask something only they'd know"
+              className={fieldInput}
+            />
+          </div>
+          <div>
+            <FieldLabel>Answers — tap the circle to mark the right one</FieldLabel>
+            <div className="space-y-2">
+              {options.map((o, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => set({ answer: i })}
+                    aria-pressed={answer === i}
+                    aria-label={`Mark option ${i + 1} as correct`}
+                    className={cn(
+                      "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                      answer === i ? "border-[#30D158] bg-[#30D158]" : "border-[#D1D1D6]"
+                    )}
+                  >
+                    {answer === i ? <Check size={13} strokeWidth={3} className="text-white" aria-hidden /> : null}
+                  </button>
+                  <input
+                    value={o}
+                    maxLength={30}
+                    aria-label={`Option ${i + 1}`}
+                    onChange={(e) => setOptions(options.map((x, j) => (j === i ? e.target.value : x)))}
+                    className={cn(fieldInput, "flex-1 py-2")}
+                    placeholder={`Option ${i + 1}`}
+                  />
+                  {options.length > 2 ? (
+                    <button
+                      type="button"
+                      onClick={() => setOptions(options.filter((_, j) => j !== i))}
+                      aria-label={`Remove option ${i + 1}`}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.08] text-[#FF375F] transition-transform active:scale-90"
+                    >
+                      <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            {options.length < 4 ? (
+              <button
+                type="button"
+                onClick={() => setOptions([...options, `Option ${String.fromCharCode(65 + options.length)}`])}
+                className="mt-2.5 flex items-center gap-1.5 rounded-full bg-[#007AFF]/[0.08] px-3.5 py-1.5 text-[12.5px] font-semibold text-[#007AFF] transition-transform active:scale-95"
+              >
+                <Plus size={13} strokeWidth={2.4} aria-hidden /> Add option
+              </button>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+    case "reward":
+      return (
+        <div className="space-y-4 pb-2">
+          <div>
+            <FieldLabel>Reward type</FieldLabel>
+            <ChipGroup
+              options={REWARD_KINDS.map((k) => ({ value: k, label: k }))}
+              value={d.rewardKind}
+              onChange={(v) => set({ rewardKind: v })}
+              groupLabel="Reward type"
+            />
+          </div>
+          <div>
+            <label htmlFor="md-reward-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+              Code or link
+            </label>
+            <input
+              id="md-reward-code"
+              maxLength={24}
+              value={d.code ?? ""}
+              onChange={(e) => set({ code: e.target.value.toUpperCase() })}
+              placeholder="SPRING24"
+              className={cn(fieldInput, "font-mono tracking-[0.08em]")}
+            />
+          </div>
+        </div>
+      );
+    case "cta":
+      return (
+        <div className="space-y-4 pb-2">
+          <div>
+            <label htmlFor="md-cta-label" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+              Button label
+            </label>
+            <input
+              id="md-cta-label"
+              maxLength={24}
+              value={d.label ?? ""}
+              onChange={(e) => set({ label: e.target.value })}
+              placeholder="Continue"
+              className={fieldInput}
+            />
+          </div>
+          <div>
+            <FieldLabel>On tap</FieldLabel>
+            <ChipGroup
+              options={CTA_ACTIONS.map((a) => ({ value: a, label: a }))}
+              value={d.action}
+              onChange={(v) => set({ action: v })}
+              groupLabel="Button action"
+            />
+          </div>
+        </div>
+      );
+    case "confetti":
+      return (
+        <div className="pb-2">
+          <FieldLabel>Celebration style</FieldLabel>
+          <ChipGroup
+            options={CONFETTI_STYLES.map((s) => ({ value: s, label: s }))}
+            value={d.style}
+            onChange={(v) => set({ style: v })}
+            groupLabel="Confetti style"
+          />
+          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+            Fires the moment this scene opens.
+          </p>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Soundtrack picker (experience-level music, sheet content)           */
+/* ------------------------------------------------------------------ */
+
+/** Mini animated equalizer bars (playing state) */
+function EqBars({ className }: { className?: string }) {
+  return (
+    <span aria-hidden className={cn("md-eq", className)}>
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
+function SoundtrackContent({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const [previewId, setPreviewId] = useState<string | null>(null);
+
+  // Previews auto-stop after a few seconds (simulated playback)
+  useEffect(() => {
+    if (!previewId) return;
+    const t = window.setTimeout(() => setPreviewId(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [previewId]);
+
+  return (
+    <div className="pb-2">
+      <div className="space-y-2">
+        {SOUNDTRACKS.map((t) => {
+          const selectedRow = selected === t.id;
+          const playing = previewId === t.id;
+          return (
+            <div
+              key={t.id}
+              className={cn(
+                "card-shadow flex items-center gap-3 rounded-[18px] border-2 bg-white p-2.5",
+                selectedRow ? "border-[#007AFF]" : "border-[#1D1D1F]/[0.07]"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewId((p) => (p === t.id ? null : t.id))}
+                aria-label={playing ? `Pause preview of ${t.title}` : `Preview ${t.title}`}
+                className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[13px] text-white transition-transform active:scale-90"
+                style={{ background: `linear-gradient(135deg, ${t.vibe}, ${t.vibe2})` }}
+              >
+                {playing ? (
+                  <Pause size={15} fill="currentColor" aria-hidden />
+                ) : (
+                  <Play size={15} fill="currentColor" className="ml-0.5" aria-hidden />
+                )}
+              </button>
+              <button
+                type="button"
+                aria-pressed={selectedRow}
+                onClick={() => onSelect(selectedRow ? null : t.id)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="truncate text-[14.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{t.title}</p>
+                <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-[#AAAAAA]">
+                  {playing ? <EqBars className="h-3 w-4 text-[#007AFF]" /> : null}
+                  <span className="truncate">
+                    {t.artist} · {t.mood} · {t.bpm} BPM
+                  </span>
+                </p>
+              </button>
+              <span className="shrink-0 text-[11.5px] font-semibold tabular-nums text-[#AAAAAA]">
+                {formatDuration(t.duration)}
+              </span>
+              <span
+                className={cn(
+                  "flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full border-2",
+                  selectedRow ? "border-[#007AFF] bg-[#007AFF]" : "border-[#D1D1D6]"
+                )}
+              >
+                {selectedRow ? <Check size={14} strokeWidth={3} className="text-white" aria-hidden /> : null}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+        Soundtracks play softly under every scene. Previews are simulated in this UI preview.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Schedule send (date + time picker, sheet content)                  */
+/* ------------------------------------------------------------------ */
+
+function ScheduleContent({ onConfirm }: { onConfirm: (label: string) => void }) {
+  const [dayIdx, setDayIdx] = useState(0);
+  const [time, setTime] = useState(SCHEDULE_TIMES[0]);
+
+  const days = useMemo(() => {
+    const out: Array<{ label: string; sub: string; full: string }> = [];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      out.push({
+        label: i === 0 ? "Today" : i === 1 ? "Tmrw" : new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(d),
+        sub: new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(d),
+        full: new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(d),
+      });
+    }
+    return out;
+  }, []);
+
+  return (
+    <div className="pb-2">
+      {/* Live summary */}
+      <div className="mb-4 rounded-[18px] bg-[#007AFF]/[0.07] px-4 py-3 text-center">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#007AFF]">Sends</p>
+        <p className="mt-0.5 text-[16px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+          {days[dayIdx].full} · {time}
+        </p>
+      </div>
+
+      <FieldLabel>Day</FieldLabel>
+      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 no-scrollbar">
+        {days.map((d, i) => {
+          const active = i === dayIdx;
+          return (
+            <button
+              key={i}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setDayIdx(i)}
+              className={cn(
+                "flex w-[72px] shrink-0 flex-col items-center rounded-[16px] border-2 py-2.5 transition-all active:scale-[0.96]",
+                active ? "border-[#007AFF] bg-[#007AFF]/[0.06]" : "border-[#1D1D1F]/[0.07] bg-white"
+              )}
+            >
+              <span className={cn("text-[10.5px] font-bold uppercase tracking-wide", active ? "text-[#007AFF]" : "text-[#AAAAAA]")}>
+                {d.label}
+              </span>
+              <span className={cn("mt-0.5 text-[15px] font-bold tabular-nums", active ? "text-[#1D1D1F]" : "text-[#1D1D1F]/70")}>
+                {d.sub}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4">
+        <FieldLabel>Time</FieldLabel>
+        <div className="grid grid-cols-3 gap-2">
+          {SCHEDULE_TIMES.map((t) => {
+            const active = time === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setTime(t)}
+                className={cn(
+                  "rounded-full border py-2.5 text-[13px] font-semibold tabular-nums transition-all active:scale-[0.96]",
+                  active
+                    ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                    : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+                )}
+              >
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="mt-3.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+        Times shown in your local timezone. You can cancel anytime before it sends.
+      </p>
+      <button
+        type="button"
+        onClick={() => onConfirm(`${days[dayIdx].full} · ${time}`)}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+      >
+        <CalendarDays size={16} aria-hidden /> Schedule send
+      </button>
+    </div>
   );
 }
 
@@ -473,6 +1236,10 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const [reorderMode, setReorderMode] = useState(false);
   const [past, setPast] = useState<Snapshot[]>([]);
   const [future, setFuture] = useState<Snapshot[]>([]);
+  const [trackId, setTrackId] = useState<string | null>(null);
+  const [editBlockId, setEditBlockId] = useState<string | null>(null);
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const idRef = useRef(100);
   const blocksEndRef = useRef<HTMLDivElement>(null);
   const blockDragStarted = useRef(false);
@@ -481,12 +1248,16 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
   const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
   const scenePos = sceneIdx + 1;
+  const track: Soundtrack | null = trackId ? (SOUNDTRACKS.find((t) => t.id === trackId) ?? null) : null;
+  const editBlock = editBlockId ? (scenes.flatMap((s) => s.blocks).find((b) => b.id === editBlockId) ?? null) : null;
+  /** Any builder-local sheet open? (Escape / ⌘Z defer to it) */
+  const localSheet = editBlock !== null || musicOpen || scheduleOpen;
 
   /* ---------- Undo / redo ---------- */
 
   const snapshot = useCallback(
-    (label: string): Snapshot => ({ label, title, scenes }),
-    [title, scenes]
+    (label: string): Snapshot => ({ label, title, scenes, trackId }),
+    [title, scenes, trackId]
   );
 
   /** Push the CURRENT state onto the past stack (call before every mutation) */
@@ -501,6 +1272,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const applySnapshot = useCallback((s: Snapshot) => {
     setTitle(s.title);
     setScenes(s.scenes);
+    setTrackId(s.trackId);
     setSceneIdx((i) => Math.min(i, s.scenes.length - 1));
     setSelectedBlock(null);
   }, []);
@@ -584,6 +1356,35 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
     if (!t) setTitle(opts.title ?? "Untitled Experience");
   };
 
+  /* ---------- Block editing (sheet + live apply, history at open) ---------- */
+
+  /** Live-applies block config changes from the editor sheet */
+  const updateBlockData = (id: string, data: BlockData) => {
+    setScenes((prev) =>
+      prev.map((s) => ({
+        ...s,
+        blocks: s.blocks.map((b) => (b.id === id ? { ...b, data } : b)),
+      }))
+    );
+  };
+
+  /** Opens the block editor (records the pre-edit state once for undo) */
+  const openBlockEditor = (id: string) => {
+    const b = scenes.flatMap((s) => s.blocks).find((x) => x.id === id);
+    pushHistory(`${BLOCK_BY_TYPE[b?.type ?? ""]?.label ?? "Block"} edited`);
+    setEditBlockId(id);
+  };
+
+  /* ---------- Soundtrack ---------- */
+
+  const selectTrack = (id: string | null) => {
+    if (trackId === id) return;
+    pushHistory(id ? "Soundtrack changed" : "Soundtrack removed");
+    setTrackId(id);
+    const name = id ? SOUNDTRACKS.find((t) => t.id === id)?.title ?? "Track" : null;
+    notify(name ? `“${name}” set as soundtrack` : "Soundtrack removed");
+  };
+
   /** Record the pre-edit title once, at edit start */
   const beginEditTitle = () => {
     pushHistory("Title renamed");
@@ -651,17 +1452,17 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        if (sheet || player || editing) return;
+        if (sheet || player || editing || localSheet) return;
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
         return;
       }
-      if (e.key === "Escape" && !sheet && !player) onClose();
+      if (e.key === "Escape" && !sheet && !player && !localSheet) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sheet, player, editing, onClose, undo, redo]);
+  }, [sheet, player, editing, localSheet, onClose, undo, redo]);
 
   const canUndo = past.length > 0;
   const canRedo = future.length > 0;
@@ -874,9 +1675,25 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                         <p className="text-[12px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
                           Scene {i + 1}
                         </p>
-                        <p className="mt-0.5 text-[10.5px] font-medium text-[#AAAAAA]">
+                        <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-medium text-[#AAAAAA]">
                           {s.blocks.length} {s.blocks.length === 1 ? "block" : "blocks"}
                         </p>
+                        {s.blocks.length > 0 ? (
+                          <span className="mt-1.5 flex items-center gap-[3px]" aria-hidden>
+                            {s.blocks.slice(0, 5).map((b) => (
+                              <span
+                                key={b.id}
+                                className="h-[5px] w-[5px] rounded-full"
+                                style={{ backgroundColor: BLOCK_BY_TYPE[b.type]?.tint ?? "#C7C7CC" }}
+                              />
+                            ))}
+                            {s.blocks.length > 5 ? (
+                              <span className="text-[8px] font-bold leading-none text-[#AAAAAA]">
+                                +{s.blocks.length - 5}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </div>
                     </button>
                   );
@@ -931,6 +1748,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                         active={active}
                         onSelect={() => setSelectedBlock(active ? null : b.id)}
                         onRemove={() => removeBlock(b.id)}
+                        onEdit={() => openBlockEditor(b.id)}
                         onGripDown={() => {
                           blockDragStarted.current = true;
                         }}
@@ -941,6 +1759,61 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 <div ref={blocksEndRef} aria-hidden />
               </Reorder.Group>
             )}
+          </section>
+
+          {/* Soundtrack */}
+          <section aria-label="Soundtrack">
+            <div className="card-shadow hairline flex items-center gap-3 rounded-[20px] bg-white p-3">
+              {track ? (
+                <>
+                  <span
+                    aria-hidden
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] text-white"
+                    style={{ background: `linear-gradient(135deg, ${track.vibe}, ${track.vibe2})` }}
+                  >
+                    <Music size={17} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{track.title}</p>
+                    <p className="mt-0.5 truncate text-[11.5px] font-medium text-[#AAAAAA]">
+                      {track.artist} · plays across all scenes
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => selectTrack(null)}
+                    aria-label="Remove soundtrack"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.09] text-[#FF375F] transition-transform active:scale-90"
+                  >
+                    <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMusicOpen(true)}
+                    className="shrink-0 rounded-full bg-[#1D1D1F]/[0.06] px-3.5 py-1.5 text-[12px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-95"
+                  >
+                    Change
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.1] text-[#FF375F]">
+                    <Music size={18} aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Add a soundtrack</p>
+                    <p className="mt-0.5 text-[11.5px] font-medium text-[#AAAAAA]">Set the mood across every scene</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMusicOpen(true)}
+                    className="shrink-0 rounded-full bg-[#007AFF] px-4 py-2 text-[12.5px] font-semibold text-white pill-shadow transition-transform active:scale-95"
+                  >
+                    Browse
+                  </button>
+                </>
+              )}
+            </div>
           </section>
 
           {/* Block palette */}
@@ -1010,7 +1883,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
         </button>
         <button
           type="button"
-          onClick={() => notify("Scheduler opens here — UI preview")}
+          onClick={() => setScheduleOpen(true)}
           className="flex-1 rounded-full bg-[#1D1D1F]/[0.06] py-3 text-[14.5px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97]"
         >
           Schedule
@@ -1025,6 +1898,33 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
           Send
         </button>
       </footer>
+
+      {/* ---------- Builder-local sheets (above builder, below app sheets) ---------- */}
+      <BottomSheet
+        open={editBlock !== null}
+        onClose={() => setEditBlockId(null)}
+        title={editBlock ? `Edit ${BLOCK_BY_TYPE[editBlock.type]?.label ?? "Block"} block` : "Edit block"}
+      >
+        {editBlock ? (
+          <BlockEditorContent
+            block={editBlock}
+            onChange={(data) => updateBlockData(editBlock.id, data)}
+          />
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet open={musicOpen} onClose={() => setMusicOpen(false)} title="Soundtrack">
+        <SoundtrackContent selected={trackId} onSelect={selectTrack} />
+      </BottomSheet>
+
+      <BottomSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Schedule send">
+        <ScheduleContent
+          onConfirm={(label) => {
+            setScheduleOpen(false);
+            notify(`Scheduled for ${label} — UI preview`);
+          }}
+        />
+      </BottomSheet>
     </motion.div>
   );
 }

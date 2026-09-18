@@ -283,3 +283,43 @@ Stage Summary:
 - Minor behavior note: undoing a scene REORDER restores scenes but keeps selection by index (not identity) — harmless, documented.
 - Next-phase candidates: Prisma models + real CRUD behind builder/sheets (app is feature-complete in UI), auth screens, onboarding tour, recipient route /e/[slug] (blocked — single-route constraint), scene-level block editing (block config sheets), export/share analytics.
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+
+---
+Task ID: 7
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 5)
+Task: Assess project status, QA via agent-browser, then continue development (fix bugs + add features + styling polish per round mandate).
+
+Work Log:
+- Status assessment: dev server healthy (GET / 200), lint clean, worklog reviewed. QA pass on the round-4 build: 5 tabs, create sheet → builder, add/select/remove/undo, insights (funnel/KPI/chart), notifications, player + Escape chains, search pill — zero page errors, zero console errors. No real bugs found (one suspected issue was a test-script timing artifact).
+- NEW FEATURE — Block editor (per-type configuration, PRD Experience Builder depth):
+  - Block model gains `data?: BlockData` (body, caption, filter, duration, trackId, message, wrap, minutes, question, options, answer, rewardKind, code, label, action, style). Snapshot/history carries it automatically (full Block objects).
+  - Selected block shows an "Edit" pill (Pencil) beside Remove → BottomSheet (builder-local) with type-specific controls: Text (textarea 240 + char count), Photo (5 filter chips + caption), Video (Slider 5–60s + live mm:ss), Audio (8-track radio list), Gift (note + 5 wrap swatches), Countdown (6 presets 1min→3days), Quiz (question + 2–4 editable options + add/remove + green correct-answer marker), Reward (type chips + mono code input, auto-uppercase), Button (label + action chips), Confetti (style chips).
+  - Edits apply LIVE to the builder state; history pushed ONCE at editor open ("Text edited" etc.) so a single ⌘Z restores pre-edit state. Verified: audio track → preview shows "Slow Orbit"; undo reverts; quiz question/3 options/correct marker render in preview.
+  - BlockPreview rewritten to render configured data for all 10 types (fallbacks preserved when unset; AI-composed text still takes priority with its badge).
+- NEW FEATURE — Soundtrack picker (PRD audio system):
+  - mock-data.ts: SOUNDTRACKS (8 abstract tracks w/ vibe gradient, mood, BPM, duration) + formatDuration().
+  - Builder workspace gains a Soundtrack card (empty "Add a soundtrack" ↔ selected track w/ gradient thumb, "plays across all scenes", Change/Remove). "Browse" opens a builder-local sheet: rows w/ play-preview button (Pause state + animated .md-eq equalizer bars, 6s auto-stop), tap-to-select w/ check circle, blue ring on selected. Toasts on set/remove; soundtrack is undo-able (Snapshot gained trackId).
+- NEW FEATURE — Schedule send sheet (builder footer "Schedule" now opens it instead of toasting):
+  - 7-day client-side date scroller (Today/Tmrw/weekday + date), 6 time chips, live "Sends {date} · {time}" summary, local-timezone note, confirm → toast. Dates computed at sheet mount (client-only, no SSR mismatch).
+- NEW FEATURE — First-run welcome tour (new file welcome-tour.tsx):
+  - 3 slides (Create moments / Share with a link / Watch every scene land) with full-bleed CoverArt, sliding transitions, iOS dots, Skip/Next/Get started. Shows once via localStorage "md-onboarded" (rAF-checked after paint — lint-safe). Replay from Profile → "Replay welcome tour" and Help → "Getting started guide". "I have an account" → closes tour → opens auth sheet. Step resets on each open via the previous-render pattern (no setState-in-effect).
+- NEW FEATURE — Auth sheet (PRD auth screens, UI-only):
+  - AuthContent in sheet-contents: LogoMark + "Welcome back"/"Create your account", Sign In / Create Account SegmentedControl, icon fields (name on signup, email, password w/ eye reveal), Forgot password link, primary CTA, "or continue with" divider, Apple (dark) + Google (4-color SVG) buttons, ToS fine print on signup. Entry points: tour "I have an account", Profile Sign Out (now opens the sheet after a "You signed out" toast). Sheet type "auth" + openAuth(mode) added to context.
+- STYLING polish: toast auto-dismiss progress hairline (2.4s scaleX); Home gains a blue uppercase date line above the greeting; Insights KPI cards gain contextual icons (Eye/CheckCheck/Clock/Heart); builder scene chips gain mini block-type color dots (max 5 + "+n"); new .lift desktop hover utility (pointer-fine only: -2px lift + deepened shadow) applied to home hero/stats/drafts, gallery cards, explore cards, profile identity card; .md-eq equalizer keyframes in globals.css.
+- ARCHITECTURE: builder-local sheets (block editor / soundtrack / schedule) render BottomSheet INSIDE the builder layer; builder keydown defers Escape AND ⌘Z while any local sheet is open (localSheet flag in deps). md-context gains openAuth/tourOpen/openTour/closeTour; Sheet type gains "auth"; SettingsContent gains onOpenTour prop.
+
+- VERIFICATION (agent-browser 390×844, DOM-level + VLM):
+  - Tour: first-run shows after storage clear; slides 1→2→3 navigate; Get started closes + sets localStorage; replay from Profile works; "I have an account" → auth sheet.
+  - Auth: segmented switch (signup shows name field), password eye reveal works, Apple/Google present, Forgot password present, submit → toast; Sign Out → toast + auth sheet; Escape closes.
+  - Block editor: Edit button appears on selected block; audio editor lists 8 tracks, selection live-applies ("Slow Orbit" in block), sheet Escape does NOT close the builder (deferred), undo restores pre-edit; text editor live-applies body; quiz editor: question + Add option (2→3) + mark correct → all render in preview.
+  - Soundtrack: sheet lists 8 tracks; preview toggles Play↔Pause w/ animated EQ bars (DOM: .md-eq present); row select → builder card shows "Neon Rainfall · plays across all scenes"; undo removes it.
+  - Schedule: 7 day chips render, time select, confirm → "Scheduled for Sun, Sep 20 · 6:00 PM — UI preview" toast.
+  - Regressions: 5 tabs, gallery drafts filter, explore preview sheet, search submit, notifications mark-all-read + toast progress bar, player from builder + Escape chain (player→builder), undo/redo, desktop 480px centered column. Home VLM PASS (date line, search pill, floating nav confirmed). VLM tour-button "cut-off" claim disproven by bounding boxes (text 35→159px inside button 25→168px). ZERO page errors, ZERO console errors, lint clean (exit 0).
+
+Stage Summary:
+- Round 5 complete. The builder is now a real editor: every block type is configurable, experiences have undo-able soundtracks and scheduling, and the app has first-run onboarding + a full auth UI loop — all still mock-data/UI-only per the user's instruction (no themed content, no backend).
+- Files: NEW welcome-tour.tsx; MODIFIED builder.tsx (block data model + 3 local sheets + soundtrack card, ~700 lines added), sheet-contents.tsx (AuthContent + KPI icons + onOpenTour), app-shell.tsx (tour/auth wiring + toast progress), md-context.tsx (auth + tour APIs), mock-data.ts (SOUNDTRACKS + formatDuration), home/profile/gallery/explore views (polish), globals.css (.lift + .md-eq).
+- Layer stack: content z-10 < chrome z-50 < builder z-60 (now hosts its own z-80/81 sheets internally) < player z-70 < app sheets z-80/81 < toast z-90 < tour z-95.
+- Known tooling quirks (not app bugs): agent-browser innerText is case-sensitive on CSS-uppercased text; VLM occasionally reports phantom "cut-off" text (always verify with bounding boxes); Explore skeleton needs ~600ms before cards exist in DOM.
+- Next-phase candidates: Prisma models + real CRUD behind builder/sheets (UI is feature-complete), recipient route /e/[slug] (blocked — single-route constraint), scene-level cover art picker, export/share insights card, dark mode pass, e2e test harness.
+- Reminder: user should rotate the GitHub token shared earlier in chat.
