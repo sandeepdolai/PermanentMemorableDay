@@ -167,12 +167,55 @@ export function backgroundDimClass(dim?: string): string {
   }
 }
 
-/** Parses a JSON column into a scene doc array (null-safe). */
+let uidSeq = 0;
+
+/**
+ * Collision-proof id: timestamp (base36) + module-scoped counter + random suffix.
+ * Replaces the old `b${counter}` / `d${Date.now()}` schemes whose counters reset on
+ * remount (or collide within the same millisecond), producing duplicate React keys.
+ */
+export function uid(prefix: string): string {
+  return `${prefix}${Date.now().toString(36)}${(uidSeq++).toString(36)}${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
+}
+
+/** Collision-proof block id (never re-issues `b100`-style ids after a remount). */
+export const freshBlockId = (): string => uid("b");
+
+/** Collision-proof scene id (never collides on same-millisecond "Add Scene" taps). */
+export const freshSceneId = (): string => uid("s");
+
+/**
+ * Repairs a scenes array so every block id is unique within its scene and every
+ * scene id is unique across the doc. Legacy drafts saved while the old resettable
+ * counter was live can legitimately contain two `b100` blocks — this re-keys the
+ * duplicates so React keyed lists never warn again.
+ */
+export function dedupeScenes<S extends { id: string; blocks: Array<{ id: string }> }>(
+  scenes: S[]
+): S[] {
+  const sceneIds = new Set<string>();
+  return scenes.map((s) => {
+    const sid = sceneIds.has(s.id) ? freshSceneId() : s.id;
+    sceneIds.add(sid);
+    const blockIds = new Set<string>();
+    const blocks = s.blocks.map((b) => {
+      if (blockIds.has(b.id)) return { ...b, id: freshBlockId() };
+      blockIds.add(b.id);
+      return b;
+    });
+    return { ...s, id: sid, blocks } as S;
+  });
+}
+
+/** Parses a JSON column into a scene doc array (null-safe, duplicate-id-repaired). */
 export function parseScenes(raw: string | null | undefined): SceneDoc[] | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as SceneDoc[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return dedupeScenes(parsed);
   } catch {
     return null;
   }

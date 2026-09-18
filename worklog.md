@@ -722,3 +722,23 @@ Stage Summary:
 - Gotchas for future agents: (1) after any prisma schema change, RESTART the dev server — the running process keeps the old client and new columns fail silently under .catch(); (2) agent-browser `drag` takes element refs, not coordinates — simulate swipes with dispatched PointerEvent sequences; (3) notification rows are pointer-capture sensitive — never capture on pointer-down if a child button must stay clickable.
 - Next-phase candidates: Spotify credentials drop-in (music search route is Spotify-ready), video trim/loop-point UI for the background block, upload progress via XHR, public /e/[slug] recipient page, per-scene soundtrack override, e2e harness for builder→player.
 - Reminder: user should rotate the GitHub PAT shared earlier in chat.
+
+---
+Task ID: 18
+Agent: Z.ai Code (main orchestrator)
+Task: Fix the "Encountered two children with the same key, `b100`" React warning (notification/console glitch reported by user).
+
+Work Log:
+- Diagnosed root cause: builder.tsx used `idRef = useRef(100)` — a resettable counter. Every builder remount (reload, Continue editing, save→reopen) restarted it at 100, so `addBlock`/`insertAiMessage` re-minted `b100` while restored drafts already contained a `b100` block → two siblings with the same React key in one scene's block list. Secondary same-millisecond collisions: `s${Date.now()}` (rapid Add Scene), `d${Date.now()}` (draft ids), `up-${Date.now()}`, `preview-${Date.now()}`.
+- md-blocks.ts: added `uid(prefix)` (timestamp-base36 + module counter + random suffix), `freshBlockId()`, `freshSceneId()`, and `dedupeScenes()` (re-keys duplicate block ids within a scene and duplicate scene ids across a doc). `parseScenes()` now repairs every server-hydrated sceneData through `dedupeScenes` — fixes already-polluted rows in the DB.
+- builder.tsx: both `b${idRef.current++}` sites → `freshBlockId()`; `addScene` → `freshSceneId()`; `up-/preview-/d${Date.now()}` → `uid(...)`; removed `idRef`; `seedScenes` restore path now runs `dedupeScenes` (covers localStorage/DB-fed docs).
+- Verified no id-format assumptions exist anywhere (no startsWith/slice parsing of ids) before changing the scheme; deterministic seed ids (b1–b32, bAi0, bSeed) can never collide with the new timestamp-based scheme.
+- E2E (agent-browser): injected a draft with TWO `b100` blocks in one scene into the DB via the moments API → opened it in the builder → zero console warnings, all 3 blocks render (duplicate re-keyed); added Text+Photo+Button blocks rapidly → clean; Save Draft → close → reopen (remount) → added another Text block → clean (the exact original bug path); Preview player overlay rendered the polluted draft → clean; fresh reload + notifications sheet → clean; deleted the e2e draft afterwards.
+- `bun run lint` exit 0; dev.log all 200s, no errors.
+
+Stage Summary:
+- The duplicate-key (`b100`) warning is fixed at both ends: new ids are collision-proof (no resettable state, no same-ms collisions), and legacy polluted data is repaired on hydration (parseScenes + seedScenes both dedupe).
+- Files touched: src/lib/md-blocks.ts (uid/freshBlockId/freshSceneId/dedupeScenes + parseScenes repair), src/components/memorableday/builder.tsx (all 6 id-generation sites + restore dedupe, idRef removed).
+- Gotcha: rg's `-r` flag is --replace (mangles output if used like grep's `-r`); use `--glob` + plain patterns.
+- Next-phase candidates (unchanged queue): Spotify credentials drop-in, video trim/loop UI for background block, upload progress via XHR, public /e/[slug] recipient page, per-scene soundtrack override, e2e harness for builder→player.
+- Reminder: user should rotate the GitHub PAT shared earlier in chat.

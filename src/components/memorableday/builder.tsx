@@ -40,8 +40,12 @@ import { formatDuration } from "@/lib/mock-data";
 import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
 import {
   backgroundDimClass,
+  dedupeScenes,
   formatClock,
+  freshBlockId,
+  freshSceneId,
   photoFilterCss,
+  uid,
   urlDomain,
   BACKGROUND_DIMS,
   BACKGROUND_MOTIONS,
@@ -148,7 +152,10 @@ const DRAFT_PATTERNS: string[][] = [
 function seedScenes(opts: BuilderOptions): Scene[] {
   // Edit-in-Builder restore — the full authored document wins over sketching.
   if (opts.doc && opts.doc.scenes.length > 0) {
-    return opts.doc.scenes.map((s) => ({ ...s, blocks: s.blocks.map((b) => ({ ...b })) }));
+    // Repair legacy duplicate block ids (the old resettable b-counter bug) while cloning.
+    return dedupeScenes(
+      opts.doc.scenes.map((s) => ({ ...s, blocks: s.blocks.map((b) => ({ ...b })) }))
+    );
   }
   if (opts.ai) {
     const scenes: Scene[] = [
@@ -1391,7 +1398,7 @@ function UploadAudioContent({
     if (!staged) return;
     stop();
     onConfirm({
-      id: `up-${Date.now()}`,
+      id: uid("up-"),
       title: staged.name,
       artist: "Your upload",
       artwork: "",
@@ -2412,7 +2419,6 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   /** Send-flow recipient prompt (iOS alert) + in-flight flag */
   const [sendPromptOpen, setSendPromptOpen] = useState(false);
   const [sending, setSending] = useState(false);
-  const idRef = useRef(100);
   const blocksEndRef = useRef<HTMLDivElement>(null);
   const blockDragStarted = useRef(false);
   const sceneDragStarted = useRef(false);
@@ -2470,7 +2476,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   /* ---------- Mutations (each pushes history) ---------- */
 
   const addBlock = (type: string, text?: string) => {
-    const id = `b${idRef.current++}`;
+    const id = freshBlockId();
     pushHistory(text ? "AI message added" : `${BLOCK_BY_TYPE[type]?.label ?? "Block"} added`);
     setScenes((prev) =>
       prev.map((s, i) =>
@@ -2499,7 +2505,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
       notify(`Scene limit reached (${MAX_SCENES}) in this preview`);
       return;
     }
-    const id = `s${Date.now()}`;
+    const id = freshSceneId();
     pushHistory("Scene added");
     setScenes((prev) => [...prev, { id, blocks: [] }]);
     setSceneIdx(scenes.length);
@@ -2605,7 +2611,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
   /** Inserts a composed message into the current scene (called from the composer sheet) */
   const insertAiMessage = (message: string) => {
-    const id = `b${idRef.current++}`;
+    const id = freshBlockId();
     pushHistory("AI message added");
     setScenes((prev) =>
       prev.map((s, i) =>
@@ -2715,7 +2721,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             type="button"
             onClick={() =>
               openMoment({
-                id: `preview-${Date.now()}`,
+                id: uid("preview-"),
                 title: title || "Untitled Experience",
                 cover,
                 dedication: "Draft preview",
@@ -3086,7 +3092,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
           type="button"
           onClick={() => {
             saveDraft({
-              id: opts.draftId ?? `d${Date.now()}`,
+              id: opts.draftId ?? uid("d"),
               title: title || "Untitled Experience",
               cover,
               scenes: scenes.length,
@@ -3148,7 +3154,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             setScheduleOpen(false);
             setSending(true);
             void sendMoment({
-              id: opts.draftId ?? `d${Date.now()}`,
+              id: opts.draftId ?? uid("d"),
               title: title || "Untitled Experience",
               cover,
               scenes: scenes.length,
@@ -3184,7 +3190,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
         onConfirm={(recipient) => {
           setSending(true);
           void sendMoment({
-            id: opts.draftId ?? `d${Date.now()}`,
+            id: opts.draftId ?? uid("d"),
             title: title || "Untitled Experience",
             cover,
             scenes: scenes.length,
