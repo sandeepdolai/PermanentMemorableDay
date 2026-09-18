@@ -83,6 +83,8 @@ model Notification {
   /// today | earlier
   group     String   @default("today")
   unread    Boolean  @default(true)
+  /// Coalescing counter — how many raw events this row summarizes (opened ×N, loved ×N)
+  count     Int      @default(1)
 
   momentId  String?
   moment    Moment?  @relation(fields: [momentId], references: [id], onDelete: SetNull)

@@ -23,8 +23,8 @@ import {
   X,
 } from "lucide-react";
 import type { PlayerPayload } from "./md-context";
-import type { BlockDoc, SongPick } from "@/lib/md-blocks";
-import { formatClock, normalizeUrl, photoFilterCss, urlDomain } from "@/lib/md-blocks";
+import type { BlockDoc, SceneDoc, SongPick } from "@/lib/md-blocks";
+import { backgroundDimClass, formatClock, normalizeUrl, photoFilterCss, urlDomain } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
@@ -1046,10 +1046,82 @@ function ConfettiBlockView({ block, index }: { block: BlockDoc; index: number })
 }
 
 /* ------------------------------------------------------------------ */
-/* Player                                                              */
+/* Scene backdrop — the authored background block (full-screen cover   */
+/* photo or looping video) or the default generated cover art          */
 /* ------------------------------------------------------------------ */
 
-/** Recipient-answerable quiz (legacy demo flow — every answer is the recipient) */
+/** Finds the scene's background block (media-bearing, backdrop-consuming). */
+function findBackgroundBlock(doc: SceneDoc | null): BlockDoc | null {
+  if (!doc) return null;
+  return doc.blocks.find((b) => b.type === "background" && (b.data?.image || b.data?.video)) ?? null;
+}
+
+/**
+ * Full-bleed scene backdrop. Uploaded media wins; otherwise the generated
+ * gradient cover art. Sits in its own non-scrolling layer so it covers the
+ * whole screen no matter how tall the stacked blocks get.
+ */
+function SceneBackdrop({
+  doc,
+  cover,
+  sceneIndex,
+}: {
+  doc: SceneDoc | null;
+  cover: number;
+  sceneIndex: number;
+}) {
+  const bg = findBackgroundBlock(doc);
+  const d = bg?.data;
+  const dim = d?.dim ?? "Medium";
+
+  if (d?.video) {
+    return (
+      <div className="absolute inset-0 overflow-hidden bg-[#1D1D1F]">
+        <video
+          key={d.video}
+          src={d.video}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden
+          className="h-full w-full object-cover"
+        />
+        <div className={cn("absolute inset-0", backgroundDimClass(dim))} />
+        <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(0,0,0,0.10),rgba(0,0,0,0.38))]" />
+      </div>
+    );
+  }
+
+  if (d?.image) {
+    const zoom = d.motion !== "Still";
+    return (
+      <div className="absolute inset-0 overflow-hidden bg-[#1D1D1F]">
+        <motion.img
+          key={d.image}
+          src={d.image}
+          alt=""
+          aria-hidden
+          initial={{ scale: zoom ? 1 : 1.02 }}
+          animate={{ scale: zoom ? 1.09 : 1.02 }}
+          transition={{ duration: 16, ease: "easeOut" }}
+          className="h-full w-full object-cover"
+        />
+        <div className={cn("absolute inset-0", backgroundDimClass(dim))} />
+        <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(0,0,0,0.10),rgba(0,0,0,0.38))]" />
+      </div>
+    );
+  }
+
+  return (
+    <CoverArt variant={(cover + sceneIndex * 3) % 10} className="absolute inset-0 h-full">
+      <div className="absolute inset-0 bg-[#1D1D1F]/55" />
+      <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(0,0,0,0.12),rgba(0,0,0,0.5))]" />
+    </CoverArt>
+  );
+}
+
 const QUIZ_OPTIONS = [
   { label: "You", correct: true },
   { label: "Not you", correct: false },
@@ -1222,7 +1294,10 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
             </motion.section>
           )}
 
-          {/* Authored scenes — exactly the blocks the creator built */}
+          {/* Authored scenes — exactly the blocks the creator built.
+              Two layers: a fixed full-bleed backdrop (background block media
+              or generated cover art) + a scrollable content column above it,
+              so the cover keeps filling the screen on tall scenes. */}
           {authored && currentDoc ? (
             <motion.section
               key={`authored-${authoredIdx}`}
@@ -1230,15 +1305,16 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -70 }}
               transition={{ duration: 0.32, ease: "easeOut" }}
-              className="absolute inset-0 overflow-y-auto no-scrollbar"
+              className="absolute inset-0"
             >
-              <CoverArt variant={(moment.cover + authoredIdx * 3) % 10} className="fixed-like absolute inset-0 h-full">
-                <div className="absolute inset-0 bg-[#1D1D1F]/55" />
-                <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(0,0,0,0.12),rgba(0,0,0,0.5))]" />
-              </CoverArt>
+              <SceneBackdrop doc={currentDoc} cover={moment.cover} sceneIndex={authoredIdx} />
+              <div className="absolute inset-0 overflow-y-auto no-scrollbar">
               <div className="relative flex min-h-full flex-col items-center justify-center gap-7 px-7 py-16 md:gap-8">
                 {currentDoc.blocks.map((b, i) => {
                   switch (b.type) {
+                    case "background":
+                      // Consumed as the full-screen backdrop above — never an inline card
+                      return null;
                     case "text":
                       return <TextBlockView key={b.id} block={b} index={i} />;
                     case "photo":
@@ -1287,6 +1363,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                       return null;
                   }
                 })}
+                </div>
               </div>
             </motion.section>
           ) : null}

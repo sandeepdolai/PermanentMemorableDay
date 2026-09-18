@@ -49,6 +49,12 @@ export interface BlockData {
   /** video */
   video?: string;
   duration?: number;
+  /** background: full-screen scene cover. Media kind is picked by whichever
+   *  field is set (photo `image` / video `video`). `dim` is the dark overlay
+   *  strength so stacked text stays readable — "None" | "Light" | "Medium" |
+   *  "Deep". `motion` is the image presentation — "Still" | "Zoom" (Ken Burns). */
+  dim?: string;
+  motion?: string;
   /** audio: the picked song/upload + snippet */
   song?: SongPick;
   /** audio: where it plays — "scene" shows a song card, "background" plays unseen */
@@ -137,6 +143,27 @@ export function urlDomain(raw: string): string {
     return new URL(normalizeUrl(t)).hostname.replace(/^www\./i, "");
   } catch {
     return t.replace(/^https?:\/\//i, "").split("/")[0];
+  }
+}
+
+/** Background-block overlay options (builder chips + player scrim). */
+export const BACKGROUND_DIMS = ["None", "Light", "Medium", "Deep"] as const;
+
+/** Background-block image motion options. */
+export const BACKGROUND_MOTIONS = ["Still", "Zoom"] as const;
+
+/** Overlay strength per dim name → Tailwind class pieces (player + previews). */
+export function backgroundDimClass(dim?: string): string {
+  switch (dim) {
+    case "None":
+      return "";
+    case "Light":
+      return "bg-[#1D1D1F]/30";
+    case "Deep":
+      return "bg-[#1D1D1F]/72";
+    default:
+      // "Medium" (and unset) — the sweet spot for white text on busy media
+      return "bg-[#1D1D1F]/52";
   }
 }
 

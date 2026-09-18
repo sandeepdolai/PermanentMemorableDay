@@ -32,15 +32,19 @@ import {
   Undo2,
   Upload,
   Video,
+  Wallpaper,
   X,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { formatDuration } from "@/lib/mock-data";
 import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
 import {
+  backgroundDimClass,
   formatClock,
   photoFilterCss,
   urlDomain,
+  BACKGROUND_DIMS,
+  BACKGROUND_MOTIONS,
   PHOTO_FILTERS,
   type BlockData,
   type BlockDoc,
@@ -73,6 +77,7 @@ const BLOCKS: BlockDef[] = [
   { type: "photo", label: "Photo", icon: ImagesIcon, tint: "#30D158" },
   { type: "video", label: "Video", icon: Video, tint: "#FF9F0A" },
   { type: "audio", label: "Audio", icon: Music, tint: "#FF375F" },
+  { type: "background", label: "Background", icon: Wallpaper, tint: "#64D2FF" },
   { type: "gift", label: "3D Gift", icon: Gift, tint: "#5E5CE6" },
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
@@ -279,6 +284,50 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
           </span>
           <span className="absolute bottom-2 right-2 rounded-full bg-[#1D1D1F]/45 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur-md">
             {formatDuration(d?.duration ?? 12)}
+          </span>
+        </div>
+      );
+    }
+    case "background": {
+      const img = d?.image;
+      const vid = d?.video;
+      const dim = d?.dim ?? "Medium";
+      return (
+        <div className="flex items-center gap-3">
+          {/* mini "screen" — the whole scene viewport in miniature */}
+          <span className="relative block h-16 w-[74px] shrink-0 overflow-hidden rounded-[10px] ring-1 ring-[#1D1D1F]/[0.08]">
+            {vid ? (
+              <video src={vid} muted playsInline preload="metadata" aria-hidden className="h-full w-full bg-[#1D1D1F] object-cover" />
+            ) : img ? (
+              <img src={img} alt="" aria-hidden className="h-full w-full object-cover" />
+            ) : (
+              <CoverArt variant={(cover + 5) % 10} className="h-full w-full" />
+            )}
+            <span className={cn("absolute inset-0", backgroundDimClass(dim))} aria-hidden />
+            {/* stacked-content mock: two soft lines the cover sits behind */}
+            <span className="absolute inset-x-2 bottom-1.5 flex flex-col gap-[3px]" aria-hidden>
+              <span className="h-[3px] w-3/5 rounded-full bg-white/70" />
+              <span className="h-[3px] w-2/5 rounded-full bg-white/45" />
+            </span>
+            {vid ? (
+              <span className="absolute right-1 top-1 rounded-full bg-[#1D1D1F]/55 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-white backdrop-blur-md">
+                Video
+              </span>
+            ) : null}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+              {img || vid ? "Full-screen cover" : "Background block"}
+            </p>
+            <p className="mt-1 text-[12.5px] leading-snug text-[#AAAAAA]">
+              {img || vid ? "Covers the whole scene — blocks layer on top" : "Upload any photo or video as the scene backdrop"}
+            </p>
+          </div>
+          <span className="flex shrink-0 flex-col items-end gap-1">
+            <span className="rounded-full bg-[#64D2FF]/[0.14] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-[#0E7490]">
+              Full screen
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#AAAAAA]">{dim} dim</span>
           </span>
         </div>
       );
@@ -661,25 +710,37 @@ const UPLOAD_LIMIT_MB = 16;
 function MediaUploadField({
   kind,
   value,
+  valueIsVideo,
   onUploaded,
   onRemove,
 }: {
-  kind: "photo" | "video";
+  kind: "photo" | "video" | "auto";
   value?: string;
-  onUploaded: (url: string) => void;
+  /** For kind="auto": how the current value should preview (photo vs video) */
+  valueIsVideo?: boolean;
+  onUploaded: (url: string, mediaKind: "photo" | "video") => void;
   onRemove: () => void;
 }) {
   const { notify } = useMD();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const isPhoto = kind === "photo";
+  const isAuto = kind === "auto";
+  // In auto mode the preview kind comes from the caller's hint; in the
+  // dropzone state we track the last picked kind so the icon stays honest.
+  const [autoIsVideo, setAutoIsVideo] = useState(false);
+  const showVideo = isAuto ? (value ? !!valueIsVideo : autoIsVideo) : !isPhoto;
 
   const pick = () => inputRef.current?.click();
 
   const upload = async (file: File) => {
-    const expected = isPhoto ? "image/" : "video/";
-    if (!file.type.startsWith(expected)) {
-      notify(isPhoto ? "That file isn't a photo" : "That file isn't a video");
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    const okType = isPhoto ? isImage : kind === "video" ? isVideo : isImage || isVideo;
+    if (!okType) {
+      notify(
+        isAuto ? "That file isn't a photo or video" : isPhoto ? "That file isn't a photo" : "That file isn't a video"
+      );
       return;
     }
     if (file.size > UPLOAD_LIMIT_MB * 1024 * 1024) {
@@ -689,8 +750,9 @@ function MediaUploadField({
     setBusy(true);
     try {
       const url = await apiUploadFile(file);
-      onUploaded(url);
-      notify(isPhoto ? "Photo uploaded" : "Video uploaded");
+      setAutoIsVideo(isVideo);
+      onUploaded(url, isVideo ? "video" : "photo");
+      notify(isVideo ? "Video uploaded" : "Photo uploaded");
     } catch (e) {
       notify(e instanceof Error ? e.message : "Upload failed — try again");
     } finally {
@@ -703,7 +765,7 @@ function MediaUploadField({
       <input
         ref={inputRef}
         type="file"
-        accept={isPhoto ? "image/*" : "video/*"}
+        accept={isAuto ? "image/*,video/*" : isPhoto ? "image/*" : "video/*"}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -714,11 +776,16 @@ function MediaUploadField({
       {value ? (
         <div className="space-y-2.5">
           <div className="relative overflow-hidden rounded-[16px] border border-[#1D1D1F]/[0.07]">
-            {isPhoto ? (
-              <img src={value} alt="Uploaded photo preview" className="max-h-[220px] w-full object-cover" />
-            ) : (
+            {showVideo ? (
               <video src={value} controls muted playsInline preload="metadata" className="max-h-[220px] w-full bg-[#1D1D1F] object-cover" />
+            ) : (
+              <img src={value} alt="Uploaded photo preview" className="max-h-[220px] w-full object-cover" />
             )}
+            {isAuto ? (
+              <span className="absolute left-2.5 top-2.5 rounded-full bg-[#1D1D1F]/55 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-md">
+                {showVideo ? "Video cover" : "Photo cover"}
+              </span>
+            ) : null}
           </div>
           <div className="flex gap-2">
             <button
@@ -748,21 +815,23 @@ function MediaUploadField({
         >
           <span className={cn(
             "mb-2.5 flex h-11 w-11 items-center justify-center rounded-full",
-            isPhoto ? "bg-[#30D158]/[0.1] text-[#1E9E4A]" : "bg-[#FF9F0A]/[0.12] text-[#B26A00]"
+            isPhoto || (isAuto && !autoIsVideo)
+              ? "bg-[#30D158]/[0.1] text-[#1E9E4A]"
+              : "bg-[#FF9F0A]/[0.12] text-[#B26A00]"
           )}>
             {busy ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
-            ) : isPhoto ? (
+            ) : isPhoto || (isAuto && !autoIsVideo) ? (
               <ImagesIcon size={19} aria-hidden />
             ) : (
               <Video size={19} aria-hidden />
             )}
           </span>
           <span className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
-            {busy ? "Uploading…" : isPhoto ? "Upload a photo" : "Upload a video"}
+            {busy ? "Uploading…" : isAuto ? "Upload a photo or video" : isPhoto ? "Upload a photo" : "Upload a video"}
           </span>
           <span className="mt-1 text-[11.5px] text-[#AAAAAA]">
-            {isPhoto ? "JPG, PNG, WebP or GIF · up to 16 MB" : "MP4 or WebM · up to 16 MB"}
+            {isAuto ? "Any image or video · covers the whole scene · up to 16 MB" : isPhoto ? "JPG, PNG, WebP or GIF · up to 16 MB" : "MP4 or WebM · up to 16 MB"}
           </span>
         </button>
       )}
@@ -1666,6 +1735,61 @@ function BlockEditorContent({
           ) : (
             <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
               Upload a clip — short videos hold attention best.
+            </p>
+          )}
+        </div>
+      );
+    case "background":
+      return (
+        <div className="space-y-4 pb-2">
+          <div>
+            <FieldLabel>Cover art</FieldLabel>
+            <MediaUploadField
+              kind="auto"
+              value={d.video ?? d.image}
+              valueIsVideo={!!d.video}
+              onUploaded={(url, mediaKind) =>
+                set(mediaKind === "video" ? { video: url, image: undefined } : { image: url, video: undefined })
+              }
+              onRemove={() => set({ image: undefined, video: undefined })}
+            />
+          </div>
+          {d.image || d.video ? (
+            <>
+              <div>
+                <FieldLabel>Dim for readability</FieldLabel>
+                <ChipGroup
+                  options={BACKGROUND_DIMS.map((v) => ({ value: v as string, label: v }))}
+                  value={d.dim ?? "Medium"}
+                  onChange={(v) => set({ dim: v })}
+                  groupLabel="Background dim"
+                />
+                <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                  A soft dark veil keeps white text readable over busy photos.
+                </p>
+              </div>
+              {d.image ? (
+                <div>
+                  <FieldLabel>Photo motion</FieldLabel>
+                  <ChipGroup
+                    options={BACKGROUND_MOTIONS.map((v) => ({ value: v as string, label: v === "Zoom" ? "Slow zoom" : v }))}
+                    value={d.motion ?? "Zoom"}
+                    onChange={(v) => set({ motion: v })}
+                    groupLabel="Background motion"
+                  />
+                  <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                    A gentle Ken Burns drift makes still photos feel cinematic.
+                  </p>
+                </div>
+              ) : (
+                <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                  The video loops silently behind this scene — sound comes from your Audio blocks.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+              Upload any image or video — it covers the entire screen of this scene, edge to edge.
             </p>
           )}
         </div>

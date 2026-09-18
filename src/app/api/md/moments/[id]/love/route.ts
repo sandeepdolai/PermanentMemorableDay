@@ -1,11 +1,11 @@
 /**
  * POST /api/md/moments/[id]/love — recipient love reaction tracking.
- * Increments loves (idempotent guard: only once per moment id per 30s
- * window per caller session is enforced client-side; server tallies taps)
- * and files a "loved" notification for the creator.
+ * Increments loves and files a "loved" notification for the creator
+ * (coalesced: repeat loves of the same moment summarize into one row
+ * with a ×N counter instead of duplicate entries).
  */
 import { db } from "@/lib/db";
-import { fail, getUser, ok, serializeMoment } from "@/lib/md-server";
+import { coalesceNotification, fail, getUser, ok, serializeMoment } from "@/lib/md-server";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -22,18 +22,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       data: { loves: { increment: 1 } },
     });
 
-    await db.notification.create({
-      data: {
-        id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-        userId: user.id,
-        kind: "loved",
-        title: `${moment.recipient || "Someone"} loved “${moment.title}”`,
-        body: "Your moment received a new love reaction",
-        timeLabel: "now",
-        group: "today",
-        unread: true,
-        momentId: moment.id,
-      },
+    await coalesceNotification({
+      userId: user.id,
+      kind: "loved",
+      title: `${moment.recipient || "Someone"} loved “${moment.title}”`,
+      body: "Your moment received a new love reaction",
+      bodyMulti: (n) => `Your moment received ${n} love reactions`,
+      momentId: moment.id,
     });
 
     return ok({ tracked: true, moment: serializeMoment(moment) });

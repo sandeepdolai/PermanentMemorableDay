@@ -1,11 +1,12 @@
 /**
  * POST /api/md/moments/[id]/view — recipient open tracking.
  * Increments views, promotes sent → viewed, and files an "opened"
- * notification into the activity feed. Drafts/scheduled are ignored
- * (no analytics before a moment is out in the world).
+ * notification into the activity feed (coalesced: repeat opens of the same
+ * moment bump a ×N counter on one row instead of spamming duplicates).
+ * Drafts/scheduled are ignored (no analytics before a moment is out there).
  */
 import { db } from "@/lib/db";
-import { fail, getUser, ok, serializeMoment } from "@/lib/md-server";
+import { coalesceNotification, fail, getUser, ok, serializeMoment } from "@/lib/md-server";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -25,18 +26,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       },
     });
 
-    await db.notification.create({
-      data: {
-        id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-        userId: user.id,
-        kind: "opened",
-        title: `${moment.recipient || "Someone"} opened your moment`,
-        body: `“${moment.title}” was just opened`,
-        timeLabel: "now",
-        group: "today",
-        unread: true,
-        momentId: moment.id,
-      },
+    await coalesceNotification({
+      userId: user.id,
+      kind: "opened",
+      title: `${moment.recipient || "Someone"} opened your moment`,
+      body: `“${moment.title}” was just opened`,
+      bodyMulti: (n) => `“${moment.title}” was opened ${n} times today`,
+      momentId: moment.id,
     });
 
     return ok({ tracked: true, moment: serializeMoment(moment) });

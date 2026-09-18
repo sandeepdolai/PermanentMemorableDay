@@ -20,6 +20,12 @@ interface NotificationInput {
 export async function GET() {
   try {
     const user = await getUser();
+    // Age groups stay honest: anything older than 24h slides from "Today"
+    // into "Earlier this week" on the next read.
+    await db.notification.updateMany({
+      where: { userId: user.id, group: "today", createdAt: { lt: new Date(Date.now() - 86_400_000) } },
+      data: { group: "earlier" },
+    });
     const rows = await db.notification.findMany({
       where: { userId: user.id },
       include: { moment: true },

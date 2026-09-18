@@ -120,11 +120,11 @@ function NotificationRow({
     if (e.pointerType === "mouse" && e.button !== 0) return;
     start.current = { x: e.clientX, y: e.clientY, axis: "undecided" };
     last.current = { x: e.clientX, t: Date.now() };
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      // capture can fail for non-active pointer ids — tracking continues via bubbling
-    }
+    // NOTE: pointer capture is deliberately NOT taken here. Capturing on
+    // pointer-down retargets pointer-up to this row, which retargets the
+    // synthesized click to the row too — the dismiss button then never
+    // receives clicks (taps dismissed nothing / opened the moment instead).
+    // Capture is taken only once a horizontal swipe is locked below.
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -136,6 +136,13 @@ function NotificationRow({
       if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) {
         s.axis = "x";
         setDragging(true);
+        // Swipe intent locked — NOW capture so the gesture keeps tracking
+        // even if the pointer leaves the row (taps stay native above).
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch {
+          // capture can fail for non-active pointer ids — bubbling continues
+        }
       } else if (Math.abs(dy) > 12) {
         s.axis = "y"; // vertical — native scroll takes over
       }

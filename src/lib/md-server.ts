@@ -54,6 +54,35 @@ export function serializeMoment(m: {
   };
 }
 
+/** Live relative label from createdAt — "now", "4m", "2h", "3d" (falls back
+ *  to the stored label for anything older than a week, where precision stops
+ *  mattering and curated copy reads better). */
+function relativeLabel(createdAt: Date | string | null | undefined, fallback: string): string {
+  if (!createdAt) return fallback;
+  const t = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
+  if (!Number.isFinite(t)) return fallback;
+  const diff = Math.max(0, Date.now() - t);
+  if (diff < 60_000) return "now";
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return fallback;
+}
+
+/** Curated label ("2m" / "18m" / "1h" / "3h" / "1d" / "4d") → ms ago, so
+ *  seeded rows get a createdAt that keeps reproducing their label live. */
+function labelToMs(label: string): number {
+  const m = /^(\d+)(m|h|d)$/.exec(label.trim());
+  if (!m) return 0;
+  const n = Number.parseInt(m[1], 10);
+  if (m[2] === "m") return n * 60_000;
+  if (m[2] === "h") return n * 3_600_000;
+  return n * 86_400_000;
+}
+
 export function serializeNotification(n: {
   id: string;
   kind: string;
@@ -62,6 +91,7 @@ export function serializeNotification(n: {
   timeLabel: string;
   group: string;
   unread: boolean;
+  createdAt?: Date | string | null;
   moment: {
     id: string;
     title: string;
@@ -74,7 +104,7 @@ export function serializeNotification(n: {
     kind: n.kind as AppNotification["kind"],
     title: n.title,
     body: n.body,
-    time: n.timeLabel,
+    time: relativeLabel(n.createdAt, n.timeLabel),
     group: n.group === "earlier" ? "earlier" : "today",
     unread: n.unread,
     ...(n.moment
@@ -88,6 +118,134 @@ export function serializeNotification(n: {
         }
       : {}),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Notification coalescing (feed stays clean — one row per event type   */
+/* per moment per day, with a ×N counter instead of duplicate rows)     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Files a feed event. If the same (kind, moment) row already exists in
+ * "today", it is refreshed instead of duplicated: count grows, the body
+ * becomes "… ×N today", the row jumps back to the top of the feed.
+ */
+export async function coalesceNotification(input: {
+  userId: string;
+  kind: string;
+  title: string;
+  /** Body copy for the FIRST occurrence */
+  body: string;
+  /** Body copy once the row summarizes N > 1 occurrences */
+  bodyMulti: (n: number) => string;
+  momentId: string | null;
+}): Promise<void> {
+  const existing = await db.notification.findFirst({
+    where: {
+      userId: input.userId,
+      kind: input.kind,
+      group: "today",
+      ...(input.momentId ? { momentId: input.momentId } : { momentId: null }),
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (existing) {
+    const count = (existing.count ?? 1) + 1;
+    await db.notification.update({
+      where: { id: existing.id },
+      data: {
+        count,
+        title: input.title,
+        body: count > 1 ? input.bodyMulti(count) : input.body,
+        timeLabel: "now",
+        unread: true,
+        createdAt: new Date(), // jump back to the top of the feed
+      },
+    });
+    return;
+  }
+
+  await db.notification.create({
+    data: {
+      id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+      userId: input.userId,
+      kind: input.kind,
+      title: input.title,
+      body: input.body,
+      timeLabel: "now",
+      group: "today",
+      unread: true,
+      count: 1,
+      momentId: input.momentId,
+    },
+  });
+}
+
+/** One-time-ish feed hygiene, safe to run on every bootstrap (no-ops when
+ *  the feed is already clean): merges duplicate (kind, moment) "today" rows
+ *  into their newest representative with a summed counter, then caps the
+ *  feed at the 60 newest rows. */
+async function dedupeNotifications(userId: string): Promise<void> {
+  const rows = await db.notification.findMany({
+    where: { userId, group: "today" },
+    include: { moment: { select: { title: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Merge duplicates: keep the newest row per (kind, momentId)
+  const seen = new Set<string>();
+  const toDelete: { id: string; count: number }[] = [];
+  for (const row of rows) {
+    const key = `${row.kind}|${row.momentId ?? "-"}`;
+    if (seen.has(key)) {
+      toDelete.push({ id: row.id, count: row.count ?? 1 });
+    } else {
+      seen.add(key);
+    }
+  }
+  if (toDelete.length > 0) {
+    // Fold each duplicate's count into its surviving representative
+    for (const dup of toDelete) {
+      const dupRow = rows.find((r) => r.id === dup.id);
+      if (!dupRow) continue;
+      const keeper = rows.find(
+        (r) => r.id !== dup.id && r.kind === dupRow.kind && (r.momentId ?? null) === (dupRow.momentId ?? null)
+      );
+      if (keeper) {
+        const total = (keeper.count ?? 1) + (dupRow.count ?? 1);
+        await db.notification
+          .update({
+            where: { id: keeper.id },
+            data: {
+              count: total,
+              body:
+                total > 1 && (dupRow.kind === "opened" || dupRow.kind === "loved")
+                  ? dupRow.kind === "opened"
+                    ? `“${dupRow.moment?.title ?? "Your moment"}” was opened ${total} times today`
+                    : `Your moment received ${total} love reactions`
+                  : keeper.body,
+            },
+          })
+          .catch(() => {}); // title/body rewrites are best-effort
+      }
+      await db.notification.delete({ where: { id: dup.id } }).catch(() => {});
+    }
+  }
+
+  // Cap the feed at 60 rows (oldest overflow goes first)
+  const total = await db.notification.count({ where: { userId } });
+  if (total > 60) {
+    const oldest = await db.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      take: total - 60,
+      select: { id: true },
+    });
+    await db.notification
+      .deleteMany({ where: { id: { in: oldest.map((r) => r.id) } } })
+      .catch(() => {});
+  }
 }
 
 function safeTags(raw: string): string[] {
@@ -176,6 +334,7 @@ export async function getUser() {
     await seedContent(user.id);
   }
   await backfillSeedDocs();
+  await dedupeNotifications(user.id);
   return user;
 }
 
@@ -211,7 +370,7 @@ async function seedContent(userId: string) {
   });
 
   await db.notification.createMany({
-    data: NOTIFICATIONS.map((n, i) => ({
+    data: NOTIFICATIONS.map((n) => ({
       id: n.id,
       userId,
       kind: n.kind,
@@ -221,7 +380,9 @@ async function seedContent(userId: string) {
       group: n.group,
       unread: n.unread,
       momentId: n.moment?.id ?? null,
-      createdAt: new Date(now - (i + 1) * 18e5),
+      // createdAt is scaled to the curated label ("2m" → 2 min ago) so the
+      // live relative labels in the feed reproduce the seeded story exactly.
+      createdAt: new Date(now - labelToMs(n.time)),
     })),
   });
 }
