@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowDown,
   ArrowUp,
   Bell,
+  BellOff,
   Bookmark,
   BookmarkCheck,
   Check,
@@ -31,6 +32,7 @@ import {
   Share2,
   Sparkles,
   TrendingUp,
+  Trash2,
   User,
   Download,
   Lock,
@@ -44,16 +46,16 @@ import {
   AI_TONES,
   AI_MESSAGE_OPTIONS,
   INSIGHTS,
-  NOTIFICATIONS,
   SHARE_URL_BASE,
   shareSlug,
   type AppNotification,
   type InsightRange,
+  type InsightSnapshot,
   type NotificationKind,
   type ExploreItem,
   USER,
 } from "@/lib/mock-data";
-import type { AuthMode, PlayerPayload, SettingsTopic } from "./md-context";
+import { useMD, type AuthMode, type PlayerPayload, type SettingsTopic } from "./md-context";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
 import { SegmentedControl } from "./segmented-control";
@@ -76,6 +78,13 @@ const GROUP_LABELS: Record<AppNotification["group"], string> = {
   earlier: "Earlier this week",
 };
 
+/**
+ * Notification row with iOS-style swipe-to-dismiss (direction-locked:
+ * `touch-action: pan-y` keeps the vertical feed scroll native while
+ * leftward swipes reveal a delete backdrop). Dismissed rows exit with a
+ * slide+fade; Undo re-inserts them. Tapping a row marks it read and opens
+ * the referenced moment.
+ */
 function NotificationRow({
   n,
   onOpenMoment,
@@ -83,74 +92,185 @@ function NotificationRow({
   n: AppNotification;
   onOpenMoment: (m: PlayerPayload) => void;
 }) {
+  const { dismissNotification, insertNotification, markNotificationRead, notify } = useMD();
   const meta = KIND_META[n.kind];
   const Icon = meta.icon;
   const clickable = Boolean(n.moment);
 
-  const Row = clickable ? "button" : "div";
+  /* swipe state */
+  const [swipeX, setSwipeX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const start = useRef<{ x: number; y: number; axis: "undecided" | "x" | "y" } | null>(null);
+  const last = useRef<{ x: number; t: number } | null>(null);
+  const justSwiped = useRef(false);
+
+  const dismiss = () => {
+    const removed = dismissNotification(n.id);
+    if (removed) {
+      notify("Notification dismissed", {
+        label: "Undo",
+        onClick: () => insertNotification(removed),
+      });
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    start.current = { x: e.clientX, y: e.clientY, axis: "undecided" };
+    last.current = { x: e.clientX, t: Date.now() };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // capture can fail for non-active pointer ids — tracking continues via bubbling
+    }
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const s = start.current;
+    if (!s) return;
+    const dx = e.clientX - s.x;
+    const dy = e.clientY - s.y;
+    if (s.axis === "undecided") {
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        s.axis = "x";
+        setDragging(true);
+      } else if (Math.abs(dy) > 12) {
+        s.axis = "y"; // vertical — native scroll takes over
+      }
+    }
+    if (s.axis === "x") {
+      setSwipeX(Math.min(0, dx));
+      last.current = { x: e.clientX, t: Date.now() };
+    }
+  };
+
+  const onPointerUp = () => {
+    const s = start.current;
+    if (s?.axis === "x") {
+      const l = last.current;
+      const dt = l ? Math.max(1, Date.now() - l.t) : 1;
+      const velocity = l ? (l.x - s.x) / dt : 0; // px/ms, leftward negative
+      if (swipeX < -84 || velocity < -0.55) {
+        dismiss();
+      } else {
+        setSwipeX(0); // spring back
+      }
+      justSwiped.current = true;
+      window.setTimeout(() => (justSwiped.current = false), 300);
+    }
+    start.current = null;
+    last.current = null;
+    setDragging(false);
+  };
+
   return (
-    <Row
-      {...(clickable
-        ? {
-            type: "button" as const,
-            onClick: () => n.moment && onOpenMoment(n.moment),
-            "aria-label": `${n.title}. Opens the moment.`,
-          }
-        : {})}
-      className={cn(
-        "flex w-full items-start gap-3 px-4 py-3 text-left",
-        clickable && "transition-colors active:bg-[#007AFF]/[0.05]"
-      )}
+    <motion.div
+      layout
+      exit={{ opacity: 0, x: -72, transition: { duration: 0.22, ease: "easeOut" } }}
+      className="relative select-none bg-white"
+      style={{ touchAction: "pan-y" }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
     >
-      <span
+      {/* delete backdrop revealed behind the swipe */}
+      <div
         aria-hidden
-        className="mt-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[12px]"
-        style={{ backgroundColor: meta.bg, color: meta.tint }}
+        className="pointer-events-none absolute inset-y-0 right-0 flex w-[96px] items-center justify-center rounded-l-[16px] bg-[#FF375F] text-white"
       >
-        <Icon size={17} strokeWidth={2.1} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span
-            className={cn(
-              "truncate text-[14.5px] tracking-[-0.01em] text-[#1D1D1F]",
-              n.unread ? "font-bold" : "font-medium"
-            )}
-          >
-            {n.title}
-          </span>
-          {n.unread ? (
-            <span aria-hidden className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#007AFF]" />
-          ) : null}
+        <Trash2 size={17} strokeWidth={2.2} />
+      </div>
+
+      {/* row content — slides with the swipe */}
+      <div
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        aria-label={clickable ? `${n.title}. Opens the moment.` : undefined}
+        onClick={() => {
+          if (justSwiped.current) return;
+          if (n.unread) markNotificationRead(n.id);
+          if (n.moment) onOpenMoment(n.moment);
+        }}
+        onKeyDown={(e) => {
+          if (clickable && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            if (n.unread) markNotificationRead(n.id);
+            if (n.moment) onOpenMoment(n.moment);
+          }
+        }}
+        className={cn(
+          "relative flex w-full items-start gap-3 bg-white px-4 py-3 text-left",
+          clickable && "cursor-pointer transition-colors active:bg-[#007AFF]/[0.05]"
+        )}
+        style={{
+          transform: `translateX(${swipeX}px)`,
+          transition: dragging ? "none" : "transform 0.24s cubic-bezier(0.32,0.72,0,1)",
+        }}
+      >
+        <span
+          aria-hidden
+          className="mt-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[12px]"
+          style={{ backgroundColor: meta.bg, color: meta.tint }}
+        >
+          <Icon size={17} strokeWidth={2.1} />
         </span>
-        <span className="mt-0.5 block truncate text-[12.5px] leading-snug text-[#AAAAAA]">{n.body}</span>
-      </span>
-      <span className="shrink-0 pt-0.5 text-[11.5px] font-medium text-[#AAAAAA]">{n.time}</span>
-    </Row>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span
+              className={cn(
+                "truncate text-[14.5px] tracking-[-0.01em] text-[#1D1D1F]",
+                n.unread ? "font-bold" : "font-medium"
+              )}
+            >
+              {n.title}
+            </span>
+            {n.unread ? (
+              <span aria-hidden className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#007AFF]" />
+            ) : null}
+          </span>
+          <span className="mt-0.5 block truncate text-[12.5px] leading-snug text-[#AAAAAA]">{n.body}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 pt-0.5">
+          <span className="text-[11.5px] font-medium text-[#AAAAAA]">{n.time}</span>
+          <button
+            type="button"
+            aria-label={`Dismiss notification: ${n.title}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              dismiss();
+            }}
+            className="flex h-[22px] w-[22px] items-center justify-center rounded-full text-[#C7C7CC] transition-all hover:bg-[#FF375F]/[0.1] hover:text-[#FF375F] active:scale-90"
+          >
+            <Trash2 size={12} strokeWidth={2.4} aria-hidden />
+          </button>
+        </span>
+      </div>
+    </motion.div>
   );
 }
 
 export function NotificationsContent({
-  onMarkAllRead,
   onOpenMoment,
 }: {
-  onMarkAllRead: () => void;
+  onMarkAllRead?: () => void;
   onOpenMoment: (m: PlayerPayload) => void;
 }) {
+  const { notifications, markAllRead, unreadCount } = useMD();
   const groups: Array<"today" | "earlier"> = ["today", "earlier"];
-  const hasUnread = NOTIFICATIONS.some((n) => n.unread);
+  const hasUnread = unreadCount > 0;
 
   return (
     <div className="pb-2">
       {/* Mark all read */}
       <div className="flex items-center justify-between px-1 pb-2">
         <p className="text-[12.5px] font-medium text-[#AAAAAA]">
-          {NOTIFICATIONS.filter((n) => n.unread).length} new · {NOTIFICATIONS.length} total
+          {unreadCount} new · {notifications.length} total
         </p>
         <button
           type="button"
           disabled={!hasUnread}
-          onClick={onMarkAllRead}
+          onClick={markAllRead}
           className={cn(
             "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-all active:scale-95",
             hasUnread
@@ -162,26 +282,53 @@ export function NotificationsContent({
         </button>
       </div>
 
-      {/* Grouped feed */}
-      <div className="max-h-[52vh] overflow-y-auto md-scroll card-shadow hairline overflow-hidden rounded-[22px] bg-white">
-        {groups.map((g, gi) => {
-          const items = NOTIFICATIONS.filter((n) => n.group === g);
-          if (items.length === 0) return null;
-          return (
-            <div key={g}>
-              {gi > 0 ? <div className="mx-4 h-px bg-[#1D1D1F]/[0.06]" /> : null}
-              <p className="px-4 pb-1 pt-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#AAAAAA]">
-                {GROUP_LABELS[g]}
-              </p>
-              <div className="divide-y divide-[#1D1D1F]/[0.05]">
-                {items.map((n) => (
-                  <NotificationRow key={n.id} n={n} onOpenMoment={onOpenMoment} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Grouped feed — dismissible rows animate out, empty groups collapse */}
+      {notifications.length === 0 ? (
+        <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-[#007AFF]/[0.08] text-[#007AFF]">
+            <BellOff size={22} aria-hidden />
+          </span>
+          <p className="text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+            You're all caught up
+          </p>
+          <p className="max-w-[240px] text-[12.5px] leading-relaxed text-[#AAAAAA]">
+            New opens, loves and milestones will land here. Swipe left or tap the
+            bin to clear what you've seen.
+          </p>
+        </div>
+      ) : (
+        <div className="max-h-[52vh] overflow-y-auto md-scroll card-shadow hairline overflow-hidden rounded-[22px] bg-white">
+          <AnimatePresence initial={false}>
+            {groups.map((g) => {
+              const items = notifications.filter((n) => n.group === g);
+              if (items.length === 0) return null;
+              return (
+                <motion.div
+                  key={g}
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                >
+                  <p className="px-4 pb-1 pt-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#AAAAAA]">
+                    {GROUP_LABELS[g]}
+                  </p>
+                  <div className="divide-y divide-[#1D1D1F]/[0.05]">
+                    <AnimatePresence initial={false}>
+                      {items.map((n) => (
+                        <NotificationRow key={n.id} n={n} onOpenMoment={onOpenMoment} />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                  {g === "today" && notifications.some((n) => n.group === "earlier") ? (
+                    <div className="mx-4 h-px bg-[#1D1D1F]/[0.06]" />
+                  ) : null}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }
@@ -969,6 +1116,116 @@ export function InsightsContent({
           <Sparkles size={10} aria-hidden /> AI insight
         </span>
         <p className="mt-2.5 text-[13.5px] font-medium leading-relaxed text-white/85">{data.aiNote}</p>
+      </div>
+
+      {/* Share report — exportable snapshot card */}
+      <ShareReportCard data={data} rangeLabel={rangeLabel} onNotify={onNotify} />
+    </div>
+  );
+}
+
+/** Branded, exportable performance snapshot with copy/share actions */
+function ShareReportCard({
+  data,
+  rangeLabel,
+  onNotify,
+}: {
+  data: InsightSnapshot;
+  rangeLabel: string;
+  onNotify: (message: string) => void;
+}) {
+  const trendMax = Math.max(...data.trend.map((t) => t.v), 1);
+
+  const summary = [
+    `MemorableDay — Performance report (${rangeLabel})`,
+    ...data.kpis.map((k) => `${k.label}: ${k.value}`),
+    data.top[0] ? `Top moment: “${data.top[0].title}” — ${data.top[0].views} views, ${data.top[0].completion}% completion` : null,
+    "memorableday.in",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const copySummary = async () => {
+    try {
+      await navigator.clipboard.writeText(summary);
+      onNotify("Report summary copied to clipboard");
+    } catch {
+      onNotify("Copy blocked by the browser — summary preview only");
+    }
+  };
+
+  return (
+    <div className="card-shadow hairline mt-3 rounded-[22px] bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Share report</h3>
+        <span className="text-[11px] font-medium text-[#AAAAAA]">snapshot card</span>
+      </div>
+
+      {/* The snapshot — a branded dark card like what a recipient would see */}
+      <div className="relative overflow-hidden rounded-[18px] bg-[#1D1D1F] p-4 text-white shadow-[0_16px_36px_-14px_rgba(29,29,31,0.55)]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <LogoMark size={24} />
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/90">
+                Performance report
+              </p>
+              <p className="text-[10px] font-medium text-white/50">{rangeLabel} · memorableday.in</p>
+            </div>
+          </div>
+          <span className="rounded-full bg-[#64D2FF]/15 px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-[#64D2FF]">
+            {data.funnel[0].value} sent
+          </span>
+        </div>
+
+        {/* KPI strip */}
+        <div className="mt-3.5 grid grid-cols-4 gap-2">
+          {data.kpis.map((k) => (
+            <div key={k.label} className="text-center">
+              <p className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-white/45">{k.label}</p>
+              <p className="mt-0.5 text-[15px] font-bold tabular-nums tracking-[-0.01em] text-white">{k.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Mini trend bars */}
+        <div className="mt-3.5 flex h-[44px] items-end gap-[3px]" aria-hidden>
+          {data.trend.map((t, i) => (
+            <div
+              key={t.d}
+              className="flex-1 rounded-[2px]"
+              style={{
+                height: `${Math.max(12, Math.round((t.v / trendMax) * 44))}px`,
+                background: i === data.trend.length - 1 ? "#64D2FF" : "rgba(255,255,255,0.22)",
+              }}
+            />
+          ))}
+        </div>
+
+        <p className="mt-3 flex items-center justify-between text-[9.5px] font-medium text-white/40">
+          <span>
+            Top: “{data.top[0]?.title ?? "—"}” · {data.top[0]?.views ?? 0} views
+          </span>
+          <span>Generated {new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="mt-3 flex gap-2.5">
+        <button
+          type="button"
+          onClick={copySummary}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#1D1D1F]/[0.06] py-2.5 text-[13px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.98]"
+        >
+          <Copy size={14} strokeWidth={2.2} aria-hidden /> Copy summary
+        </button>
+        <button
+          type="button"
+          onClick={() => onNotify("Report link shared — UI preview")}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#007AFF] py-2.5 text-[13px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+        >
+          <Share2 size={14} strokeWidth={2.2} aria-hidden /> Share
+        </button>
       </div>
     </div>
   );

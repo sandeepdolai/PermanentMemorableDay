@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { RefObject } from "react";
-import type { ExploreItem, InsightRange } from "@/lib/mock-data";
+import type { AppNotification, ExploreItem, InsightRange } from "@/lib/mock-data";
 
 export type Tab = "home" | "create" | "explore" | "gallery" | "profile";
 export type ThemeMode = "light" | "dark" | "system";
@@ -93,6 +93,14 @@ export interface MDContextValue {
   /** Number of unread activity notifications (drives the bell badge) */
   unreadCount: number;
   markAllRead: () => void;
+  /** Live notification feed (seeded from mock data, session state) */
+  notifications: AppNotification[];
+  /** Dismisses one notification — returns it so callers can offer Undo */
+  dismissNotification: (id: string) => AppNotification | null;
+  /** Re-inserts a dismissed notification (Undo) */
+  insertNotification: (n: AppNotification) => void;
+  /** Marks a single notification read (fires when it's opened) */
+  markNotificationRead: (id: string) => void;
   /** Opens the Experience Builder layer */
   openBuilder: (opts?: BuilderOptions) => void;
   /** Currently open builder payload (null = closed) */

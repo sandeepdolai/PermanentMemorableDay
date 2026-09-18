@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Bell, Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
-import { NOTIFICATIONS, PRICING_PLANS, type InsightRange } from "@/lib/mock-data";
+import { NOTIFICATIONS, PRICING_PLANS, type AppNotification, type InsightRange } from "@/lib/mock-data";
 import {
   MDContext,
   type AiInsertFn,
@@ -253,7 +253,7 @@ export function AppShell() {
   const [drafts, setDrafts] = useState<UserDraft[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const aiInsertRef = useRef<AiInsertFn | null>(null);
-  const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
+  const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // First-run welcome tour (shown once, remembered in localStorage).
@@ -448,11 +448,37 @@ export function AppShell() {
   }, []);
 
   const markAllRead = useCallback(() => {
-    setUnreadCount(0);
+    setNotifications((prev) => prev.map((n) => (n.unread ? { ...n, unread: false } : n)));
     notify("All notifications marked as read");
   }, [notify]);
 
+  /** Dismisses one notification — returns it so callers can offer Undo */
+  const dismissNotification = useCallback((id: string): AppNotification | null => {
+    let removed: AppNotification | null = null;
+    setNotifications((prev) => {
+      removed = prev.find((n) => n.id === id) ?? null;
+      return prev.filter((n) => n.id !== id);
+    });
+    return removed;
+  }, []);
+
+  /** Re-inserts a dismissed notification (Undo) — returns to the end of its group */
+  const insertNotification = useCallback((n: AppNotification) => {
+    setNotifications((prev) => (prev.some((x) => x.id === n.id) ? prev : [...prev, n]));
+  }, []);
+
+  /** Marks a single notification read (fires when it's opened) */
+  const markNotificationRead = useCallback((id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id && n.unread ? { ...n, unread: false } : n)));
+  }, []);
+
   const isSearchTab = tab === "home" || tab === "explore";
+
+  /** Derived live from the feed — badge + sidebar stay in sync automatically */
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => n.unread).length,
+    [notifications]
+  );
 
   return (
     <MotionConfig reducedMotion="user">
@@ -472,6 +498,10 @@ export function AppShell() {
           openShare,
           unreadCount,
           markAllRead,
+          notifications,
+          dismissNotification,
+          insertNotification,
+          markNotificationRead,
           openBuilder,
           builder,
           closeBuilder,
@@ -616,7 +646,6 @@ export function AppShell() {
         {/* Notifications sheet */}
         <BottomSheet open={sheet === "notifications"} onClose={() => setSheet(null)} title="Notifications">
           <NotificationsContent
-            onMarkAllRead={markAllRead}
             onOpenMoment={(m) => {
               setSheet(null);
               openMoment(m);

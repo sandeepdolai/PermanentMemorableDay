@@ -488,3 +488,35 @@ Stage Summary:
 - Known tooling quirks (not app bugs): agent-browser `errors` empty ✗ marks; MultiEdit applies sequentially and aborts on first mismatch (verify partial application); toast Undo clicks must land within the 4.3s window (combine delete+click in back-to-back evals); `#explore-segments` id is not directly queryable (verify dim via the wrapper's opacity-40 class).
 - Next-phase candidates: Prisma models + real CRUD (UI feature-complete), insights export/share card, notification swipe-to-dismiss, draft rename, e2e harness, print styles.
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+---
+Task ID: 12
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 12)
+Task: Assess project status, QA via agent-browser, then continue development — focus: notification lifecycle (per-item dismiss/read) and insights share report, per the round mandate (more features + more styling detail).
+
+Work Log:
+- Status assessment: dev server healthy, lint clean, round-11 build stable (palette opens, notifications sheet opens, zero errors). No bugs → feature work on the worklog's top UI candidates.
+- NEW FEATURE — Notification lifecycle (notifications become live app state):
+  - md-context + app-shell: NOTIFICATIONS (static const) is now the SEED for a `notifications` state array; unreadCount becomes DERIVED (useMemo over the feed) so the bell badge, sidebar card and palette subtitle all stay in sync automatically. New APIs: dismissNotification(id) → returns the removed item (for Undo), insertNotification(n) (Undo restore, dedupe-safe), markNotificationRead(id) (fires on open). markAllRead now maps over state. The notifications sheet lost its onMarkAllRead prop (context-driven now).
+  - NotificationRow REWRITTEN with iOS swipe-to-dismiss: custom direction-locked pointer handlers (touch-action: pan-y keeps the vertical feed scroll native; leftward swipes track with a 12px/1.4:1 axis lock) — row content translateX follows the finger (no transition while dragging, Apple cubic-bezier spring-back on release), red #FF375F delete backdrop (Trash2 icon) revealed behind, dismiss at swipeX < -84px OR flick velocity < -0.55 px/ms. justSwiped ref suppresses the row's click for 300ms after a swipe. setPointerCapture wrapped in try/catch (synthetic/edge pointer ids can throw NotFoundError — caught in QA).
+  - Also per-row: a small X/trash button (real <button>, 22px, #C7C7CC → hover red) beside the time label for desktop/click users; row restructured to role="button" div (keyboard Enter/Space activation) so the dismiss button is a legal sibling. Tap = mark read + open moment. Exit animation: slide x:-72 + fade; groups (Today/Earlier) collapse via AnimatePresence + layout when their last row leaves.
+  - Dismiss flow: row exits → toast "Notification dismissed" + Undo → insertNotification restores it to the end of its group. Dismissing an UNREAD row decrements the badge live (verified 4→3 new).
+  - Empty state (all dismissed): BellOff icon tile + "You're all caught up" + swipe/bin hint copy.
+- NEW FEATURE — Insights share report (PRD analytics export):
+  - New ShareReportCard section at the end of the insights sheet: a branded dark snapshot card (bg #1D1D1F, deep shadow) with LogoMark + "PERFORMANCE REPORT" + range · memorableday.in, "{sent} sent" teal chip, 4-KPI strip (white values / 45% labels), 44px mini trend-bar chart (white/22 bars, latest bar #64D2FF), and a footer line (Top moment · views · Generated date). Below: "Copy summary" (clipboard.writeText of a formatted multi-line report w/ try/catch fallback toast) + primary "Share" (toast).
+  - Card re-renders when the range segment switches (7D/30D/90D — verified).
+- STYLING details: swipe reveal backdrop, spring-back row physics, red-tinted hover on dismiss buttons, group collapse animations, dark branded report card with KPI strip + mini-bars, balanced ghost/primary action pair.
+
+- VERIFICATION (agent-browser at 1440×900 + 390×844 + VLM):
+  - Notifications: sheet shows 7 rows w/ dismiss buttons + "4 new · 7 total"; X-dismiss → "3 new · 6 total" + toast + Undo → restored ("4 new · 7 total"); SYNTHETIC swipe gesture (pointerdown/move/up sequence) dismisses too (3 new · 6 total); tap Maya row → marked read (4→3 new) + player opens (notifications sheet closed); mark-all-read → "0 new" + sidebar badge label swaps to plain "Notifications"; dismiss-all → empty state "You're all caught up" (VLM PASS: "clean, modern UI standards, no defects"); phone bell opens sheet, fits 390. ZERO errors (after the setPointerCapture try/catch fix caught via synthetic events).
+  - Insights: stats card → sheet; scrolled to bottom → Share report + Performance report + Copy summary + Share all present; Copy → clipboard toast; Share → "Report link shared" toast; 30D range switch keeps the card; phone: card renders at 390. VLM PASS on the snapshot card (readable KPIs, even mini-bars, balanced action buttons, "high-fidelity representation").
+  - Palette regression: "notif" query → Notifications command subtitle live-updates to "You're all caught up" (derived unreadCount).
+  - Phone tab cycle: home→create→explore→home, zero errors. lint exit 0; dev.log only 200s; HTTP 200.
+
+Stage Summary:
+- Round 12 complete — notifications are a full managed lifecycle (swipe-to-dismiss + X dismiss + Undo + read-on-open + mark-all + empty state) with the badge derived from live state, and the insights sheet gained a shareable branded report snapshot. Both features reuse the round-11 toast-action primitive.
+- Still UI-only with mock data per the user's standing instruction. localStorage keys unchanged (md-onboarded, md-saved, md-drafts, md-theme, md-rail). Notifications are session state (ephemeral by design — resets on reload, like a real feed).
+- Files: MODIFIED md-context.tsx (notifications + dismiss/insert/markRead APIs), app-shell.tsx (notifications state, derived unreadCount, removed onMarkAllRead prop wiring), sheet-contents.tsx (NotificationRow rewrite w/ swipe + AnimatePresence groups + empty state; NotificationsContent context-driven; NEW ShareReportCard in InsightsContent).
+- Layer stack unchanged: content z-10 < chrome z-50 < builder z-60 < player z-70 < sheets z-80/81 < toast z-90 < tour z-95 < palette z-96 < shortcuts help z-97.
+- Known tooling quirks (not app bugs): agent-browser `errors` empty ✗ marks; class-name selectors with brackets break in eval (find elements by iterating divs + className.includes instead); multiple "Share" buttons exist across the page — target the report's Share via the Copy button's parent; toasts expire between separate CLI calls (~4.3s) — combine action+verify in back-to-back evals; swipe is testable by dispatching synthetic PointerEvent sequences on `.relative.select-none` rows.
+- Next-phase candidates: Prisma models + real CRUD (UI feature-complete), draft rename, notification swipe for gallery drafts, e2e harness, print styles.
+- Reminder: user should rotate the GitHub token shared earlier in chat.
