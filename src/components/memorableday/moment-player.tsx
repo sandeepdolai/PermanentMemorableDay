@@ -181,7 +181,7 @@ const QUIZ_OPTIONS = [
 const SCENE_COUNT = 5;
 
 export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClose: () => void }) {
-  const { setTab, notify, openShare, sheet } = useMD();
+  const { setTab, notify, openShare, sheet, trackLove } = useMD();
   const [scene, setScene] = useState(0);
   const [giftOpen, setGiftOpen] = useState(false);
   const [quizSolved, setQuizSolved] = useState(false);
@@ -203,13 +203,16 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
     setScene((s) => Math.min(s + 1, SCENE_COUNT - 1));
   }, [scene, giftOpen, quizSolved]);
 
-  /** Love reaction — heart burst + filled state (idempotent per session) */
+  /** Love reaction — heart burst + filled state + real server tracking (once per session) */
   const love = useCallback(() => {
     setLoved((prev) => {
-      if (!prev) setBurstKey((k) => k + 1);
+      if (!prev) {
+        setBurstKey((k) => k + 1);
+        trackLove(moment.id);
+      }
       return true;
     });
-  }, []);
+  }, [moment.id, trackLove]);
 
   // Escape to close (deferred while a sheet is layered above the player)
   useEffect(() => {

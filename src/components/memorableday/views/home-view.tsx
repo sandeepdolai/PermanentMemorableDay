@@ -2,19 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { ChartPie, Eye, Heart, Share2, Trash2 } from "lucide-react";
-import { MOMENTS, USER } from "@/lib/mock-data";
+import { USER } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
 import { CountUp, SectionHeader, StatusBadge } from "../bits";
 import { useMD, type UserDraft } from "../md-context";
 
-const STATS = [
-  { label: "Moments sent", value: String(USER.stats.sent) },
-  { label: "Open rate", value: USER.stats.openRate },
-  { label: "Loves", value: String(USER.stats.loves) },
-];
-
 export function HomeView() {
-  const { setTab, openMoment, openShare, openBuilder, openInsights, drafts: userDrafts, deleteDraft, saveDraft, notify } = useMD();
+  const { setTab, openMoment, openShare, openBuilder, openInsights, drafts: userDrafts, deleteDraft, saveDraft, notify, moments } = useMD();
+
+  // Real stats from the server-synced moments (floored at the account baseline)
+  const sentCount = moments.filter((m) => m.status === "sent" || m.status === "viewed").length;
+  const lovesTotal = moments.reduce((n, m) => n + m.loves, 0);
+  const STATS = [
+    { label: "Moments sent", value: String(Math.max(USER.stats.sent, sentCount)) },
+    { label: "Open rate", value: USER.stats.openRate },
+    { label: "Loves", value: String(Math.max(USER.stats.loves, lovesTotal)) },
+  ];
   const [greeting, setGreeting] = useState("Hello");
   const [dateLine, setDateLine] = useState("");
 
@@ -63,7 +66,7 @@ export function HomeView() {
       blocks: d.blocks,
       editedAt: d.editedAt,
     })),
-    ...MOMENTS.filter((m) => m.status === "draft").map((m) => ({
+    ...moments.filter((m) => m.source === "seed" && m.status === "draft").map((m) => ({
       id: m.id,
       title: m.title,
       cover: m.cover,
@@ -71,7 +74,7 @@ export function HomeView() {
       progress: m.progress,
     })),
   ];
-  const recent = MOMENTS.filter((m) => m.status !== "draft").slice(0, 5);
+  const recent = moments.filter((m) => m.status !== "draft").slice(0, 5);
 
   return (
     <div className="px-5 pb-36 pt-[88px] md:px-8 md:pb-16 lg:px-10">
@@ -292,7 +295,7 @@ export function HomeView() {
           <div className="relative lg:flex lg:items-center lg:justify-between lg:gap-10">
             <div className="min-w-0">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/90">
-                <Heart size={12} aria-hidden /> {USER.stats.loves} loves received
+                <Heart size={12} aria-hidden /> {Math.max(USER.stats.loves, lovesTotal)} loves received
               </span>
               <h2 className="mt-3 text-[19px] font-bold leading-snug tracking-[-0.02em] text-white lg:text-[22px]">
                 Recipients remember moments, not messages.

@@ -10,11 +10,13 @@ import {
   Eye,
   MoreHorizontal,
   Pencil,
+  Send,
   Share2,
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { MOMENTS, type MomentStatus } from "@/lib/mock-data";
+import type { MomentStatus } from "@/lib/mock-data";
+import type { ClientMoment } from "@/lib/md-types";
 import { CoverArt } from "../cover-art";
 import { EmptyState, LargeTitle, SkeletonCard, StatusBadge } from "../bits";
 import { useSkeleton } from "../use-skeleton";
@@ -25,7 +27,7 @@ import { cn } from "@/lib/utils";
 type Filter = "all" | MomentStatus;
 
 type GalleryItem =
-  | ({ kind: "moment" } & (typeof MOMENTS)[number])
+  | ({ kind: "moment" } & ClientMoment)
   | ({ kind: "user-draft" } & UserDraft);
 
 const FILTERS: Array<{ value: Filter; label: string }> = [
@@ -47,18 +49,23 @@ export function GalleryView() {
     saveDraft,
     renameDraft,
     duplicateDraft,
-    archivedIds,
     toggleArchived,
+    moments,
+    ready,
+    sendMoment,
     notify,
   } = useMD();
   const [filter, setFilter] = useState<Filter>("all");
-  const loading = useSkeleton(filter);
+  const loading = useSkeleton(filter) || !ready;
 
   // --- transient menu / dialog state ---------------------------------
   /** item + anchor element of the card whose action menu is open */
   const [menu, setMenu] = useState<{ item: GalleryItem; anchor: HTMLElement } | null>(null);
   /** draft pending rename (dialog state) */
   const [renaming, setRenaming] = useState<UserDraft | null>(null);
+  /** draft pending send — the recipient dialog is open */
+  const [sending, setSending] = useState<UserDraft | null>(null);
+  const [sendingBusy, setSendingBusy] = useState(false);
 
   /** Deletes one of the user's own drafts — toast offers Undo (re-inserts it) */
   const removeDraft = (d: UserDraft) => {
@@ -72,33 +79,38 @@ export function GalleryView() {
     });
   };
 
-  /** Effective status — archiving overrides a seeded moment's own status */
-  const statusOf = (m: (typeof MOMENTS)[number]): MomentStatus =>
-    archivedIds.includes(m.id) ? "archived" : m.status;
+  /** Server-synced status is the single source of truth now */
+  const statusOf = (m: ClientMoment): MomentStatus => m.status;
+  const isUserDraftMoment = (m: ClientMoment) => m.source === "user" && m.status === "draft";
 
   const items = useMemo<GalleryItem[]>(() => {
-    const eff = (m: (typeof MOMENTS)[number]): MomentStatus =>
-      archivedIds.includes(m.id) ? "archived" : m.status;
     const user: GalleryItem[] = userDrafts.map((d) => ({ kind: "user-draft", ...d }));
-    const seeded = MOMENTS.map((m) => ({ kind: "moment" as const, ...m }));
+    const rest = moments.filter((m) => !isUserDraftMoment(m)).map((m) => ({ kind: "moment" as const, ...m }));
     if (filter === "draft") {
-      return [...user, ...seeded.filter((m) => eff(m) === "draft")];
+      return [...user, ...rest.filter((m) => m.status === "draft")];
     }
-    if (filter === "archived") return seeded.filter((m) => eff(m) === "archived");
+    if (filter === "archived") return rest.filter((m) => m.status === "archived");
     if (filter === "all") {
-      return [...user, ...seeded.filter((m) => eff(m) !== "archived")];
+      return [...user, ...rest.filter((m) => m.status !== "archived")];
     }
-    return seeded.filter((m) => eff(m) === filter);
-  }, [filter, userDrafts, archivedIds]);
+    return rest.filter((m) => m.status === filter);
+  }, [filter, userDrafts, moments]);
 
-  const liveCount = userDrafts.length + MOMENTS.filter((m) => statusOf(m) !== "archived").length;
-  const inProgress = userDrafts.length + MOMENTS.filter((m) => statusOf(m) === "draft").length;
+  const liveCount = userDrafts.length + moments.filter((m) => !isUserDraftMoment(m) && m.status !== "archived").length;
+  const inProgress = userDrafts.length + moments.filter((m) => m.source === "seed" && m.status === "draft").length;
 
   /** Builds the action list for a card's ellipsis menu */
   const menuActions = (it: GalleryItem): MomentMenuAction[] => {
     if (it.kind === "user-draft") {
       return [
         { id: "rename", label: "Rename", icon: Pencil, tint: "#007AFF", onSelect: () => setRenaming(it) },
+        {
+          id: "send",
+          label: "Send now",
+          icon: Send,
+          tint: "#30D158",
+          onSelect: () => setSending(it),
+        },
         {
           id: "duplicate",
           label: "Duplicate",
@@ -149,11 +161,12 @@ export function GalleryView() {
                     views: it.views,
                     completion: it.completion ?? "—",
                     scenes: it.scenes,
+                    loves: it.loves,
                   }),
               } satisfies MomentMenuAction,
             ]
           : []),
-        { id: "share", label: "Share", icon: Share2, tint: "#30D158", onSelect: () => openShare({ id: it.id, title: it.title }) },
+        { id: "share", label: "Share", icon: Share2, tint: "#30D158", onSelect: () => openShare({ id: it.id, title: it.title, ...(it.shareSlug ? { slug: it.shareSlug } : {}) }) },
         {
           id: "unarchive",
           label: "Unarchive",
@@ -214,11 +227,12 @@ export function GalleryView() {
                   views: it.views,
                   completion: it.completion ?? "—",
                   scenes: it.scenes,
+                  loves: it.loves,
                 }),
             } satisfies MomentMenuAction,
           ]
         : []),
-      { id: "share", label: "Share", icon: Share2, tint: "#30D158", onSelect: () => openShare({ id: it.id, title: it.title }) },
+      { id: "share", label: "Share", icon: Share2, tint: "#30D158", onSelect: () => openShare({ id: it.id, title: it.title, ...(it.shareSlug ? { slug: it.shareSlug } : {}) }) },
       {
         id: "archive",
         label: "Archive",
@@ -424,6 +438,40 @@ export function GalleryView() {
             notify(old === title ? "Name unchanged" : `Renamed to “${title}”`);
           }
           setRenaming(null);
+        }}
+      />
+
+      {/* Send now — recipient alert (iOS style), real server send */}
+      <RenameDialog
+        open={sending !== null}
+        title="Send this moment"
+        description="Who is this experience for? They'll receive your link."
+        placeholder="Recipient's name"
+        confirmLabel="Send"
+        initialTitle=""
+        busy={sendingBusy}
+        onCancel={() => {
+          if (!sendingBusy) setSending(null);
+        }}
+        onConfirm={(recipient) => {
+          const draft = sending;
+          if (!draft) return;
+          setSendingBusy(true);
+          void sendMoment({
+            id: draft.id,
+            title: draft.title,
+            cover: draft.cover,
+            scenes: draft.scenes,
+            blocks: draft.blocks,
+            recipient,
+          }).then((moment) => {
+            setSendingBusy(false);
+            setSending(null);
+            if (moment) {
+              notify(`Sent to ${recipient} — the link is live`);
+              openShare({ id: moment.id, title: moment.title, ...(moment.shareSlug ? { slug: moment.shareSlug } : {}) });
+            }
+          });
         }}
       />
     </div>

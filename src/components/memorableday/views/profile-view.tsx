@@ -184,7 +184,7 @@ function AppearanceSection() {
 /* ------------------------------------------------------------------ */
 
 export function ProfileView() {
-  const { notify, openSheet, openSettings, openInsights, openAuth, openTour } = useMD();
+  const { notify, openSheet, openSettings, openInsights, openAuth, openTour, credits } = useMD();
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
 
   const sections: Array<{ title: string; rows: Row[] }> = [
@@ -205,7 +205,7 @@ export function ProfileView() {
     {
       title: "Billing",
       rows: [
-        { kind: "value", icon: CreditCard, tint: "#30D158", label: "AI credits", value: `${USER.credits - 64} left`, action: () => openSheet("pricing") },
+        { kind: "value", icon: CreditCard, tint: "#30D158", label: "AI credits", value: `${credits} left`, action: () => openSheet("pricing") },
         { kind: "link", icon: FileText, tint: "#FF9F0A", label: "Invoices", action: () => notify("Invoices — UI preview") },
         { kind: "link", icon: ShieldCheck, tint: "#007AFF", label: "Payment method", action: () => notify("Payment method — UI preview") },
       ],
@@ -280,7 +280,7 @@ export function ProfileView() {
       {/* AI credits */}
       <section aria-label="AI credits" className="lg:flex lg:flex-col">
         <div className="card-shadow hairline flex items-center gap-4 rounded-[26px] bg-white p-4">
-          <CreditRing used={64} total={USER.credits} />
+          <CreditRing used={Math.max(0, USER.credits - credits)} total={USER.credits} />
           <div className="min-w-0 flex-1">
             <h2 className="flex items-center gap-1.5 text-[16px] font-bold tracking-[-0.02em] text-[#1D1D1F]">
               <Sparkles size={15} className="text-[#5E5CE6]" aria-hidden /> AI Credits

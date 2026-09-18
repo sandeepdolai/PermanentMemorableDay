@@ -56,7 +56,12 @@ export function CoverArt({ variant, className, children }: CoverArtProps) {
   return (
     <div
       aria-hidden
-      className={cn("relative h-full w-full overflow-hidden", className)}
+      // No base height: `h-full` + `aspect-*` created a grid sizing cycle
+      // (row sized by square cover → h-full stretched cover to row height →
+      // text below clipped by the card's overflow-hidden). Aspect-ratio
+      // usages now size purely from width; full-bleed callers pass their
+      // own h-full / inset-0 explicitly.
+      className={cn("relative w-full overflow-hidden", className)}
       style={{ background: `linear-gradient(135deg, ${a} 0%, ${b} 52%, ${c} 100%)` }}
     >
       {/* soft light blobs */}

@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// MemorableDay — Prisma schema (SQLite)
+// Real persistence for moments, drafts, notifications and saved templates.
 
 generator client {
   provider = "prisma-client-js"
@@ -14,19 +11,88 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  email       String    @unique
+  name        String
+  plan        String    @default("Free")
+  credits     Int       @default(240)
+  onboarded   Boolean   @default(false)
+  /// One-time localStorage → server migration marker
+  migratedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  moments        Moment[]
+  notifications  Notification[]
+  savedTemplates SavedTemplate[]
 }
 
-model Post {
-  id        String   @id @default(cuid())
+/// A moment experience — seeded previews, user drafts, scheduled & sent moments.
+model Moment {
+  id          String    @id
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  recipient   String    @default("")
+  /// draft | scheduled | sent | viewed | archived
+  status      String    @default("draft")
+  /// Status to restore when unarchived (archive keeps a memory of the real status)
+  prevStatus  String?
+  /// seed (shipped preview content) | user (created in the builder)
+  source      String    @default("user")
+
+  cover       Int       @default(0)
+  scenes      Int       @default(3)
+  blocks      Int       @default(0)
+  views       Int       @default(0)
+  loves       Int       @default(0)
+  /// 0–100 (nullable until a moment has analytics)
+  completion  Int?
+  /// Builder progress 0–100 for drafts
+  progress    Int?
+  /// JSON string array of tags
+  tags        String    @default("[]")
+  /// Human display date ("Sent Oct 12", "Edited 2h ago", …)
+  dateLabel   String    @default("Just now")
+
+  /// Deterministic share slug for the recipient link (assigned on send/schedule)
+  shareSlug   String?   @unique
+  scheduledFor DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  notifications Notification[]
+}
+
+/// Activity feed notification (opened / loved / milestone / reminder / credits / sent).
+model Notification {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  kind      String
   title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  body      String
+  timeLabel String   @default("now")
+  /// today | earlier
+  group     String   @default("today")
+  unread    Boolean  @default(true)
+
+  momentId  String?
+  moment    Moment?  @relation(fields: [momentId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+}
+
+/// Explore template saved to the user's collection.
+model SavedTemplate {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templateId String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, templateId])
 }

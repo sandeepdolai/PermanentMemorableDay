@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import type { RefObject } from "react";
 import type { AppNotification, ExploreItem, InsightRange, MomentStatus } from "@/lib/mock-data";
+import type { ClientMoment, SendMomentPayload } from "@/lib/md-types";
 
 export type Tab = "home" | "create" | "explore" | "gallery" | "profile";
 export type ThemeMode = "light" | "dark" | "system";
@@ -35,6 +36,8 @@ export interface PlayerPayload {
 export interface SharePayload {
   id: string;
   title: string;
+  /** Real server-assigned share slug (falls back to the deterministic one) */
+  slug?: string;
 }
 
 /** Payload for the per-moment stats sheet */
@@ -48,6 +51,8 @@ export interface StatsPayload {
   views: number;
   completion: string;
   scenes: number;
+  /** Real tracked love count (server) — falls back to the generated estimate */
+  loves?: number;
 }
 
 /** A moment draft saved by the user from the builder (persisted in localStorage) */
@@ -152,9 +157,13 @@ export interface MDContextValue {
   theme: ThemeMode;
   /** Sets the appearance mode */
   setTheme: (mode: ThemeMode) => void;
-  /** Drafts the user saved from the builder (persisted in localStorage) */
+  /** Full moment collection — server-synced via /api/md (seeds + user moments) */
+  moments: ClientMoment[];
+  /** True once the bootstrap fetch has settled (views gate skeletons on it) */
+  ready: boolean;
+  /** Drafts the user saved from the builder (derived from `moments`, server-persisted) */
   drafts: UserDraft[];
-  /** Creates or updates a draft (deduped by id, newest first) */
+  /** Creates or updates a draft (deduped by id, newest first, persisted) */
   saveDraft: (draft: UserDraft) => void;
   /** Deletes a draft — returns the removed draft so callers can offer Undo */
   deleteDraft: (id: string) => UserDraft | null;
@@ -162,10 +171,18 @@ export interface MDContextValue {
   renameDraft: (id: string, title: string) => void;
   /** Duplicates a draft — returns the copy (or null if the original vanished) */
   duplicateDraft: (id: string) => UserDraft | null;
-  /** Seeded moment ids the user archived (persisted in localStorage) */
+  /** Ids of archived moments (derived from `moments`) */
   archivedIds: string[];
-  /** Archives / unarchives a seeded moment (persisted) */
+  /** Archives / unarchives a moment (persisted, restores the remembered status) */
   toggleArchived: (id: string) => void;
+  /** Sends (or schedules) a moment for real — share link + activity, server-side */
+  sendMoment: (payload: SendMomentPayload) => Promise<ClientMoment | null>;
+  /** Fires a recipient love reaction (server-tracked) */
+  trackLove: (id: string) => void;
+  /** Live AI credits balance (server-synced) */
+  credits: number;
+  /** Spends n AI credits (optimistic + server) — returns false when short */
+  spendCredits: (n: number) => boolean;
   /** Opens the per-moment stats sheet */
   openStats: (moment: StatsPayload) => void;
   /** Spotlight-style command palette (⌘K) visibility */

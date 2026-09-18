@@ -3,7 +3,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Bell, Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
-import { NOTIFICATIONS, PRICING_PLANS, type AppNotification, type InsightRange } from "@/lib/mock-data";
+import { PRICING_PLANS, type AppNotification, type InsightRange } from "@/lib/mock-data";
+import type { ClientMoment } from "@/lib/md-types";
+import {
+  apiAdjustCredits,
+  apiBootstrap,
+  apiDeleteMoment,
+  apiDismissNotification,
+  apiListNotifications,
+  apiMarkAllNotificationsRead,
+  apiMarkNotificationRead,
+  apiPatchMoment,
+  apiPutSavedTemplates,
+  apiSendMoment,
+  apiTrackLove,
+  apiTrackView,
+  apiUpsertMoment,
+  apiUpsertNotification,
+} from "@/lib/md-client";
 import {
   MDContext,
   type AiInsertFn,
@@ -251,12 +268,13 @@ export function AppShell() {
   const [tourOpen, setTourOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [theme, setThemeState] = useState<ThemeMode>("system");
-  const [drafts, setDrafts] = useState<UserDraft[]>([]);
-  const [archivedIds, setArchivedIds] = useState<string[]>([]);
+  const [moments, setMoments] = useState<ClientMoment[]>([]);
+  const [ready, setReady] = useState(false);
+  const [credits, setCredits] = useState(240);
   const [statsMoment, setStatsMoment] = useState<StatsPayload | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const aiInsertRef = useRef<AiInsertFn | null>(null);
-  const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // First-run welcome tour (shown once, remembered in localStorage).
@@ -265,23 +283,63 @@ export function AppShell() {
     const id = requestAnimationFrame(() => {
       try {
         if (!window.localStorage.getItem("md-onboarded")) setTourOpen(true);
-        const saved = window.localStorage.getItem("md-saved");
-        if (saved) setSavedIds(JSON.parse(saved) as string[]);
         const storedTheme = window.localStorage.getItem("md-theme");
         if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
           setThemeState(storedTheme);
-        }
-        const storedDrafts = window.localStorage.getItem("md-drafts");
-        if (storedDrafts) setDrafts(JSON.parse(storedDrafts) as UserDraft[]);
-        const storedArchived = window.localStorage.getItem("md-archived");
-        if (storedArchived && Array.isArray(JSON.parse(storedArchived))) {
-          setArchivedIds(JSON.parse(storedArchived) as string[]);
         }
       } catch {
         // storage unavailable — skip the tour
       }
     });
     return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Server bootstrap — hydrates moments / notifications / saved templates.
+  // Carries a one-time localStorage migration (drafts · saved · archived) so
+  // data created before the backend existed moves to the server, then the
+  // local keys are retired for good.
+  useEffect(() => {
+    let cancelled = false;
+    let migrate: { drafts?: UserDraft[]; savedIds?: string[]; archivedIds?: string[] } | undefined;
+    try {
+      const d = window.localStorage.getItem("md-drafts");
+      const s = window.localStorage.getItem("md-saved");
+      const a = window.localStorage.getItem("md-archived");
+      if (d || s || a) {
+        migrate = {
+          drafts: d ? (JSON.parse(d) as UserDraft[]) : undefined,
+          savedIds: s ? (JSON.parse(s) as string[]) : undefined,
+          archivedIds: a ? (JSON.parse(a) as string[]) : undefined,
+        };
+      }
+    } catch {
+      migrate = undefined;
+    }
+    apiBootstrap(migrate)
+      .then((state) => {
+        if (cancelled) return;
+        setMoments(state.moments);
+        setNotifications(state.notifications);
+        setSavedIds(state.savedIds);
+        if (typeof state.user?.credits === "number") setCredits(state.user.credits);
+        setReady(true);
+        if (migrate) {
+          try {
+            window.localStorage.removeItem("md-drafts");
+            window.localStorage.removeItem("md-saved");
+            window.localStorage.removeItem("md-archived");
+          } catch {
+            // ignore
+          }
+        }
+      })
+      .catch(() => {
+        // Offline-tolerant: the shell still works with optimistic-only updates.
+        if (!cancelled) setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Apply the resolved theme to <html> and follow OS changes while in "system".
@@ -308,83 +366,245 @@ export function AppShell() {
     }
   }, []);
 
-  /** Creates or updates a draft (deduped by id, newest first, persisted) */
-  const saveDraft = useCallback((draft: UserDraft) => {
-    setDrafts((prev) => {
-      const next = [draft, ...prev.filter((d) => d.id !== draft.id)].slice(0, 12);
-      try {
-        window.localStorage.setItem("md-drafts", JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+  /** Quiet re-sync of the activity feed (used after tracked views/loves) */
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const { notifications: rows } = await apiListNotifications();
+      setNotifications(rows);
+    } catch {
+      // ignore — feed refreshes on next bootstrap anyway
+    }
   }, []);
+
+  /** Server-sync failure notice (optimistic UI already applied) */
+  const notifySyncError = useCallback(() => {
+    setToast({ id: Date.now(), message: "Couldn't reach the server — changes may not persist" });
+  }, []);
+
+  /** True while a moment is an editable user draft */
+  const isUserDraft = useCallback(
+    (m: ClientMoment) => m.source === "user" && m.status === "draft",
+    []
+  );
+
+  /** Drafts derived from the server-synced moment list (newest first, cap 12) */
+  const drafts = useMemo<UserDraft[]>(
+    () =>
+      moments
+        .filter(isUserDraft)
+        .map((m) => ({
+          id: m.id,
+          title: m.title,
+          cover: m.cover,
+          scenes: m.scenes,
+          blocks: m.blocks,
+          editedAt: m.date,
+        }))
+        .slice(0, 12),
+    [moments, isUserDraft]
+  );
+
+  /** Archived ids derived from the live moment statuses */
+  const archivedIds = useMemo(() => moments.filter((m) => m.status === "archived").map((m) => m.id), [moments]);
+
+  /** Creates or updates a draft (optimistic + server upsert) */
+  const saveDraft = useCallback(
+    (draft: UserDraft) => {
+      setMoments((prev) => {
+        const exists = prev.some((m) => m.id === draft.id);
+        if (exists) {
+          return prev.map((m) =>
+            m.id === draft.id
+              ? {
+                  ...m,
+                  title: draft.title,
+                  cover: draft.cover,
+                  scenes: draft.scenes,
+                  blocks: draft.blocks,
+                  date: draft.editedAt,
+                }
+              : m
+          );
+        }
+        const created: ClientMoment = {
+          id: draft.id,
+          title: draft.title,
+          recipient: "",
+          status: "draft",
+          date: draft.editedAt,
+          cover: draft.cover,
+          scenes: draft.scenes,
+          views: 0,
+          completion: null,
+          progress: null,
+          tags: [],
+          loves: 0,
+          blocks: draft.blocks,
+          source: "user",
+          shareSlug: null,
+        };
+        return [created, ...prev];
+      });
+      void apiUpsertMoment({
+        id: draft.id,
+        title: draft.title,
+        cover: draft.cover,
+        scenes: draft.scenes,
+        blocks: draft.blocks,
+        status: "draft",
+        dateLabel: draft.editedAt,
+      }).catch(notifySyncError);
+    },
+    [notifySyncError]
+  );
 
   /** Deletes a draft — returns the removed draft so callers can offer Undo */
-  const deleteDraft = useCallback((id: string): UserDraft | null => {
-    let removed: UserDraft | null = null;
-    setDrafts((prev) => {
-      removed = prev.find((d) => d.id === id) ?? null;
-      const next = prev.filter((d) => d.id !== id);
-      try {
-        window.localStorage.setItem("md-drafts", JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-    return removed;
-  }, []);
+  const deleteDraft = useCallback(
+    (id: string): UserDraft | null => {
+      let removed: UserDraft | null = null;
+      setMoments((prev) => {
+        const m = prev.find((x) => x.id === id);
+        if (m) {
+          removed = {
+            id: m.id,
+            title: m.title,
+            cover: m.cover,
+            scenes: m.scenes,
+            blocks: m.blocks,
+            editedAt: m.date,
+          };
+        }
+        return prev.filter((x) => x.id !== id);
+      });
+      void apiDeleteMoment(id).catch(notifySyncError);
+      return removed;
+    },
+    [notifySyncError]
+  );
 
   /** Renames a draft in place (persisted) */
-  const renameDraft = useCallback((id: string, title: string) => {
-    setDrafts((prev) => {
-      const next = prev.map((d) => (d.id === id ? { ...d, title } : d));
-      try {
-        window.localStorage.setItem("md-drafts", JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
+  const renameDraft = useCallback(
+    (id: string, title: string) => {
+      setMoments((prev) => prev.map((m) => (m.id === id ? { ...m, title } : m)));
+      void apiPatchMoment(id, { title }).catch(notifySyncError);
+    },
+    [notifySyncError]
+  );
 
   /** Duplicates a draft (new id, " (copy)" suffix) — returns the copy */
-  const duplicateDraft = useCallback((id: string): UserDraft | null => {
-    let copy: UserDraft | null = null;
-    setDrafts((prev) => {
-      const source = prev.find((d) => d.id === id);
-      if (!source) return prev;
-      copy = {
-        ...source,
-        id: `d${Date.now()}`,
-        title: `${source.title.replace(/ \(copy\)$/, "")} (copy)`,
-        editedAt: "Just now",
-      };
-      const next = [copy, ...prev].slice(0, 12);
-      try {
-        window.localStorage.setItem("md-drafts", JSON.stringify(next));
-      } catch {
-        // ignore
+  const duplicateDraft = useCallback(
+    (id: string): UserDraft | null => {
+      let copy: UserDraft | null = null;
+      setMoments((prev) => {
+        const source = prev.find((m) => m.id === id);
+        if (!source) return prev;
+        copy = {
+          id: `d${Date.now()}`,
+          title: `${source.title.replace(/ \(copy\)$/, "")} (copy)`,
+          cover: source.cover,
+          scenes: source.scenes,
+          blocks: source.blocks,
+          editedAt: "Just now",
+        };
+        const created: ClientMoment = {
+          ...source,
+          id: copy.id,
+          title: copy.title,
+          status: "draft",
+          date: "Just now",
+          blocks: source.blocks,
+          shareSlug: null,
+        };
+        return [created, ...prev];
+      });
+      if (copy) {
+        void apiUpsertMoment({
+          id: copy.id,
+          title: copy.title,
+          cover: copy.cover,
+          scenes: copy.scenes,
+          blocks: copy.blocks,
+          status: "draft",
+          dateLabel: copy.editedAt,
+        }).catch(notifySyncError);
       }
-      return next;
-    });
-    return copy;
-  }, []);
+      return copy;
+    },
+    [notifySyncError]
+  );
 
-  /** Archives / unarchives a seeded moment (persisted) */
-  const toggleArchived = useCallback((id: string) => {
-    setArchivedIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+  /** Archives / unarchives a moment (optimistic flip + server truth reconcile) */
+  const toggleArchived = useCallback(
+    (id: string) => {
+      let nextArchived = false;
+      setMoments((prev) =>
+        prev.map((m) => {
+          if (m.id !== id) return m;
+          nextArchived = m.status !== "archived";
+          return { ...m, status: nextArchived ? "archived" : "draft" };
+        })
+      );
+      void apiPatchMoment(id, { archived: nextArchived })
+        .then(({ moment }) => {
+          setMoments((prev) => prev.map((m) => (m.id === id ? moment : m)));
+        })
+        .catch(notifySyncError);
+    },
+    [notifySyncError]
+  );
+
+  /** Sends (or schedules with `scheduledFor`) a moment — full server pipeline */
+  const sendMoment = useCallback(
+    async (payload: Parameters<typeof apiSendMoment>[0]): Promise<ClientMoment | null> => {
       try {
-        window.localStorage.setItem("md-archived", JSON.stringify(next));
+        const { moment } = await apiSendMoment(payload);
+        setMoments((prev) => {
+          const exists = prev.some((m) => m.id === moment.id);
+          return exists ? prev.map((m) => (m.id === moment.id ? moment : m)) : [moment, ...prev];
+        });
+        await refreshNotifications();
+        return moment;
       } catch {
-        // ignore
+        notifySyncError();
+        return null;
       }
-      return next;
-    });
-  }, []);
+    },
+    [notifySyncError, refreshNotifications]
+  );
+
+  /** Recipient love reaction — optimistic + server-tracked */
+  const trackLove = useCallback(
+    (id: string) => {
+      setMoments((prev) => prev.map((m) => (m.id === id ? { ...m, loves: m.loves + 1 } : m)));
+      void apiTrackLove(id).then((moment) => {
+        if (moment) {
+          setMoments((prev) => prev.map((m) => (m.id === id ? moment : m)));
+          void refreshNotifications();
+        }
+      });
+    },
+    [refreshNotifications]
+  );
+
+  /** Spends n AI credits (optimistic + server) — false when the balance is short */
+  const spendCredits = useCallback(
+    (n: number): boolean => {
+      let allowed = true;
+      setCredits((prev) => {
+        if (prev < n) {
+          allowed = false;
+          return prev;
+        }
+        return Math.max(0, prev - n);
+      });
+      if (!allowed) return false;
+      void apiAdjustCredits(-n)
+        .then(({ user }) => setCredits(user.credits))
+        .catch(notifySyncError);
+      return true;
+    },
+    [notifySyncError]
+  );
 
   const closeTour = useCallback(() => {
     setTourOpen(false);
@@ -406,17 +626,16 @@ export function AppShell() {
   }, []);
 
   /** Toggle a template in the saved collection (persisted in localStorage) */
-  const toggleSaved = useCallback((id: string) => {
-    setSavedIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      try {
-        window.localStorage.setItem("md-saved", JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
+  const toggleSaved = useCallback(
+    (id: string) => {
+      setSavedIds((prev) => {
+        const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+        void apiPutSavedTemplates(next).catch(() => {});
+        return next;
+      });
+    },
+    []
+  );
 
   const notify = useCallback((message: string, action?: ToastAction) => {
     setToast({ id: Date.now(), message, ...(action ? { action } : {}) });
@@ -456,7 +675,30 @@ export function AppShell() {
 
   const openSheet = useCallback((s: Exclude<Sheet, null>) => setSheet(s), []);
 
-  const openMoment = useCallback((m: PlayerPayload) => setPlayer(m), []);
+  const openMoment = useCallback(
+    (m: PlayerPayload) => {
+      setPlayer(m);
+      // Real recipient-open tracking: views++, sent → viewed, feed notification.
+      setMoments((prev) =>
+        prev.map((x) =>
+          x.id === m.id && (x.status === "sent" || x.status === "viewed")
+            ? {
+                ...x,
+                views: x.views + 1,
+                ...(x.status === "sent" ? { status: "viewed" as const, date: "Opened just now" } : {}),
+              }
+            : x
+        )
+      );
+      void apiTrackView(m.id).then((moment) => {
+        if (moment) {
+          setMoments((prev) => prev.map((x) => (x.id === m.id ? moment : x)));
+          void refreshNotifications();
+        }
+      });
+    },
+    [refreshNotifications]
+  );
 
   const closeMoment = useCallback(() => setPlayer(null), []);
 
@@ -483,9 +725,16 @@ export function AppShell() {
 
   const openComposer = useCallback(() => setSheet("composer"), []);
 
-  /** Insert an AI-composed message: into the open builder, or open one seeded with it */
+  /** Insert an AI-composed message: into the open builder, or open one seeded with it.
+   *  Each insert spends real AI credits server-side. */
   const insertAiMessage = useCallback(
     (message: string) => {
+      if (!spendCredits(4)) {
+        setSheet(null);
+        notify("Out of AI credits — upgrade your plan for more");
+        window.setTimeout(() => setSheet("pricing"), 300);
+        return;
+      }
       setSheet(null);
       if (builder && aiInsertRef.current) {
         aiInsertRef.current(message);
@@ -495,7 +744,7 @@ export function AppShell() {
         }, 240);
       }
     },
-    [builder]
+    [builder, spendCredits, notify]
   );
 
   const openShare = useCallback((m: SharePayload) => {
@@ -510,6 +759,7 @@ export function AppShell() {
 
   const markAllRead = useCallback(() => {
     setNotifications((prev) => prev.map((n) => (n.unread ? { ...n, unread: false } : n)));
+    void apiMarkAllNotificationsRead().catch(() => {});
     notify("All notifications marked as read");
   }, [notify]);
 
@@ -520,17 +770,20 @@ export function AppShell() {
       removed = prev.find((n) => n.id === id) ?? null;
       return prev.filter((n) => n.id !== id);
     });
+    void apiDismissNotification(id).catch(() => {});
     return removed;
   }, []);
 
   /** Re-inserts a dismissed notification (Undo) — returns to the end of its group */
   const insertNotification = useCallback((n: AppNotification) => {
     setNotifications((prev) => (prev.some((x) => x.id === n.id) ? prev : [...prev, n]));
+    void apiUpsertNotification(n).catch(() => {});
   }, []);
 
   /** Marks a single notification read (fires when it's opened) */
   const markNotificationRead = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id && n.unread ? { ...n, unread: false } : n)));
+    void apiMarkNotificationRead(id).catch(() => {});
   }, []);
 
   const isSearchTab = tab === "home" || tab === "explore";
@@ -582,6 +835,8 @@ export function AppShell() {
           toggleSaved,
           theme,
           setTheme,
+          moments,
+          ready,
           drafts,
           saveDraft,
           deleteDraft,
@@ -589,6 +844,10 @@ export function AppShell() {
           duplicateDraft,
           archivedIds,
           toggleArchived,
+          sendMoment,
+          trackLove,
+          credits,
+          spendCredits,
           openStats,
           paletteOpen,
           openPalette,

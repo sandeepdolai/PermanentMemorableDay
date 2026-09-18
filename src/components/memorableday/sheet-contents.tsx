@@ -8,6 +8,7 @@ import {
   ArrowUp,
   Bell,
   BellOff,
+  Send,
   Bookmark,
   BookmarkCheck,
   Check,
@@ -71,6 +72,7 @@ const KIND_META: Record<NotificationKind, { icon: React.ComponentType<{ size?: n
   milestone: { icon: TrendingUp, tint: "#30D158", bg: "rgba(48,209,88,0.12)" },
   reminder: { icon: Bell, tint: "#FF9F0A", bg: "rgba(255,159,10,0.12)" },
   credits: { icon: Sparkles, tint: "#64D2FF", bg: "rgba(100,210,255,0.14)" },
+  sent: { icon: Send, tint: "#30D158", bg: "rgba(48,209,88,0.12)" },
 };
 
 const GROUP_LABELS: Record<AppNotification["group"], string> = {
@@ -354,13 +356,13 @@ export function ShareContent({
   moment,
   onNotify,
 }: {
-  moment: { id: string; title: string };
+  moment: { id: string; title: string; slug?: string };
   onNotify: (message: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [expiry, setExpiry] = useState<(typeof EXPIRY_OPTIONS)[number]["id"]>("30d");
   const [locked, setLocked] = useState(false);
-  const slug = shareSlug(moment.id);
+  const slug = moment.slug ?? shareSlug(moment.id);
   const url = `https://${SHARE_URL_BASE}${slug}`;
   const displayUrl = `${SHARE_URL_BASE}${slug}`;
 
@@ -1250,6 +1252,7 @@ export function AIComposerContent({
   onInsert: (message: string) => void;
   onNotify: (message: string) => void;
 }) {
+  const { credits } = useMD();
   const [brief, setBrief] = useState("");
   const [tone, setTone] = useState("heartfelt");
   const [phase, setPhase] = useState<"compose" | "generating" | "done">("compose");
@@ -1281,6 +1284,15 @@ export function AIComposerContent({
 
   return (
     <div className="pb-2">
+      {/* Live AI credit balance (server-synced — each insert spends 4) */}
+      <div className="mb-3 flex items-center justify-between rounded-[16px] bg-[#5E5CE6]/[0.07] px-3.5 py-2.5">
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[#5E5CE6]">
+          <Sparkles size={13} aria-hidden /> AI Credits
+        </span>
+        <span className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F] dark:text-white">
+          {credits} <span className="font-medium text-[#AAAAAA]">available · 4 per insert</span>
+        </span>
+      </div>
       {phase === "compose" ? (
         <>
           {/* Brief */}
@@ -1615,7 +1627,8 @@ export function StatsContent({
 }) {
   const stats = useMemo(() => {
     const r = hashSeed(moment.id);
-    const loves = Math.max(2, Math.round(moment.views * (0.42 + r() / 250)));
+    // Real tracked loves when the payload carries them; generated estimate otherwise
+    const loves = moment.loves !== undefined ? moment.loves : Math.max(2, Math.round(moment.views * (0.42 + r() / 250)));
     const completionPct = moment.completion === "—" ? 64 + r() % 30 : parseInt(moment.completion, 10) || 78;
     const minutes = 1 + r() % 2;
     const seconds = 12 + r() % 48;
@@ -1630,7 +1643,7 @@ export function StatsContent({
     const topSceneDrop = 100 - (r() % 22);
     const sharedBack = 18 + r() % 20;
     return { loves, completionPct, avgTime, bars, topScene, topSceneDrop, sharedBack };
-  }, [moment.id, moment.views, moment.completion, moment.scenes]);
+  }, [moment.id, moment.views, moment.completion, moment.scenes, moment.loves]);
 
   const journey = [
     { label: "Sent", detail: moment.date.replace(/^Sent /, ""), done: true },

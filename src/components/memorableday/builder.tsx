@@ -31,6 +31,7 @@ import { Slider } from "@/components/ui/slider";
 import { SOUNDTRACKS, formatDuration, type Soundtrack } from "@/lib/mock-data";
 import { CoverArt, COVER_NAMES } from "./cover-art";
 import { BottomSheet } from "./bottom-sheet";
+import { RenameDialog } from "./moment-menu";
 import { useMD, type BuilderOptions } from "./md-context";
 import { cn } from "@/lib/utils";
 
@@ -1107,12 +1108,12 @@ function CoverArtContent({
 /* Schedule send (date + time picker, sheet content)                  */
 /* ------------------------------------------------------------------ */
 
-function ScheduleContent({ onConfirm }: { onConfirm: (label: string) => void }) {
+function ScheduleContent({ onConfirm }: { onConfirm: (label: string, iso: string) => void }) {
   const [dayIdx, setDayIdx] = useState(0);
   const [time, setTime] = useState(SCHEDULE_TIMES[0]);
 
   const days = useMemo(() => {
-    const out: Array<{ label: string; sub: string; full: string }> = [];
+    const out: Array<{ label: string; sub: string; full: string; date: Date }> = [];
     const now = new Date();
     for (let i = 0; i < 7; i++) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
@@ -1120,10 +1121,26 @@ function ScheduleContent({ onConfirm }: { onConfirm: (label: string) => void }) 
         label: i === 0 ? "Today" : i === 1 ? "Tmrw" : new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(d),
         sub: new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(d),
         full: new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(d),
+        date: d,
       });
     }
     return out;
   }, []);
+
+  /** Combines the picked day + time chip into a real Date */
+  const scheduledDate = useMemo(() => {
+    const d = new Date(days[dayIdx].date);
+    const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(time);
+    if (m) {
+      let h = Number(m[1]);
+      const min = Number(m[2]);
+      const mer = m[3];
+      if (mer === "PM" && h < 12) h += 12;
+      if (mer === "AM" && h === 12) h = 0;
+      d.setHours(h, min, 0, 0);
+    }
+    return d;
+  }, [days, dayIdx, time]);
 
   return (
     <div className="pb-2">
@@ -1191,7 +1208,7 @@ function ScheduleContent({ onConfirm }: { onConfirm: (label: string) => void }) 
       </p>
       <button
         type="button"
-        onClick={() => onConfirm(`${days[dayIdx].full} · ${time}`)}
+        onClick={() => onConfirm(`${days[dayIdx].full} · ${time}`, scheduledDate.toISOString())}
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
       >
         <CalendarDays size={16} aria-hidden /> Schedule send
@@ -1285,7 +1302,7 @@ function SceneRow({
 /* ------------------------------------------------------------------ */
 
 export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onClose: () => void }) {
-  const { notify, openMoment, openShare, sheet, player, aiInsertRef, openComposer, saveDraft } = useMD();
+  const { notify, openMoment, openShare, sheet, player, aiInsertRef, openComposer, saveDraft, sendMoment } = useMD();
   const [title, setTitle] = useState(opts.title ?? "Untitled Experience");
   const [editing, setEditing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>(() => seedScenes(opts));
@@ -1299,6 +1316,9 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const [musicOpen, setMusicOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [coverOpen, setCoverOpen] = useState(false);
+  /** Send-flow recipient prompt (iOS alert) + in-flight flag */
+  const [sendPromptOpen, setSendPromptOpen] = useState(false);
+  const [sending, setSending] = useState(false);
   const idRef = useRef(100);
   const blocksEndRef = useRef<HTMLDivElement>(null);
   const blockDragStarted = useRef(false);
@@ -1310,7 +1330,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const track: Soundtrack | null = trackId ? (SOUNDTRACKS.find((t) => t.id === trackId) ?? null) : null;
   const editBlock = editBlockId ? (scenes.flatMap((s) => s.blocks).find((b) => b.id === editBlockId) ?? null) : null;
   /** Any builder-local sheet open? (Escape / ⌘Z defer to it) */
-  const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen;
+  const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen || sendPromptOpen;
 
   /* ---------- Undo / redo ---------- */
 
@@ -1995,12 +2015,11 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
         </button>
         <button
           type="button"
-          onClick={() => {
-            openShare({ id: `draft-${opts.cover ?? 0}`, title: title || "Untitled Experience" });
-          }}
-          className="flex-[1.4] rounded-full bg-[#007AFF] py-3 text-[14.5px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+          onClick={() => setSendPromptOpen(true)}
+          disabled={sending}
+          className="flex-[1.4] rounded-full bg-[#007AFF] py-3 text-[14.5px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97] disabled:opacity-60"
         >
-          Send
+          {sending ? "Sending…" : "Send"}
         </button>
         </div>
       </footer>
@@ -2029,12 +2048,65 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
       <BottomSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Schedule send">
         <ScheduleContent
-          onConfirm={(label) => {
+          onConfirm={(label, iso) => {
             setScheduleOpen(false);
-            notify(`Scheduled for ${label} — UI preview`);
+            setSending(true);
+            void sendMoment({
+              id: opts.draftId ?? `d${Date.now()}`,
+              title: title || "Untitled Experience",
+              cover,
+              scenes: scenes.length,
+              blocks: scenes.reduce((n, s) => n + s.blocks.length, 0),
+              scheduledFor: iso,
+              label,
+            }).then((moment) => {
+              setSending(false);
+              if (moment) {
+                notify(`Scheduled for ${label}`);
+                onClose();
+              }
+            });
           }}
         />
       </BottomSheet>
+
+      {/* Send — recipient prompt (iOS alert), real server send with link */}
+      <RenameDialog
+        open={sendPromptOpen}
+        title="Send this moment"
+        description="Who is this experience for? They'll receive your link."
+        placeholder="Recipient's name"
+        confirmLabel="Send"
+        initialTitle=""
+        maxLength={30}
+        busy={sending}
+        onCancel={() => {
+          if (!sending) setSendPromptOpen(false);
+        }}
+        onConfirm={(recipient) => {
+          setSending(true);
+          void sendMoment({
+            id: opts.draftId ?? `d${Date.now()}`,
+            title: title || "Untitled Experience",
+            cover,
+            scenes: scenes.length,
+            blocks: scenes.reduce((n, s) => n + s.blocks.length, 0),
+            recipient,
+          }).then((moment) => {
+            setSending(false);
+            setSendPromptOpen(false);
+            if (moment) {
+              notify(`Sent to ${recipient} — the link is live`);
+              onClose();
+              openShare({
+                id: moment.id,
+                title: moment.title,
+                ...(moment.shareSlug ? { slug: moment.shareSlug } : {}),
+              });
+            }
+          });
+        }}
+      />
     </motion.div>
   );
 }

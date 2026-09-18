@@ -24,7 +24,7 @@ import {
   User,
   type LucideIcon,
 } from "lucide-react";
-import { EXPLORE_ITEMS, MOMENTS } from "@/lib/mock-data";
+import { EXPLORE_ITEMS } from "@/lib/mock-data";
 import { useMD, type Tab } from "./md-context";
 import { cn } from "@/lib/utils";
 
@@ -129,16 +129,18 @@ export function CommandPalette() {
       { id: "act-shortcuts", title: "Keyboard shortcuts", subtitle: "See every shortcut in one place", icon: Keyboard, group: "Actions", kbd: "?", run: () => setHelpOpen(true) },
       { id: "act-signin", title: "Sign in", subtitle: "Or create an account", icon: LogIn, group: "Actions", run: () => md.openAuth("signin") },
 
-      // Moments (gallery library)
-      ...MOMENTS.map<PaletteCommand>((m) => ({
-        id: `moment-${m.id}`,
-        title: m.title,
-        subtitle: `Moment · for ${m.recipient} · ${m.scenes} scenes`,
-        icon: Play,
-        group: "Moments",
-        keywords: `${m.status} ${m.tags.join(" ")} ${m.recipient}`,
-        run: () => md.openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` }),
-      })),
+      // Moments (gallery library — server-synced, excludes editable drafts)
+      ...md.moments
+        .filter((m) => !(m.source === "user" && m.status === "draft"))
+        .map<PaletteCommand>((m) => ({
+          id: `moment-${m.id}`,
+          title: m.title,
+          subtitle: `Moment · for ${m.recipient} · ${m.scenes} scenes`,
+          icon: Play,
+          group: "Moments",
+          keywords: `${m.status} ${m.tags.join(" ")} ${m.recipient}`,
+          run: () => md.openMoment({ id: m.id, title: m.title, cover: m.cover, dedication: `For ${m.recipient}` }),
+        })),
 
       // Drafts (user-saved, newest first)
       ...md.drafts.map<PaletteCommand>((d) => ({

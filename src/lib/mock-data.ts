@@ -182,7 +182,7 @@ export const SEARCH_SUGGESTIONS: Array<{ label: string; hint: string }> = [
 /* Notifications (activity feed — abstract, no themed content)         */
 /* ------------------------------------------------------------------ */
 
-export type NotificationKind = "opened" | "loved" | "milestone" | "reminder" | "credits";
+export type NotificationKind = "opened" | "loved" | "milestone" | "reminder" | "credits" | "sent";
 
 export interface AppNotification {
   id: string;

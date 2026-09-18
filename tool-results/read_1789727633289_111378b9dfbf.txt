@@ -1,0 +1,856 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+     5→import { Bell, Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
+     6→import { NOTIFICATIONS, PRICING_PLANS, type AppNotification, type InsightRange } from "@/lib/mock-data";
+     7→import {
+     8→  MDContext,
+     9→  type AiInsertFn,
+    10→  type AuthMode,
+    11→  type BuilderOptions,
+    12→  type PlayerPayload,
+    13→  type SettingsTopic,
+    14→  type SharePayload,
+    15→  type Sheet,
+    16→  type StatsPayload,
+    17→  type Tab,
+    18→  type ThemeMode,
+    19→  type ToastAction,
+    20→  type UserDraft,
+    21→} from "./md-context";
+    22→import type { ExploreItem } from "@/lib/mock-data";
+    23→import { SearchBar } from "./search-bar";
+    24→import { SideNav } from "./side-nav";
+    25→import { BottomNav } from "./bottom-nav";
+    26→import { BottomSheet } from "./bottom-sheet";
+    27→import { CommandPalette } from "./command-palette";
+    28→import { MomentPlayer } from "./moment-player";
+    29→import { ExperienceBuilder } from "./builder";
+    30→import { WelcomeTour } from "./welcome-tour";
+    31→import { AuthContent, ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, StatsContent, AIComposerContent } from "./sheet-contents";
+    32→import { HomeView } from "./views/home-view";
+    33→import { CreateView } from "./views/create-view";
+    34→import { ExploreView } from "./views/explore-view";
+    35→import { GalleryView } from "./views/gallery-view";
+    36→import { ProfileView } from "./views/profile-view";
+    37→import { cn } from "@/lib/utils";
+    38→
+    39→const TAB_TITLES: Record<Tab, string> = {
+    40→  home: "Home",
+    41→  create: "Create",
+    42→  explore: "Explore",
+    43→  gallery: "Gallery",
+    44→  profile: "Profile",
+    45→};
+    46→
+    47→/** iOS-style dark glass toast — optional action button (e.g. Undo) */
+    48→function GlassToast({ message, action, onAction }: { message: string; action?: ToastAction; onAction: () => void }) {
+    49→  return (
+    50→    <div className="pointer-events-none absolute inset-x-0 top-[70px] z-[90] flex justify-center px-6">
+    51→      <motion.div
+    52→        initial={{ opacity: 0, y: -14, scale: 0.96 }}
+    53→        animate={{ opacity: 1, y: 0, scale: 1 }}
+    54→        exit={{ opacity: 0, y: -14, scale: 0.96 }}
+    55→        transition={{ type: "spring", stiffness: 420, damping: 30 }}
+    56→        className="pointer-events-auto relative flex max-w-full items-center gap-2 overflow-hidden rounded-full bg-[#1D1D1F]/88 px-4 py-2.5 shadow-[0_16px_40px_-10px_rgba(29,29,31,0.5)] md:max-w-[520px]"
+    57→        style={{ WebkitBackdropFilter: "blur(20px)", backdropFilter: "blur(20px)" }}
+    58→      >
+    59→        <Info size={14} className="shrink-0 text-[#64D2FF]" aria-hidden />
+    60→        <span className="truncate text-[13px] font-medium text-white">{message}</span>
+    61→        {action ? (
+    62→          <>
+    63→            <span aria-hidden className="h-3.5 w-px shrink-0 bg-white/20" />
+    64→            <button
+    65→              type="button"
+    66→              onClick={() => {
+    67→                onAction();
+    68→                action.onClick();
+    69→              }}
+    70→              className="shrink-0 rounded-full bg-white/[0.14] px-3 py-1 text-[12px] font-bold tracking-[-0.01em] text-white transition-colors hover:bg-white/25 active:scale-95"
+    71→            >
+    72→              {action.label}
+    73→            </button>
+    74→          </>
+    75→        ) : null}
+    76→        {/* auto-dismiss progress hairline — longer when an action needs a click */}
+    77→        <motion.span
+    78→          aria-hidden
+    79→          initial={{ scaleX: 1 }}
+    80→          animate={{ scaleX: 0 }}
+    81→          transition={{ duration: action ? 4.2 : 2.4, ease: "linear" }}
+    82→          className="absolute inset-x-0 bottom-0 h-[2.5px] origin-left rounded-full bg-[#64D2FF]/60"
+    83→        />
+    84→      </motion.div>
+    85→    </div>
+    86→  );
+    87→}
+    88→
+    89→/** Notification bell — fixed top chrome, iOS badge style */
+    90→function BellButton({ count, onClick }: { count: number; onClick: () => void }) {
+    91→  return (
+    92→    <button
+    93→      type="button"
+    94→      onClick={onClick}
+    95→      aria-label={count > 0 ? `${count} unread notifications` : "Notifications"}
+    96→      className="relative flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-[#1D1D1F]/[0.06] bg-white/90 text-[#1D1D1F] shadow-[0_10px_30px_-12px_rgba(29,29,31,0.25)] backdrop-blur-xl transition-transform active:scale-90"
+    97→    >
+    98→      <Bell size={19} strokeWidth={2.1} aria-hidden />
+    99→      <AnimatePresence>
+   100→        {count > 0 ? (
+   101→          <motion.span
+   102→            initial={{ scale: 0 }}
+   103→            animate={{ scale: 1 }}
+   104→            exit={{ scale: 0 }}
+   105→            transition={{ type: "spring", stiffness: 500, damping: 22 }}
+   106→            className="absolute -right-0.5 -top-0.5 flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-[#FF375F] px-1 text-[10.5px] font-bold leading-none text-white shadow-[0_4px_10px_-2px_rgba(255,55,95,0.6)] ring-2 ring-white"
+   107→          >
+   108→            {count > 9 ? "9+" : count}
+   109→          </motion.span>
+   110→        ) : null}
+   111→      </AnimatePresence>
+   112→    </button>
+   113→  );
+   114→}
+   115→
+   116→/** "How to start" sheet content */
+   117→function CreateStartContent({ onStart }: { onStart: (mode: "blank" | "ai") => void }) {
+   118→  const [mode, setMode] = useState<"blank" | "ai">("blank");
+   119→  const options = [
+   120→    {
+   121→      id: "blank" as const,
+   122→      icon: LayoutTemplate,
+   123→      title: "Blank canvas",
+   124→      sub: "Start from an empty scene stack",
+   125→    },
+   126→    {
+   127→      id: "ai" as const,
+   128→      icon: Sparkles,
+   129→      title: "AI-assisted",
+   130→      sub: "Describe the moment — AI sketches it",
+   131→    },
+   132→  ];
+   133→  return (
+   134→    <div className="pb-2">
+   135→      <div className="space-y-2.5">
+   136→        {options.map((o) => {
+   137→          const selected = mode === o.id;
+   138→          const Icon = o.icon;
+   139→          return (
+   140→            <button
+   141→              key={o.id}
+   142→              type="button"
+   143→              onClick={() => setMode(o.id)}
+   144→              className={cn(
+   145→                "flex w-full items-center gap-3.5 rounded-[20px] border-2 p-3.5 text-left transition-all active:scale-[0.98]",
+   146→                selected
+   147→                  ? "border-[#007AFF] bg-[#007AFF]/[0.05]"
+   148→                  : "border-[#1D1D1F]/[0.07] bg-white"
+   149→              )}
+   150→            >
+   151→              <span
+   152→                className={cn(
+   153→                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px]",
+   154→                  selected ? "bg-[#007AFF] text-white" : "bg-[#007AFF]/[0.1] text-[#007AFF]"
+   155→                )}
+   156→              >
+   157→                <Icon size={20} aria-hidden />
+   158→              </span>
+   159→              <span className="min-w-0 flex-1">
+   160→                <span className="block text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{o.title}</span>
+   161→                <span className="mt-0.5 block text-[12.5px] text-[#AAAAAA]">{o.sub}</span>
+   162→              </span>
+   163→              <span
+   164→                aria-hidden
+   165→                className={cn(
+   166→                  "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+   167→                  selected ? "border-[#007AFF] bg-[#007AFF]" : "border-[#D1D1D6]"
+   168→                )}
+   169→              >
+   170→                {selected ? <Check size={13} strokeWidth={3} className="text-white" /> : null}
+   171→              </span>
+   172→            </button>
+   173→          );
+   174→        })}
+   175→      </div>
+   176→      <button
+   177→        type="button"
+   178→        onClick={() => onStart(mode)}
+   179→        className="mt-5 w-full rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+   180→      >
+   181→        Start Creating
+   182→      </button>
+   183→    </div>
+   184→  );
+   185→}
+   186→
+   187→/** Pricing sheet content */
+   188→function PricingContent({ onChoose }: { onChoose: (plan: string) => void }) {
+   189→  const [selected, setSelected] = useState("personal");
+   190→  return (
+   191→    <div className="pb-2">
+   192→      <div className="space-y-2.5">
+   193→        {PRICING_PLANS.map((p) => {
+   194→          const active = selected === p.id;
+   195→          return (
+   196→            <button
+   197→              key={p.id}
+   198→              type="button"
+   199→              onClick={() => setSelected(p.id)}
+   200→              className={cn(
+   201→                "flex w-full items-center gap-3.5 rounded-[20px] border-2 p-3.5 text-left transition-all active:scale-[0.98]",
+   202→                active ? "border-[#007AFF] bg-[#007AFF]/[0.05]" : "border-[#1D1D1F]/[0.07] bg-white"
+   203→              )}
+   204→            >
+   205→              <span className="min-w-0 flex-1">
+   206→                <span className="flex items-center gap-2">
+   207→                  <span className="text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{p.name}</span>
+   208→                  {p.recommended ? (
+   209→                    <span className="rounded-full bg-[#007AFF]/[0.1] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#007AFF]">
+   210→                      Popular
+   211→                    </span>
+   212→                  ) : null}
+   213→                </span>
+   214→                <span className="mt-0.5 block text-[12.5px] text-[#AAAAAA]">{p.note}</span>
+   215→              </span>
+   216→              <span className="shrink-0 text-right">
+   217→                <span className="block text-[17px] font-bold tracking-[-0.02em] text-[#1D1D1F]">{p.price}</span>
+   218→                <span className="block text-[11px] text-[#AAAAAA]">{p.period}</span>
+   219→              </span>
+   220→            </button>
+   221→          );
+   222→        })}
+   223→      </div>
+   224→      <button
+   225→        type="button"
+   226→        onClick={() => onChoose(selected)}
+   227→        className="mt-5 w-full rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+   228→      >
+   229→        Continue
+   230→      </button>
+   231→      <p className="mt-3 text-center text-[11px] font-medium text-[#AAAAAA]">
+   232→        Secure checkout via Dodo Payments
+   233→      </p>
+   234→    </div>
+   235→  );
+   236→}
+   237→
+   238→export function AppShell() {
+   239→  const [tab, setTabState] = useState<Tab>("home");
+   240→  const [query, setQuery] = useState("");
+   241→  const [scrolled, setScrolled] = useState(false);
+   242→  const [toast, setToast] = useState<{ id: number; message: string; action?: ToastAction } | null>(null);
+   243→  const [sheet, setSheet] = useState<Sheet>(null);
+   244→  const [player, setPlayer] = useState<PlayerPayload | null>(null);
+   245→  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
+   246→  const [builder, setBuilder] = useState<BuilderOptions | null>(null);
+   247→  const [settingsTopic, setSettingsTopic] = useState<SettingsTopic | null>(null);
+   248→  const [exploreItem, setExploreItem] = useState<ExploreItem | null>(null);
+   249→  const [insightsRange, setInsightsRange] = useState<InsightRange>("7d");
+   250→  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+   251→  const [tourOpen, setTourOpen] = useState(false);
+   252→  const [savedIds, setSavedIds] = useState<string[]>([]);
+   253→  const [theme, setThemeState] = useState<ThemeMode>("system");
+   254→  const [drafts, setDrafts] = useState<UserDraft[]>([]);
+   255→  const [archivedIds, setArchivedIds] = useState<string[]>([]);
+   256→  const [statsMoment, setStatsMoment] = useState<StatsPayload | null>(null);
+   257→  const [paletteOpen, setPaletteOpen] = useState(false);
+   258→  const aiInsertRef = useRef<AiInsertFn | null>(null);
+   259→  const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS);
+   260→  const scrollRef = useRef<HTMLDivElement>(null);
+   261→
+   262→  // First-run welcome tour (shown once, remembered in localStorage).
+   263→  // Checked after paint — async so the render stays stable (and SSR-safe).
+   264→  useEffect(() => {
+   265→    const id = requestAnimationFrame(() => {
+   266→      try {
+   267→        if (!window.localStorage.getItem("md-onboarded")) setTourOpen(true);
+   268→        const saved = window.localStorage.getItem("md-saved");
+   269→        if (saved) setSavedIds(JSON.parse(saved) as string[]);
+   270→        const storedTheme = window.localStorage.getItem("md-theme");
+   271→        if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
+   272→          setThemeState(storedTheme);
+   273→        }
+   274→        const storedDrafts = window.localStorage.getItem("md-drafts");
+   275→        if (storedDrafts) setDrafts(JSON.parse(storedDrafts) as UserDraft[]);
+   276→        const storedArchived = window.localStorage.getItem("md-archived");
+   277→        if (storedArchived && Array.isArray(JSON.parse(storedArchived))) {
+   278→          setArchivedIds(JSON.parse(storedArchived) as string[]);
+   279→        }
+   280→      } catch {
+   281→        // storage unavailable — skip the tour
+   282→      }
+   283→    });
+   284→    return () => cancelAnimationFrame(id);
+   285→  }, []);
+   286→
+   287→  // Apply the resolved theme to <html> and follow OS changes while in "system".
+   288→  useEffect(() => {
+   289→    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+   290→    const apply = () => {
+   291→      const resolved = theme === "system" ? (mql.matches ? "dark" : "light") : theme;
+   292→      document.documentElement.classList.toggle("dark", resolved === "dark");
+   293→    };
+   294→    apply();
+   295→    if (theme === "system") {
+   296→      mql.addEventListener("change", apply);
+   297→      return () => mql.removeEventListener("change", apply);
+   298→    }
+   299→  }, [theme]);
+   300→
+   301→  /** Sets the appearance mode (persisted in localStorage) */
+   302→  const setTheme = useCallback((mode: ThemeMode) => {
+   303→    setThemeState(mode);
+   304→    try {
+   305→      window.localStorage.setItem("md-theme", mode);
+   306→    } catch {
+   307→      // ignore
+   308→    }
+   309→  }, []);
+   310→
+   311→  /** Creates or updates a draft (deduped by id, newest first, persisted) */
+   312→  const saveDraft = useCallback((draft: UserDraft) => {
+   313→    setDrafts((prev) => {
+   314→      const next = [draft, ...prev.filter((d) => d.id !== draft.id)].slice(0, 12);
+   315→      try {
+   316→        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+   317→      } catch {
+   318→        // ignore
+   319→      }
+   320→      return next;
+   321→    });
+   322→  }, []);
+   323→
+   324→  /** Deletes a draft — returns the removed draft so callers can offer Undo */
+   325→  const deleteDraft = useCallback((id: string): UserDraft | null => {
+   326→    let removed: UserDraft | null = null;
+   327→    setDrafts((prev) => {
+   328→      removed = prev.find((d) => d.id === id) ?? null;
+   329→      const next = prev.filter((d) => d.id !== id);
+   330→      try {
+   331→        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+   332→      } catch {
+   333→        // ignore
+   334→      }
+   335→      return next;
+   336→    });
+   337→    return removed;
+   338→  }, []);
+   339→
+   340→  /** Renames a draft in place (persisted) */
+   341→  const renameDraft = useCallback((id: string, title: string) => {
+   342→    setDrafts((prev) => {
+   343→      const next = prev.map((d) => (d.id === id ? { ...d, title } : d));
+   344→      try {
+   345→        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+   346→      } catch {
+   347→        // ignore
+   348→      }
+   349→      return next;
+   350→    });
+   351→  }, []);
+   352→
+   353→  /** Duplicates a draft (new id, " (copy)" suffix) — returns the copy */
+   354→  const duplicateDraft = useCallback((id: string): UserDraft | null => {
+   355→    let copy: UserDraft | null = null;
+   356→    setDrafts((prev) => {
+   357→      const source = prev.find((d) => d.id === id);
+   358→      if (!source) return prev;
+   359→      copy = {
+   360→        ...source,
+   361→        id: `d${Date.now()}`,
+   362→        title: `${source.title.replace(/ \(copy\)$/, "")} (copy)`,
+   363→        editedAt: "Just now",
+   364→      };
+   365→      const next = [copy, ...prev].slice(0, 12);
+   366→      try {
+   367→        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+   368→      } catch {
+   369→        // ignore
+   370→      }
+   371→      return next;
+   372→    });
+   373→    return copy;
+   374→  }, []);
+   375→
+   376→  /** Archives / unarchives a seeded moment (persisted) */
+   377→  const toggleArchived = useCallback((id: string) => {
+   378→    setArchivedIds((prev) => {
+   379→      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+   380→      try {
+   381→        window.localStorage.setItem("md-archived", JSON.stringify(next));
+   382→      } catch {
+   383→        // ignore
+   384→      }
+   385→      return next;
+   386→    });
+   387→  }, []);
+   388→
+   389→  const closeTour = useCallback(() => {
+   390→    setTourOpen(false);
+   391→    try {
+   392→      window.localStorage.setItem("md-onboarded", "1");
+   393→    } catch {
+   394→      // ignore
+   395→    }
+   396→  }, []);
+   397→
+   398→  const openTour = useCallback(() => setTourOpen(true), []);
+   399→
+   400→  const openPalette = useCallback(() => setPaletteOpen(true), []);
+   401→  const closePalette = useCallback(() => setPaletteOpen(false), []);
+   402→
+   403→  const openAuth = useCallback((mode?: AuthMode) => {
+   404→    setAuthMode(mode ?? "signin");
+   405→    setSheet("auth");
+   406→  }, []);
+   407→
+   408→  /** Toggle a template in the saved collection (persisted in localStorage) */
+   409→  const toggleSaved = useCallback((id: string) => {
+   410→    setSavedIds((prev) => {
+   411→      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+   412→      try {
+   413→        window.localStorage.setItem("md-saved", JSON.stringify(next));
+   414→      } catch {
+   415→        // ignore
+   416→      }
+   417→      return next;
+   418→    });
+   419→  }, []);
+   420→
+   421→  const notify = useCallback((message: string, action?: ToastAction) => {
+   422→    setToast({ id: Date.now(), message, ...(action ? { action } : {}) });
+   423→  }, []);
+   424→
+   425→  useEffect(() => {
+   426→    if (!toast) return;
+   427→    const t = setTimeout(() => setToast(null), toast.action ? 4300 : 2400);
+   428→    return () => clearTimeout(t);
+   429→  }, [toast]);
+   430→
+   431→  const scrollTop = useCallback(() => {
+   432→    scrollRef.current?.scrollTo({ top: 0 });
+   433→  }, []);
+   434→
+   435→  const setTab = useCallback(
+   436→    (t: Tab) => {
+   437→      setTabState(t);
+   438→      scrollTop();
+   439→    },
+   440→    [scrollTop]
+   441→  );
+   442→
+   443→  const submitSearch = useCallback(
+   444→    (q?: string) => {
+   445→      const value = (q ?? query).trim();
+   446→      if (!value) {
+   447→        notify("Type something to search");
+   448→        return;
+   449→      }
+   450→      setQuery(value);
+   451→      setTab("explore");
+   452→      notify(`Showing results for “${value}”`);
+   453→    },
+   454→    [query, notify, setTab]
+   455→  );
+   456→
+   457→  const openSheet = useCallback((s: Exclude<Sheet, null>) => setSheet(s), []);
+   458→
+   459→  const openMoment = useCallback((m: PlayerPayload) => setPlayer(m), []);
+   460→
+   461→  const closeMoment = useCallback(() => setPlayer(null), []);
+   462→
+   463→  const openBuilder = useCallback((opts?: BuilderOptions) => {
+   464→    setBuilder(opts ?? {});
+   465→  }, []);
+   466→
+   467→  const closeBuilder = useCallback(() => setBuilder(null), []);
+   468→
+   469→  const openSettings = useCallback((topic: SettingsTopic) => {
+   470→    setSettingsTopic(topic);
+   471→    setSheet("settings");
+   472→  }, []);
+   473→
+   474→  const openExplore = useCallback((item: ExploreItem) => {
+   475→    setExploreItem(item);
+   476→    setSheet("explore");
+   477→  }, []);
+   478→
+   479→  const openInsights = useCallback((range?: InsightRange) => {
+   480→    if (range) setInsightsRange(range);
+   481→    setSheet("insights");
+   482→  }, []);
+   483→
+   484→  const openComposer = useCallback(() => setSheet("composer"), []);
+   485→
+   486→  /** Insert an AI-composed message: into the open builder, or open one seeded with it */
+   487→  const insertAiMessage = useCallback(
+   488→    (message: string) => {
+   489→      setSheet(null);
+   490→      if (builder && aiInsertRef.current) {
+   491→        aiInsertRef.current(message);
+   492→      } else {
+   493→        window.setTimeout(() => {
+   494→          setBuilder({ ai: true, cover: 9, title: "Untitled Experience", seedText: message });
+   495→        }, 240);
+   496→      }
+   497→    },
+   498→    [builder]
+   499→  );
+   500→
+   501→  const openShare = useCallback((m: SharePayload) => {
+   502→    setSharePayload(m);
+   503→    setSheet("share");
+   504→  }, []);
+   505→
+   506→  const openStats = useCallback((m: StatsPayload) => {
+   507→    setStatsMoment(m);
+   508→    setSheet("stats");
+   509→  }, []);
+   510→
+   511→  const markAllRead = useCallback(() => {
+   512→    setNotifications((prev) => prev.map((n) => (n.unread ? { ...n, unread: false } : n)));
+   513→    notify("All notifications marked as read");
+   514→  }, [notify]);
+   515→
+   516→  /** Dismisses one notification — returns it so callers can offer Undo */
+   517→  const dismissNotification = useCallback((id: string): AppNotification | null => {
+   518→    let removed: AppNotification | null = null;
+   519→    setNotifications((prev) => {
+   520→      removed = prev.find((n) => n.id === id) ?? null;
+   521→      return prev.filter((n) => n.id !== id);
+   522→    });
+   523→    return removed;
+   524→  }, []);
+   525→
+   526→  /** Re-inserts a dismissed notification (Undo) — returns to the end of its group */
+   527→  const insertNotification = useCallback((n: AppNotification) => {
+   528→    setNotifications((prev) => (prev.some((x) => x.id === n.id) ? prev : [...prev, n]));
+   529→  }, []);
+   530→
+   531→  /** Marks a single notification read (fires when it's opened) */
+   532→  const markNotificationRead = useCallback((id: string) => {
+   533→    setNotifications((prev) => prev.map((n) => (n.id === id && n.unread ? { ...n, unread: false } : n)));
+   534→  }, []);
+   535→
+   536→  const isSearchTab = tab === "home" || tab === "explore";
+   537→
+   538→  /** Derived live from the feed — badge + sidebar stay in sync automatically */
+   539→  const unreadCount = useMemo(
+   540→    () => notifications.filter((n) => n.unread).length,
+   541→    [notifications]
+   542→  );
+   543→
+   544→  return (
+   545→    <MotionConfig reducedMotion="user">
+   546→      <MDContext.Provider
+   547→        value={{
+   548→          tab,
+   549→          setTab,
+   550→          query,
+   551→          setQuery,
+   552→          submitSearch,
+   553→          notify,
+   554→          openSheet,
+   555→          sheet,
+   556→          openMoment,
+   557→          player,
+   558→          closePlayer: closeMoment,
+   559→          openShare,
+   560→          unreadCount,
+   561→          markAllRead,
+   562→          notifications,
+   563→          dismissNotification,
+   564→          insertNotification,
+   565→          markNotificationRead,
+   566→          openBuilder,
+   567→          builder,
+   568→          closeBuilder,
+   569→          openSettings,
+   570→          settingsTopic,
+   571→          openExplore,
+   572→          exploreItem,
+   573→          openInsights,
+   574→          openComposer,
+   575→          aiInsertRef,
+   576→          insertAiMessage,
+   577→          openAuth,
+   578→          tourOpen,
+   579→          openTour,
+   580→          closeTour,
+   581→          savedIds,
+   582→          toggleSaved,
+   583→          theme,
+   584→          setTheme,
+   585→          drafts,
+   586→          saveDraft,
+   587→          deleteDraft,
+   588→          renameDraft,
+   589→          duplicateDraft,
+   590→          archivedIds,
+   591→          toggleArchived,
+   592→          openStats,
+   593→          paletteOpen,
+   594→          openPalette,
+   595→          closePalette,
+   596→        }}
+   597→      >
+   598→      {/*
+   599→        Responsive app frame —
+   600→        · below `md`: phone column (max 480px, centered, hairline edges)
+   601→        · from `md`: iPad-style layout — glass sidebar rail + content area,
+   602→          capped at 1560px and framed with hairlines from `lg`
+   603→        All overlays (chrome, nav, sheets, builder, player, toast) are scoped
+   604→        to the content area, so the rail stays live beside them — like iPadOS.
+   605→      */}
+   606→      <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05] md:max-w-none md:flex-row md:border-x-0 md:bg-transparent lg:max-w-[1560px] lg:border-x lg:border-[#1D1D1F]/[0.05]">
+   607→        <SideNav
+   608→          unreadCount={unreadCount}
+   609→          onNotifications={() => openSheet("notifications")}
+   610→          onAccount={() => openSettings("account")}
+   611→          onNewMoment={() => openSheet("create")}
+   612→          onPalette={openPalette}
+   613→        />
+   614→
+   615→        <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
+   616→        {/* Top chrome: signature search pill + bell (Home/Explore) or compact title + bell on scroll.
+   617→            From `md` the pill centers with a sensible max width and the bell
+   618→            moves into the sidebar; the compact title yields to the always-
+   619→            visible Large Titles in the content. */}
+   620→        <div
+   621→          className={cn(
+   622→            "absolute inset-x-0 top-0 z-50 px-5 pb-5 pt-4 transition-colors duration-200 md:px-8",
+   623→            scrolled && !isSearchTab
+   624→              ? "border-b border-[#1D1D1F]/[0.06] glass-panel"
+   625→              : "bg-gradient-to-b from-[#F5F5F7] via-[#F5F5F7]/80 to-transparent dark:from-[#0A0A0C] dark:via-[#0A0A0C]/80"
+   626→          )}
+   627→        >
+   628→          {isSearchTab ? (
+   629→            <div className="relative flex items-center gap-2.5">
+   630→              <div className="min-w-0 flex-1 md:mx-auto md:max-w-[560px]">
+   631→                <SearchBar />
+   632→              </div>
+   633→              <div className="shrink-0 md:hidden">
+   634→                <BellButton count={unreadCount} onClick={() => openSheet("notifications")} />
+   635→              </div>
+   636→            </div>
+   637→          ) : (
+   638→            <div className="relative flex h-[46px] items-center justify-center">
+   639→              <span
+   640→                className={cn(
+   641→                  "text-[16px] font-semibold tracking-[-0.02em] text-[#1D1D1F] transition-opacity duration-200 md:opacity-0",
+   642→                  scrolled ? "opacity-100" : "opacity-0"
+   643→                )}
+   644→              >
+   645→                {TAB_TITLES[tab]}
+   646→              </span>
+   647→              <div className="absolute right-0 md:hidden">
+   648→                <BellButton count={unreadCount} onClick={() => openSheet("notifications")} />
+   649→              </div>
+   650→            </div>
+   651→          )}
+   652→        </div>
+   653→
+   654→        {/* Main scroll area */}
+   655→        <main
+   656→          ref={scrollRef}
+   657→          onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 24)}
+   658→          className="no-scrollbar relative z-10 flex-1 overflow-y-auto overscroll-contain"
+   659→        >
+   660→          <AnimatePresence mode="wait" initial={false}>
+   661→            <motion.div
+   662→              key={tab}
+   663→              initial={{ opacity: 0, y: 12 }}
+   664→              animate={{ opacity: 1, y: 0 }}
+   665→              exit={{ opacity: 0, y: -8 }}
+   666→              transition={{ duration: 0.22, ease: "easeOut" }}
+   667→            >
+   668→              {tab === "home" && <HomeView />}
+   669→              {tab === "create" && <CreateView />}
+   670→              {tab === "explore" && <ExploreView />}
+   671→              {tab === "gallery" && <GalleryView />}
+   672→              {tab === "profile" && <ProfileView />}
+   673→            </motion.div>
+   674→          </AnimatePresence>
+   675→        </main>
+   676→
+   677→        {/* Floating pill navigation — phone only (sidebar takes over ≥ md) */}
+   678→        <BottomNav />
+   679→
+   680→        {/* Toast — topmost layer, above sheets and the player */}
+   681→        <AnimatePresence>
+   682→          {toast ? (
+   683→            <GlassToast
+   684→              key={toast.id}
+   685→              message={toast.message}
+   686→              action={toast.action}
+   687→              onAction={() => setToast(null)}
+   688→            />
+   689→          ) : null}
+   690→        </AnimatePresence>
+   691→
+   692→        {/* Sheets */}
+   693→        <BottomSheet open={sheet === "create"} onClose={() => setSheet(null)} title="How would you like to start?">
+   694→          <CreateStartContent
+   695→            onStart={(mode) => {
+   696→              setSheet(null);
+   697→              openBuilder(mode === "ai" ? { ai: true, cover: 9, title: "Untitled Experience" } : { cover: 5 });
+   698→            }}
+   699→          />
+   700→        </BottomSheet>
+   701→
+   702→        <BottomSheet open={sheet === "pricing"} onClose={() => setSheet(null)} title="Choose your plan">
+   703→          <PricingContent
+   704→            onChoose={(plan) => {
+   705→              setSheet(null);
+   706→              const p = PRICING_PLANS.find((x) => x.id === plan);
+   707→              notify(`Checkout preview — ${p?.name} plan via Dodo Payments`);
+   708→            }}
+   709→          />
+   710→        </BottomSheet>
+   711→
+   712→        {/* Notifications sheet */}
+   713→        <BottomSheet open={sheet === "notifications"} onClose={() => setSheet(null)} title="Notifications">
+   714→          <NotificationsContent
+   715→            onOpenMoment={(m) => {
+   716→              setSheet(null);
+   717→              openMoment(m);
+   718→            }}
+   719→          />
+   720→        </BottomSheet>
+   721→
+   722→        {/* Share sheet */}
+   723→        <BottomSheet
+   724→          open={sheet === "share"}
+   725→          onClose={() => setSheet(null)}
+   726→          title={sharePayload ? `Share “${sharePayload.title}”` : "Share moment"}
+   727→        >
+   728→          {sharePayload ? <ShareContent moment={sharePayload} onNotify={notify} /> : null}
+   729→        </BottomSheet>
+   730→
+   731→        {/* Settings detail sheet */}
+   732→        <BottomSheet
+   733→          open={sheet === "settings"}
+   734→          onClose={() => setSheet(null)}
+   735→          title={settingsTopic ? SETTINGS_TITLES[settingsTopic] : "Settings"}
+   736→        >
+   737→          {settingsTopic ? (
+   738→            <SettingsContent
+   739→              key={settingsTopic}
+   740→              topic={settingsTopic}
+   741→              onOpenPricing={() => {
+   742→                setSheet(null);
+   743→                window.setTimeout(() => setSheet("pricing"), 260);
+   744→              }}
+   745→              onOpenTour={() => {
+   746→                setSheet(null);
+   747→                window.setTimeout(openTour, 300);
+   748→              }}
+   749→              onNotify={notify}
+   750→            />
+   751→          ) : null}
+   752→        </BottomSheet>
+   753→
+   754→        {/* Explore template preview sheet */}
+   755→        <BottomSheet
+   756→          open={sheet === "explore"}
+   757→          onClose={() => setSheet(null)}
+   758→          ariaLabel={exploreItem ? `Template: ${exploreItem.title}` : "Template"}
+   759→        >
+   760→          {exploreItem ? (
+   761→            <ExploreContent
+   762→              item={exploreItem}
+   763→              saved={savedIds.includes(exploreItem.id)}
+   764→              onToggleSaved={() => toggleSaved(exploreItem.id)}
+   765→              onPreview={() => {
+   766→                const it = exploreItem;
+   767→                setSheet(null);
+   768→                window.setTimeout(
+   769→                  () => openMoment({ id: it.id, title: it.title, cover: it.cover, dedication: `By ${it.creator}` }),
+   770→                  220
+   771→                );
+   772→              }}
+   773→              onUseLayout={() => {
+   774→                const it = exploreItem;
+   775→                setSheet(null);
+   776→                window.setTimeout(
+   777→                  () => openBuilder({ title: it.title, cover: it.cover, scenes: 3 }),
+   778→                  260
+   779→                );
+   780→              }}
+   781→              onNotify={notify}
+   782→            />
+   783→          ) : null}
+   784→        </BottomSheet>
+   785→
+   786→        {/* Insights / analytics sheet */}
+   787→        <BottomSheet open={sheet === "insights"} onClose={() => setSheet(null)} title="Insights">
+   788→          <InsightsContent initialRange={insightsRange} onNotify={notify} />
+   789→        </BottomSheet>
+   790→
+   791→        {/* Per-moment stats sheet */}
+   792→        <BottomSheet
+   793→          open={sheet === "stats"}
+   794→          onClose={() => setSheet(null)}
+   795→          title={statsMoment ? `${statsMoment.title} — insights` : "Moment insights"}
+   796→        >
+   797→          {statsMoment ? (
+   798→            <StatsContent
+   799→              moment={statsMoment}
+   800→              onNotify={notify}
+   801→              onOpenFullInsights={() => {
+   802→                setSheet(null);
+   803→                window.setTimeout(() => openInsights("7d"), 260);
+   804→              }}
+   805→            />
+   806→          ) : null}
+   807→        </BottomSheet>
+   808→
+   809→        {/* AI message composer sheet */}
+   810→        <BottomSheet open={sheet === "composer"} onClose={() => setSheet(null)} title="AI Message Composer">
+   811→          <AIComposerContent onInsert={insertAiMessage} onNotify={notify} />
+   812→        </BottomSheet>
+   813→
+   814→        {/* Auth sheet (sign in / create account) */}
+   815→        <BottomSheet open={sheet === "auth"} onClose={() => setSheet(null)} ariaLabel="Sign in or create an account">
+   816→          <AuthContent
+   817→            initialMode={authMode}
+   818→            onDone={(mode) => {
+   819→              setSheet(null);
+   820→              notify(mode === "signin" ? "Signed in — UI preview" : "Account created — UI preview");
+   821→            }}
+   822→            onNotify={notify}
+   823→          />
+   824→        </BottomSheet>
+   825→
+   826→        {/* Experience builder layer */}
+   827→        <AnimatePresence>
+   828→          {builder ? <ExperienceBuilder key="builder" opts={builder} onClose={closeBuilder} /> : null}
+   829→        </AnimatePresence>
+   830→
+   831→        {/* Recipient experience player */}
+   832→        <AnimatePresence>
+   833→          {player ? (
+   834→            <MomentPlayer key={player.id} moment={player} onClose={closeMoment} />
+   835→          ) : null}
+   836→        </AnimatePresence>
+   837→
+   838→        {/* First-run welcome tour — topmost layer */}
+   839→        <WelcomeTour
+   840→          open={tourOpen}
+   841→          onClose={closeTour}
+   842→          onSignIn={() => {
+   843→            closeTour();
+   844→            window.setTimeout(() => openAuth("signin"), 300);
+   845→          }}
+   846→        />
+   847→
+   848→        {/* Spotlight command palette (⌘K) — desktop power layer */}
+   849→        <CommandPalette />
+   850→        </div>
+   851→      </div>
+   852→      </MDContext.Provider>
+   853→    </MotionConfig>
+   854→  );
+   855→}
+   856→
