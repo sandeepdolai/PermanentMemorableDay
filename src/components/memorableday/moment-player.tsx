@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight, Heart, RotateCcw, Share2, X } from "lucide-react";
+import { Check, ChevronRight, Heart, Play, RotateCcw, Share2, X } from "lucide-react";
 import type { PlayerPayload } from "./md-context";
+import { SOUNDTRACKS } from "@/lib/mock-data";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
@@ -135,22 +136,80 @@ function SceneDots({ total, current, light }: { total: number; current: number; 
   );
 }
 
-const SCENE_COUNT = 4;
+/** Floating heart burst (double-tap / love reaction) */
+function HeartBurst() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <motion.span
+        initial={{ scale: 0.4, opacity: 0, rotate: -12 }}
+        animate={{ scale: [0.4, 1.25, 1.1], opacity: [0, 1, 0], rotate: [-12, 6, 0] }}
+        transition={{ duration: 0.9, ease: "easeOut" }}
+        className="text-[#FF6482] drop-shadow-[0_12px_32px_rgba(255,100,130,0.6)]"
+      >
+        <Heart size={110} fill="currentColor" strokeWidth={0} />
+      </motion.span>
+      {Array.from({ length: 10 }, (_, i) => {
+        const angle = (i / 10) * 360;
+        const rad = (angle * Math.PI) / 180;
+        const d = 70 + (i % 3) * 26;
+        return (
+          <motion.span
+            key={i}
+            initial={{ x: 0, y: 0, opacity: 1, scale: 0.6 }}
+            animate={{ x: Math.cos(rad) * d, y: Math.sin(rad) * d, opacity: 0, scale: 1 }}
+            transition={{ duration: 0.75, ease: "easeOut", delay: 0.06 * (i % 3) }}
+            className="absolute rounded-full"
+            style={{
+              width: 8 + (i % 4) * 3,
+              height: 8 + (i % 4) * 3,
+              backgroundColor: ["#FF6482", "#FFD60A", "#64D2FF"][i % 3],
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** Recipient-answerable quiz (abstract — every answer is the recipient) */
+const QUIZ_OPTIONS = [
+  { label: "You", correct: true },
+  { label: "Not you", correct: false },
+  { label: "Someone else", correct: false },
+];
+
+const SCENE_COUNT = 5;
 
 export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClose: () => void }) {
   const { setTab, notify, openShare, sheet } = useMD();
   const [scene, setScene] = useState(0);
   const [giftOpen, setGiftOpen] = useState(false);
+  const [quizSolved, setQuizSolved] = useState(false);
+  const [wrongPick, setWrongPick] = useState<number | null>(null);
+  const [loved, setLoved] = useState(false);
+  const [burstKey, setBurstKey] = useState(0);
+  const track = moment.trackId ? (SOUNDTRACKS.find((t) => t.id === moment.trackId) ?? null) : null;
 
   const advance = useCallback(() => {
-    if (scene === 2) {
+    // Quiz scene: requires a correct answer first
+    if (scene === 2 && !quizSolved) return;
+    // Gift scene: first tap opens the gift
+    if (scene === 3) {
       if (!giftOpen) {
         setGiftOpen(true);
         return;
       }
     }
     setScene((s) => Math.min(s + 1, SCENE_COUNT - 1));
-  }, [scene, giftOpen]);
+  }, [scene, giftOpen, quizSolved]);
+
+  /** Love reaction — heart burst + filled state (idempotent per session) */
+  const love = useCallback(() => {
+    setLoved((prev) => {
+      if (!prev) setBurstKey((k) => k + 1);
+      return true;
+    });
+  }, []);
 
   // Escape to close (deferred while a sheet is layered above the player)
   useEffect(() => {
@@ -167,6 +226,8 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
   const replay = () => {
     setScene(0);
     setGiftOpen(false);
+    setQuizSolved(false);
+    setWrongPick(null);
   };
 
   return (
@@ -184,6 +245,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
       <div
         className="relative flex-1 cursor-pointer select-none"
         onClick={isFinal ? undefined : advance}
+        onDoubleClick={isFinal ? undefined : love}
       >
         <AnimatePresence mode="wait" initial={false}>
           {/* Scene 1 — Intro */}
@@ -270,10 +332,119 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
             </motion.section>
           )}
 
-          {/* Scene 3 — Gift reveal */}
+          {/* Scene 3 — Quiz (interactive) */}
           {scene === 2 && (
             <motion.section
-              key="s2"
+              key="s2-quiz"
+              initial={{ opacity: 0, x: 70 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -70 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
+              className="absolute inset-0"
+            >
+              <div className="absolute inset-0 bg-[#1D1D1F]" />
+              <div
+                aria-hidden
+                className="absolute -right-16 top-10 h-64 w-64 rounded-full opacity-40 blur-[80px]"
+                style={{ background: "radial-gradient(circle, rgba(94,92,230,0.6), transparent 70%)" }}
+              />
+              <div
+                aria-hidden
+                className="absolute -bottom-16 -left-12 h-56 w-56 rounded-full opacity-35 blur-[70px]"
+                style={{ background: "radial-gradient(circle, rgba(100,210,255,0.55), transparent 70%)" }}
+              />
+              <div className="relative flex h-full flex-col items-center justify-center px-9 text-center">
+                <motion.p
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-[13px] font-bold uppercase tracking-[0.2em] text-white/70"
+                >
+                  Pop quiz
+                </motion.p>
+                <motion.h2
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12 }}
+                  className="mt-3 max-w-[300px] text-[26px] font-bold leading-[1.2] tracking-[-0.02em] text-white"
+                >
+                  Who is this moment for?
+                </motion.h2>
+
+                <div className="mt-9 flex w-full max-w-[280px] flex-col gap-3" role="group" aria-label="Quiz answers">
+                  {QUIZ_OPTIONS.map((o, i) => {
+                    const isCorrectPick = quizSolved && o.correct;
+                    const isWrongPick = wrongPick === i;
+                    return (
+                      <motion.button
+                        key={o.label}
+                        type="button"
+                        aria-label={`Answer: ${o.label}`}
+                        disabled={quizSolved}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (quizSolved) return;
+                          if (o.correct) {
+                            setQuizSolved(true);
+                            setWrongPick(null);
+                          } else {
+                            setWrongPick(i);
+                            window.setTimeout(() => setWrongPick((w) => (w === i ? null : w)), 600);
+                          }
+                        }}
+                        initial={{ opacity: 0, y: 14 }}
+                        animate={
+                          isWrongPick
+                            ? { opacity: 1, y: 0, x: [0, -8, 8, -5, 0] }
+                            : { opacity: 1, y: 0, x: 0 }
+                        }
+                        transition={isWrongPick ? { duration: 0.45 } : { delay: 0.2 + i * 0.09 }}
+                        className={cn(
+                          "flex items-center justify-center gap-2 rounded-full border py-3.5 text-[16px] font-semibold transition-colors",
+                          isCorrectPick
+                            ? "border-[#30D158]/60 bg-[#30D158]/25 text-white"
+                            : isWrongPick
+                              ? "border-[#FF6482]/60 bg-[#FF6482]/20 text-white"
+                              : quizSolved
+                                ? "border-white/10 bg-white/[0.04] text-white/35"
+                                : "border-white/25 bg-white/10 text-white backdrop-blur-md active:scale-[0.96]"
+                        )}
+                      >
+                        {o.label}
+                        {isCorrectPick ? <Check size={16} strokeWidth={3} aria-hidden /> : null}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+
+                <AnimatePresence>
+                  {quizSolved ? (
+                    <motion.p
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="mt-8 text-[14px] font-medium text-white/70"
+                    >
+                      Obviously. Keep going —
+                    </motion.p>
+                  ) : (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: [0.45, 1, 0.45] }}
+                      transition={{ repeat: Infinity, duration: 1.8 }}
+                      className="mt-8 text-[12.5px] font-semibold text-white/60"
+                    >
+                      Pick an answer to continue
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </div>
+            </motion.section>
+          )}
+
+          {/* Scene 4 — Gift reveal */}
+          {scene === 3 && (
+            <motion.section
+              key="s3-gift"
               initial={{ opacity: 0, x: 70 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -70 }}
@@ -344,10 +515,10 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
             </motion.section>
           )}
 
-          {/* Scene 4 — Signature */}
-          {scene === 3 && (
+          {/* Scene 5 — Signature */}
+          {scene === 4 && (
             <motion.section
-              key="s3"
+              key="s4"
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 50 }}
@@ -439,9 +610,29 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
           )}
         </AnimatePresence>
 
+        {/* Love burst (double-tap or heart button) */}
+        {burstKey > 0 ? <HeartBurst key={burstKey} /> : null}
+
+        {/* Soundtrack chip — "now playing" (dark scenes only) */}
+        {track && !isFinal ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="pointer-events-none absolute bottom-[70px] left-4 flex items-center gap-2 rounded-full bg-[#1D1D1F]/40 py-1.5 pl-2.5 pr-3.5 text-white backdrop-blur-md"
+          >
+            <span aria-hidden className="md-eq h-3 w-4 text-[#64D2FF]">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="text-[11.5px] font-semibold tracking-[-0.01em]">{track.title}</span>
+          </motion.div>
+        ) : null}
+
         {/* Continue hint */}
         <AnimatePresence>
-          {!isFinal ? (
+          {!isFinal && !(scene === 2 && !quizSolved) ? (
             <motion.button
               type="button"
               aria-label="Continue"
@@ -477,22 +668,51 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
           <X size={19} strokeWidth={2.4} />
         </button>
         <SceneDots total={SCENE_COUNT} current={scene} light={isLightScene} />
-        <button
-          type="button"
-          aria-label="Share experience"
-          onClick={(e) => {
-            e.stopPropagation();
-            openShare({ id: moment.id, title: moment.title });
-          }}
-          className={cn(
-            "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
-            isLightScene
-              ? "bg-white/80 text-[#007AFF] hairline backdrop-blur-xl"
-              : "bg-[#1D1D1F]/35 text-white backdrop-blur-md"
-          )}
-        >
-          <Share2 size={17} strokeWidth={2.2} />
-        </button>
+        <div className="pointer-events-auto flex items-center gap-2">
+          <button
+            type="button"
+            aria-label={loved ? "Loved — thank you" : "Love this moment"}
+            aria-pressed={loved}
+            onClick={(e) => {
+              e.stopPropagation();
+              love();
+              if (!loved) notify("Loved — they’ll know you cared");
+            }}
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+              isLightScene
+                ? "bg-white/80 hairline backdrop-blur-xl"
+                : "bg-[#1D1D1F]/35 backdrop-blur-md",
+              loved ? "text-[#FF375F]" : isLightScene ? "text-[#1D1D1F]" : "text-white"
+            )}
+          >
+            <motion.span
+              key={String(loved)}
+              initial={{ scale: loved ? 0.5 : 1 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 500, damping: 16 }}
+              className="flex"
+            >
+              <Heart size={17} fill={loved ? "currentColor" : "none"} strokeWidth={2.2} aria-hidden />
+            </motion.span>
+          </button>
+          <button
+            type="button"
+            aria-label="Share experience"
+            onClick={(e) => {
+              e.stopPropagation();
+              openShare({ id: moment.id, title: moment.title });
+            }}
+            className={cn(
+              "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+              isLightScene
+                ? "bg-white/80 text-[#007AFF] hairline backdrop-blur-xl"
+                : "bg-[#1D1D1F]/35 text-white backdrop-blur-md"
+            )}
+          >
+            <Share2 size={17} strokeWidth={2.2} />
+          </button>
+        </div>
       </div>
     </motion.div>
   );

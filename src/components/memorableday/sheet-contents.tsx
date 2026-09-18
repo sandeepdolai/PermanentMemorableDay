@@ -197,6 +197,12 @@ const SHARE_CHANNELS = [
   { id: "more", label: "More", icon: MoreHorizontal, tint: "#8E8E93", bg: "rgba(142,142,147,0.12)" },
 ];
 
+const EXPIRY_OPTIONS = [
+  { id: "7d", label: "7 days", days: 7 },
+  { id: "30d", label: "30 days", days: 30 },
+  { id: "never", label: "No expiry", days: null },
+] as const;
+
 export function ShareContent({
   moment,
   onNotify,
@@ -205,9 +211,18 @@ export function ShareContent({
   onNotify: (message: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [expiry, setExpiry] = useState<(typeof EXPIRY_OPTIONS)[number]["id"]>("30d");
+  const [locked, setLocked] = useState(false);
   const slug = shareSlug(moment.id);
   const url = `https://${SHARE_URL_BASE}${slug}`;
   const displayUrl = `${SHARE_URL_BASE}${slug}`;
+
+  const selected = EXPIRY_OPTIONS.find((o) => o.id === expiry) ?? EXPIRY_OPTIONS[1];
+  const expiryNote = selected.days
+    ? `Link expires ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(
+        new Date(Date.now() + selected.days * 86400000)
+      )}`
+    : "Link never expires — replay it anytime";
 
   const copy = async () => {
     try {
@@ -287,6 +302,64 @@ export function ShareContent({
             </button>
           );
         })}
+      </div>
+
+      {/* Link controls — expiry + password (PRD sharing options) */}
+      <div className="card-shadow hairline mt-3 overflow-hidden rounded-[20px] bg-white">
+        <div className="px-4 pb-3 pt-3.5">
+          <p className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+            Link settings
+          </p>
+          <div className="mt-2 flex gap-2" role="group" aria-label="Link expiry">
+            {EXPIRY_OPTIONS.map((o) => {
+              const active = expiry === o.id;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setExpiry(o.id)}
+                  className={cn(
+                    "flex-1 rounded-full border py-2 text-[12.5px] font-semibold transition-all active:scale-[0.96]",
+                    active
+                      ? "border-[#007AFF] bg-[#007AFF] text-white pill-shadow"
+                      : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+                  )}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11.5px] font-medium text-[#AAAAAA]">{expiryNote}</p>
+        </div>
+        <div className="flex items-center gap-3 border-t border-[#1D1D1F]/[0.06] px-4 py-3">
+          <span
+            aria-hidden
+            className={cn(
+              "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] transition-colors",
+              locked ? "bg-[#FF9F0A]/[0.12] text-[#B26A00]" : "bg-[#8E8E93]/[0.12] text-[#8E8E93]"
+            )}
+          >
+            <Lock size={15} strokeWidth={2.1} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14.5px] font-medium tracking-[-0.01em] text-[#1D1D1F]">
+              Password-protect
+            </span>
+            <span className="mt-0.5 block text-[11.5px] font-medium text-[#AAAAAA]">
+              {locked ? "Recipients enter a password to open it" : "Anyone with the link can open it"}
+            </span>
+          </span>
+          <Switch
+            checked={locked}
+            onCheckedChange={(v) => {
+              setLocked(v);
+              onNotify(v ? "Password protection on" : "Password protection off");
+            }}
+            aria-label="Password protect this moment"
+          />
+        </div>
       </div>
 
       <p className="mt-3.5 px-1 text-center text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
@@ -487,16 +560,19 @@ function formatCount(n: number): string {
 
 export function ExploreContent({
   item,
+  saved,
+  onToggleSaved,
   onPreview,
   onUseLayout,
   onNotify,
 }: {
   item: ExploreItem;
+  saved: boolean;
+  onToggleSaved: () => void;
   onPreview: () => void;
   onUseLayout: () => void;
   onNotify: (message: string) => void;
 }) {
-  const [saved, setSaved] = useState(false);
   const [liked, setLiked] = useState(false);
   const segments = item.segments
     .map((s) => (s === "picks" ? "Editor's Pick" : s === "trending" ? "Trending" : "New"));
@@ -512,7 +588,7 @@ export function ExploreContent({
         <button
           type="button"
           onClick={() => {
-            setSaved((s) => !s);
+            onToggleSaved();
             onNotify(saved ? "Removed from saved" : "Saved to your collection");
           }}
           aria-label={saved ? "Remove from saved" : "Save template"}

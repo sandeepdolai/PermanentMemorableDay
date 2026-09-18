@@ -1539,6 +1539,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 title: title || "Untitled Experience",
                 cover,
                 dedication: "Draft preview",
+                trackId: trackId ?? undefined,
               })
             }
             aria-label="Preview experience"

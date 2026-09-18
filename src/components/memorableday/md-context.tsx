@@ -25,6 +25,8 @@ export interface PlayerPayload {
   title: string;
   cover: number;
   dedication: string;
+  /** Optional soundtrack to surface in the player ("Now playing" chip) */
+  trackId?: string;
 }
 
 /** Payload for the share sheet */
@@ -100,6 +102,10 @@ export interface MDContextValue {
   openTour: () => void;
   /** Dismisses the tour and marks it seen */
   closeTour: () => void;
+  /** Ids of templates saved to the user's collection (Explore → Saved) */
+  savedIds: string[];
+  /** Toggles a template in the saved collection (persisted in localStorage) */
+  toggleSaved: (id: string) => void;
 }
 
 export const MDContext = createContext<MDContextValue | null>(null);

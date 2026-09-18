@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Eye, Heart, SearchX } from "lucide-react";
+import { Bookmark, BookmarkCheck, Eye, Heart, SearchX } from "lucide-react";
 import { EXPLORE_ITEMS, type ExploreItem } from "@/lib/mock-data";
 import { CoverArt } from "../cover-art";
 import { EmptyState, LargeTitle, SkeletonCard } from "../bits";
@@ -11,12 +11,13 @@ import { useSkeleton } from "../use-skeleton";
 import { useMD } from "../md-context";
 import { cn } from "@/lib/utils";
 
-type Segment = "trending" | "new" | "picks";
+type Segment = "trending" | "new" | "picks" | "saved";
 
 const SEGMENTS: Array<{ value: Segment; label: string }> = [
   { value: "trending", label: "Trending" },
   { value: "new", label: "New" },
   { value: "picks", label: "Editor's Picks" },
+  { value: "saved", label: "Saved" },
 ];
 
 function formatCount(n: number): string {
@@ -24,14 +25,16 @@ function formatCount(n: number): string {
 }
 
 export function ExploreView() {
-  const { query, setQuery, openExplore } = useMD();
+  const { query, setQuery, openExplore, savedIds, toggleSaved } = useMD();
   const [segment, setSegment] = useState<Segment>("trending");
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const loading = useSkeleton(segment);
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return EXPLORE_ITEMS.filter((i) => i.segments.includes(segment)).filter((i) => {
+    return EXPLORE_ITEMS.filter((i) =>
+      segment === "saved" ? savedIds.includes(i.id) : i.segments.includes(segment)
+    ).filter((i) => {
       if (!q) return true;
       return (
         i.title.toLowerCase().includes(q) ||
@@ -39,7 +42,7 @@ export function ExploreView() {
         i.tags.some((t) => t.includes(q))
       );
     });
-  }, [segment, query]);
+  }, [segment, query, savedIds]);
 
   return (
     <div className="space-y-5 px-5 pb-36 pt-[88px]">
@@ -81,11 +84,19 @@ export function ExploreView() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <EmptyState
-          icon={<SearchX size={26} aria-hidden />}
-          title="Nothing found"
-          sub={`No experiences match “${query.trim()}”. Try a different search.`}
-        />
+        segment === "saved" ? (
+          <EmptyState
+            icon={<Bookmark size={26} aria-hidden />}
+            title="Nothing saved yet"
+            sub="Tap the bookmark on any template to keep it here for later."
+          />
+        ) : (
+          <EmptyState
+            icon={<SearchX size={26} aria-hidden />}
+            title="Nothing found"
+            sub={`No experiences match “${query.trim()}”. Try a different search.`}
+          />
+        )
       ) : (
         <div className="grid grid-cols-2 gap-4">
           {items.map((item, idx) => (
@@ -94,8 +105,10 @@ export function ExploreView() {
               idx={idx}
               item={item}
               liked={Boolean(liked[item.id])}
+              saved={savedIds.includes(item.id)}
               onOpen={() => openExplore(item)}
               onToggleLike={() => setLiked((l) => ({ ...l, [item.id]: !l[item.id] }))}
+              onToggleSave={() => toggleSaved(item.id)}
             />
           ))}
         </div>
@@ -104,19 +117,23 @@ export function ExploreView() {
   );
 }
 
-/** Card with entrance animation, like toggle + template preview */
+/** Card with entrance animation, like/save toggles + template preview */
 function ExploreCard({
   idx,
   item,
   liked,
+  saved,
   onOpen,
   onToggleLike,
+  onToggleSave,
 }: {
   idx: number;
   item: ExploreItem;
   liked: boolean;
+  saved: boolean;
   onOpen: () => void;
   onToggleLike: () => void;
+  onToggleSave: () => void;
 }) {
   return (
     <motion.div
@@ -162,7 +179,7 @@ function ExploreCard({
         </div>
       </div>
 
-      {/* Like row */}
+      {/* Like / save row */}
       <div className="flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3 py-2">
         <button
           type="button"
@@ -185,13 +202,35 @@ function ExploreCard({
           </motion.span>
           {formatCount(item.likes + (liked ? 1 : 0))}
         </button>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="rounded-full bg-[#007AFF]/[0.08] px-3 py-1 text-[11.5px] font-semibold text-[#007AFF] transition-transform active:scale-95"
-        >
-          View
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onToggleSave}
+            aria-pressed={saved}
+            aria-label={saved ? `Remove ${item.title} from saved` : `Save ${item.title} for later`}
+            className={cn(
+              "flex h-[30px] w-[30px] items-center justify-center rounded-full transition-all active:scale-90",
+              saved ? "bg-[#007AFF]/[0.1] text-[#007AFF]" : "text-[#AAAAAA] hover:bg-[#1D1D1F]/[0.04]"
+            )}
+          >
+            <motion.span
+              key={String(saved)}
+              initial={{ scale: saved ? 0.6 : 1 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 500, damping: 17 }}
+              className="flex items-center"
+            >
+              {saved ? <BookmarkCheck size={15} aria-hidden /> : <Bookmark size={15} aria-hidden />}
+            </motion.span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpen}
+            className="rounded-full bg-[#007AFF]/[0.08] px-3 py-1 text-[11.5px] font-semibold text-[#007AFF] transition-transform active:scale-95"
+          >
+            View
+          </button>
+        </div>
       </div>
     </motion.div>
   );

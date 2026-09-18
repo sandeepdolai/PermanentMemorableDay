@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **PASS** – Layout is clean; text is centered and fully visible within the dark player, with no overlapping or cut-off elements.\n2) **FAIL** – The large red heart animation overlaps and obscures the selected answer text (\"You\") and partially covers the option below it (\"Not you\").\n3) **FAIL** – The bottom of the share sheet (including channel icons like \"Messages\", \"WhatsApp\" etc.) is cut off by the edge of the image frame.\n4) **PASS** – The \"Saved\" segment is active, the template card is fully rendered, and all text/elements are properly aligned without overlap or clipping.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1789717582,
+  "id": "2026091815461822a57314fa2d4da6",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026091815461822a57314fa2d4da6",
+  "usage": {
+    "completion_tokens": 133,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3626,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3759
+  }
+}

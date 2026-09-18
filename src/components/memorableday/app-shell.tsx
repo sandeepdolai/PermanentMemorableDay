@@ -228,6 +228,7 @@ export function AppShell() {
   const [insightsRange, setInsightsRange] = useState<InsightRange>("7d");
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [tourOpen, setTourOpen] = useState(false);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
   const aiInsertRef = useRef<AiInsertFn | null>(null);
   const [unreadCount, setUnreadCount] = useState(() => NOTIFICATIONS.filter((n) => n.unread).length);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -238,6 +239,8 @@ export function AppShell() {
     const id = requestAnimationFrame(() => {
       try {
         if (!window.localStorage.getItem("md-onboarded")) setTourOpen(true);
+        const saved = window.localStorage.getItem("md-saved");
+        if (saved) setSavedIds(JSON.parse(saved) as string[]);
       } catch {
         // storage unavailable — skip the tour
       }
@@ -259,6 +262,19 @@ export function AppShell() {
   const openAuth = useCallback((mode?: AuthMode) => {
     setAuthMode(mode ?? "signin");
     setSheet("auth");
+  }, []);
+
+  /** Toggle a template in the saved collection (persisted in localStorage) */
+  const toggleSaved = useCallback((id: string) => {
+    setSavedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      try {
+        window.localStorage.setItem("md-saved", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
   }, []);
 
   const notify = useCallback((message: string) => {
@@ -386,6 +402,8 @@ export function AppShell() {
           tourOpen,
           openTour,
           closeTour,
+          savedIds,
+          toggleSaved,
         }}
       >
       <div className="relative mx-auto flex h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-background sm:border-x sm:border-[#1D1D1F]/[0.05]">
@@ -525,6 +543,8 @@ export function AppShell() {
           {exploreItem ? (
             <ExploreContent
               item={exploreItem}
+              saved={savedIds.includes(exploreItem.id)}
+              onToggleSaved={() => toggleSaved(exploreItem.id)}
               onPreview={() => {
                 const it = exploreItem;
                 setSheet(null);
