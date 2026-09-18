@@ -221,6 +221,9 @@ export function CommandPalette() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (tourOpen) return;
+        // A transient card menu (z-110) is open — it owns the stage until
+        // Escape/scrim dismisses it; the palette must not open beneath it.
+        if (document.querySelector('[role="menu"]')) return;
         if (paletteOpen) closePalette();
         else openPalette();
         return;
@@ -235,10 +238,12 @@ export function CommandPalette() {
         (el instanceof HTMLElement && el.isContentEditable);
       if (typing) return;
 
-      // "?" opens the shortcuts help from anywhere.
+      // "?" opens the shortcuts help from anywhere (except over a card menu,
+      // which sits above the help layer — close it first).
       if (e.key === "?") {
         e.preventDefault();
         if (tourOpen) return;
+        if (document.querySelector('[role="menu"]')) return;
         setHelpOpen((o) => !o);
         return;
       }

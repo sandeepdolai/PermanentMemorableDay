@@ -13,6 +13,7 @@ import {
   type SettingsTopic,
   type SharePayload,
   type Sheet,
+  type StatsPayload,
   type Tab,
   type ThemeMode,
   type ToastAction,
@@ -27,7 +28,7 @@ import { CommandPalette } from "./command-palette";
 import { MomentPlayer } from "./moment-player";
 import { ExperienceBuilder } from "./builder";
 import { WelcomeTour } from "./welcome-tour";
-import { AuthContent, ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, AIComposerContent } from "./sheet-contents";
+import { AuthContent, ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, StatsContent, AIComposerContent } from "./sheet-contents";
 import { HomeView } from "./views/home-view";
 import { CreateView } from "./views/create-view";
 import { ExploreView } from "./views/explore-view";
@@ -251,6 +252,8 @@ export function AppShell() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [theme, setThemeState] = useState<ThemeMode>("system");
   const [drafts, setDrafts] = useState<UserDraft[]>([]);
+  const [archivedIds, setArchivedIds] = useState<string[]>([]);
+  const [statsMoment, setStatsMoment] = useState<StatsPayload | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const aiInsertRef = useRef<AiInsertFn | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS);
@@ -270,6 +273,10 @@ export function AppShell() {
         }
         const storedDrafts = window.localStorage.getItem("md-drafts");
         if (storedDrafts) setDrafts(JSON.parse(storedDrafts) as UserDraft[]);
+        const storedArchived = window.localStorage.getItem("md-archived");
+        if (storedArchived && Array.isArray(JSON.parse(storedArchived))) {
+          setArchivedIds(JSON.parse(storedArchived) as string[]);
+        }
       } catch {
         // storage unavailable — skip the tour
       }
@@ -328,6 +335,55 @@ export function AppShell() {
       return next;
     });
     return removed;
+  }, []);
+
+  /** Renames a draft in place (persisted) */
+  const renameDraft = useCallback((id: string, title: string) => {
+    setDrafts((prev) => {
+      const next = prev.map((d) => (d.id === id ? { ...d, title } : d));
+      try {
+        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  /** Duplicates a draft (new id, " (copy)" suffix) — returns the copy */
+  const duplicateDraft = useCallback((id: string): UserDraft | null => {
+    let copy: UserDraft | null = null;
+    setDrafts((prev) => {
+      const source = prev.find((d) => d.id === id);
+      if (!source) return prev;
+      copy = {
+        ...source,
+        id: `d${Date.now()}`,
+        title: `${source.title.replace(/ \(copy\)$/, "")} (copy)`,
+        editedAt: "Just now",
+      };
+      const next = [copy, ...prev].slice(0, 12);
+      try {
+        window.localStorage.setItem("md-drafts", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    return copy;
+  }, []);
+
+  /** Archives / unarchives a seeded moment (persisted) */
+  const toggleArchived = useCallback((id: string) => {
+    setArchivedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      try {
+        window.localStorage.setItem("md-archived", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
   }, []);
 
   const closeTour = useCallback(() => {
@@ -447,6 +503,11 @@ export function AppShell() {
     setSheet("share");
   }, []);
 
+  const openStats = useCallback((m: StatsPayload) => {
+    setStatsMoment(m);
+    setSheet("stats");
+  }, []);
+
   const markAllRead = useCallback(() => {
     setNotifications((prev) => prev.map((n) => (n.unread ? { ...n, unread: false } : n)));
     notify("All notifications marked as read");
@@ -524,6 +585,11 @@ export function AppShell() {
           drafts,
           saveDraft,
           deleteDraft,
+          renameDraft,
+          duplicateDraft,
+          archivedIds,
+          toggleArchived,
+          openStats,
           paletteOpen,
           openPalette,
           closePalette,
@@ -720,6 +786,24 @@ export function AppShell() {
         {/* Insights / analytics sheet */}
         <BottomSheet open={sheet === "insights"} onClose={() => setSheet(null)} title="Insights">
           <InsightsContent initialRange={insightsRange} onNotify={notify} />
+        </BottomSheet>
+
+        {/* Per-moment stats sheet */}
+        <BottomSheet
+          open={sheet === "stats"}
+          onClose={() => setSheet(null)}
+          title={statsMoment ? `${statsMoment.title} — insights` : "Moment insights"}
+        >
+          {statsMoment ? (
+            <StatsContent
+              moment={statsMoment}
+              onNotify={notify}
+              onOpenFullInsights={() => {
+                setSheet(null);
+                window.setTimeout(() => openInsights("7d"), 260);
+              }}
+            />
+          ) : null}
         </BottomSheet>
 
         {/* AI message composer sheet */}

@@ -520,3 +520,46 @@ Stage Summary:
 - Known tooling quirks (not app bugs): agent-browser `errors` empty ✗ marks; class-name selectors with brackets break in eval (find elements by iterating divs + className.includes instead); multiple "Share" buttons exist across the page — target the report's Share via the Copy button's parent; toasts expire between separate CLI calls (~4.3s) — combine action+verify in back-to-back evals; swipe is testable by dispatching synthetic PointerEvent sequences on `.relative.select-none` rows.
 - Next-phase candidates: Prisma models + real CRUD (UI feature-complete), draft rename, notification swipe for gallery drafts, e2e harness, print styles.
 - Reminder: user should rotate the GitHub token shared earlier in chat.
+
+---
+Task ID: 13
+Agent: Z.ai Code (cron webDevReview — 15-minute review cycle, round 13)
+Task: Assess project status, QA via agent-browser, then continue development — focus: moment management layer (card action menus, draft rename/duplicate, archive, per-moment stats sheet), per the round mandate (more features + more styling detail).
+
+Work Log:
+- Status assessment: dev server healthy (all 200s), lint clean, rounds 11-12 stable (regression-verified: ⌘K palette w/ live "4 unread" subtitle, notification dismiss + badge + Undo, Explore global search + Clear, phone layout). Worklog candidate list was stale again (share sheet + builder cover picker already built; "notification swipe for gallery drafts" superseded by round 11 trash) — real gaps identified by QA: no per-card actions, drafts can't be renamed/duplicated, no archive, sent moments have no stats surface.
+- NEW FILE moment-menu.tsx:
+  - MomentMenu — iOS 26-style anchored popover (portal to body because cards are overflow-hidden): measures the anchor's live rect, clamps to viewport, FLIPS ABOVE when the anchor sits near the bottom (verified: bottom-anchored card opens upward, in-viewport); glass panel (white/92 blur-2xl + dark variant #2C2C2E/94), 44px rows, 28px tinted icon squircles (iOS system colors), hairline separators, destructive red rows, spring entrance scaled from the anchor corner; scrim + capture-phase Escape (stopPropagation) close it before any other layer reacts. Client-only portal via useSyncExternalStore (lint-clean, no setState-in-effect).
+  - RenameDialog — centered iOS alert (z-120, scrim + 2px blur, rounded-[28px] card, spring pop): prefilled+autoselected input (50-char cap, amber counter at 44+, focus ring #007AFF), Cancel/Rename split button grid with hairline dividers, Enter confirms / Escape cancels / scrim cancels, Rename disabled when empty; field resets via the previous-render pattern.
+- NEW FEATURE — Card action menus on every Gallery card (ellipses pill, cover top-right, replaces the round-11 draft trash — Delete now lives in the menu):
+  - User drafts: Rename (dialog) · Duplicate · Share · Delete draft (destructive, Undo preserved from round 11).
+  - Seeded sent/viewed: View insights · Share · Archive. Seeded draft: Edit in Builder · Share · Archive. Archived: View insights · Share · Unarchive. Scheduled (no views): Share · Archive.
+  - Duplicate: copies with " (copy)" suffix + "Just now", toast offers "Open" → launches the builder on the copy (verified end-to-end).
+- NEW FEATURE — Archive lifecycle (persisted localStorage "md-archived"):
+  - Effective status = archived if id ∈ archivedIds else native status (seeded m8 is natively archived). "All"/"Drafts"/status filters exclude archived; "Archived" filter shows archived cards DIMMED (opacity-75 cover + saturate-[0.45] desaturation). Archive toasts offer Undo; Unarchive restores. Header counts use effective status (fixed an initial mismatch where natively-archived m8 was counted but filtered). Empty state per filter ("Nothing archived").
+- NEW FEATURE — Per-moment stats sheet (new "stats" sheet type + StatsPayload):
+  - Entry points: menu "View insights" + the views pill on sent cards (now a real button w/ hover, aria-label "Insights for X — N views").
+  - StatsContent: hero row (cover + "To Maya · Sent Oct 12 · 5 scenes" + Live chip), 2×2 KPI grid (Views/Loves/Completion/Avg. time, staggered entrances, iOS-tinted icons), 7-day bar chart (staggered spring rise, today = #007AFF→#64D2FF gradient + glow, others 16% blue; labels M-S), strongest-scene retention card (purple→pink gradient progress bar), recipient journey timeline (Sent→Opened→Completed→Loved with green check nodes + connector), "Open full insights" (chains into the Insights sheet) + "Copy stats summary" (toast).
+  - All numbers deterministic via an id-hash PRNG (stable per moment, no hydration drift).
+- FIX (caught by VLM): chart bars initially used % heights inside items-end content-sized columns → collapsed to 0. Now explicit pixel heights (max(8, round(h*0.72)) px) — verified rendering + VLM PASS.
+- FIX (layering, caught by QA): ⌘K and "?" ignored the open menu → palette (z-96)/help (z-97) opened UNDER the menu (z-110). Both branches now bail while [role="menu"] exists (verified: menu blocks palette; palette opens after menu closes).
+- CONTEXT/WIRING: md-context (Sheet += "stats"; StatsPayload; renameDraft/duplicateDraft/toggleArchived/archivedIds/openStats), app-shell (archivedIds state + md-archived load/persist; statsMoment state; stats BottomSheet titled "X — insights"; provider wiring), gallery-view (full rewrite of card overlays: ellipses on all cards, menu-state captures the item at click time, effective-status filtering + counts, rename dialog state, views-pill stats shortcut).
+
+- VERIFICATION (agent-browser at 1440×900 + 390×844 + VLM):
+  - Menus: Golden Hour (sent) → View insights/Share/Archive; draft → Rename/Duplicate/Share/Delete draft; archived → View insights/Share/Unarchive; Escape + scrim close; positions clamp (phone l=10 r=242 in 390) and flip up near the bottom.
+  - Stats: sheet opens via menu AND views pill; KPIs + chart (bars 44-63px, today tallest) + journey all present (DOM) — VLM PASS after the pixel-height fix; "Copy stats summary" toasts; chains into full Insights.
+  - Archive: Golden Hour archived → counts 8→7 + toast + Undo → 8 restored; persisted md-archived survives reload; Archived filter shows m1+m8 dimmed (opacity-75 + saturate verified); Unarchive clears storage + restores counts; counts use effective status (9 moments / 4 in progress with 2 user drafts).
+  - Drafts: Rename dialog (autofocus+selected, counter) → "Silver Anniversary" updated on card + storage + toast; VLM PASS. Duplicate → "(copy)" card + toast "Open" → builder opens on the copy; Delete via menu → storage shrinks + Undo restores.
+  - Layering: menu open + ⌘K → blocked; Escape closes menu only; ⌘K after → palette opens. "?" likewise guarded.
+  - Dark mode menu VLM PASS (dark surface, readable, red destructive row visible).
+  - Regression: Home Continue Creating trash buttons intact (2), Explore 6 trending cards, palette live subtitle, notifications dismiss/undo, phone 5-tab nav + rename dialog fits (300px centered) + stats bars render.
+  - lint exit 0; dev.log only 200s post-fixes (one transient 500 was the mid-edit HMR state before the StatsContent import landed — not present in the final build); zero page errors.
+
+Stage Summary:
+- Round 13 complete — the moment management layer: every Gallery card now has a full iOS-style action menu (portal popover with viewport clamping + flip-up), drafts gained rename (iOS alert dialog) and duplicate, moments gained a persisted archive lifecycle (dimmed archived view + Undo), and sent moments gained a per-moment stats sheet (KPIs, 7-day chart, scene retention, recipient journey) reachable from menus and view pills.
+- Still UI-only with mock data per the user's standing instruction. localStorage keys now: md-onboarded, md-saved, md-drafts, md-theme, md-rail, md-archived.
+- Files: NEW moment-menu.tsx (MomentMenu + RenameDialog); MODIFIED md-context.tsx (stats sheet type + 5 new APIs), app-shell.tsx (archive/stats state + wiring + stats sheet), gallery-view.tsx (menus + archive + rename + stats entry points), sheet-contents.tsx (StatsContent + hashSeed), command-palette.tsx (⌘K/? menu guard).
+- Layer stack: content z-10 < chrome z-50 < builder z-60 < player z-70 < sheets z-80/81 < toast z-90 < tour z-95 < palette z-96 < shortcuts help z-97 < card menu z-110 < rename alert z-120.
+- Known tooling quirks (not app bugs): agent-browser `errors` empty ✗ marks; after `agent-browser open` (reload) the app returns to Home — re-navigate via the rail's text content (sidebar nav items have no tab-name aria-labels); React input.value assignment needs the native setter + input event; VLM may report below-the-fold sections (journey) as "empty" — verify with DOM evals.
+- Next-phase candidates: home Recent Moments cards could adopt the same action menu; drag-to-reorder for gallery cards; scheduled-send date editor (PRD delivery scheduling); recipient view simulation ("preview as recipient" from stats); e2e harness; print styles.
+- Reminder: user should rotate the GitHub token shared earlier in chat.

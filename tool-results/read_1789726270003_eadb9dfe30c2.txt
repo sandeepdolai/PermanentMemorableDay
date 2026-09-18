@@ -1,0 +1,720 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useState } from "react";
+     4→import { AnimatePresence, motion } from "framer-motion";
+     5→import { Check, ChevronRight, Heart, Play, RotateCcw, Share2, X } from "lucide-react";
+     6→import type { PlayerPayload } from "./md-context";
+     7→import { SOUNDTRACKS } from "@/lib/mock-data";
+     8→import { CoverArt } from "./cover-art";
+     9→import { LogoMark } from "./bits";
+    10→import { useMD } from "./md-context";
+    11→import { cn } from "@/lib/utils";
+    12→
+    13→const CONFETTI_COLORS = ["#007AFF", "#64D2FF", "#FF6482", "#FFD60A", "#FFFFFF", "#30D158"];
+    14→
+    15→interface Particle {
+    16→  id: number;
+    17→  x: number;
+    18→  y: number;
+    19→  size: number;
+    20→  rotate: number;
+    21→  delay: number;
+    22→  color: string;
+    23→}
+    24→
+    25→/** One-shot confetti burst (gift reveal) */
+    26→function ConfettiBurst() {
+    27→  const [particles] = useState<Particle[]>(() =>
+    28→    Array.from({ length: 28 }, (_, i) => {
+    29→      const angle = (i / 28) * 360 + (Math.random() - 0.5) * 18;
+    30→      const distance = 90 + Math.random() * 120;
+    31→      const rad = (angle * Math.PI) / 180;
+    32→      return {
+    33→        id: i,
+    34→        x: Math.cos(rad) * distance,
+    35→        y: Math.sin(rad) * distance,
+    36→        size: 6 + Math.random() * 7,
+    37→        rotate: Math.random() * 720 - 360,
+    38→        delay: Math.random() * 0.14,
+    39→        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    40→      };
+    41→    })
+    42→  );
+    43→
+    44→  return (
+    45→    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+    46→      {particles.map((p) => (
+    47→        <motion.span
+    48→          key={p.id}
+    49→          initial={{ x: 0, y: 0, opacity: 1, rotate: 0, scale: 0.5 }}
+    50→          animate={{ x: p.x, y: p.y, opacity: 0, rotate: p.rotate, scale: 1 }}
+    51→          transition={{ duration: 1 + p.delay * 2.4, ease: "easeOut", delay: p.delay }}
+    52→          className="absolute rounded-[2px]"
+    53→          style={{ width: p.size, height: p.size * 0.62, backgroundColor: p.color }}
+    54→        />
+    55→      ))}
+    56→    </div>
+    57→  );
+    58→}
+    59→
+    60→/** Tap-to-open gift box (signature interaction) */
+    61→function GiftBox({ open, onOpen }: { open: boolean; onOpen: () => void }) {
+    62→  return (
+    63→    <button
+    64→      type="button"
+    65→      aria-label={open ? "Gift opened" : "Tap to open the gift"}
+    66→      onClick={(e) => {
+    67→        e.stopPropagation();
+    68→        if (!open) onOpen();
+    69→      }}
+    70→      className="relative outline-none"
+    71→    >
+    72→      <motion.div
+    73→        animate={open ? { y: 0 } : { y: [0, -10, 0] }}
+    74→        transition={open ? { duration: 0.2 } : { repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
+    75→        className="relative"
+    76→      >
+    77→        {/* box body */}
+    78→        <div
+    79→          className="relative h-[84px] w-[104px] rounded-[18px] shadow-[0_24px_50px_-12px_rgba(0,0,0,0.45)]"
+    80→          style={{ background: "linear-gradient(160deg, #339CFF, #007AFF 60%)" }}
+    81→        >
+    82→          {/* vertical ribbon */}
+    83→          <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" />
+    84→          <div className="absolute inset-0 rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.3),transparent_45%)]" />
+    85→        </div>
+    86→        {/* lid */}
+    87→        <motion.div
+    88→          animate={open ? { y: -84, rotate: -24, opacity: 1 } : { y: 0, rotate: 0 }}
+    89→          transition={{ type: "spring", stiffness: 260, damping: 18 }}
+    90→          className="absolute -top-[14px] left-[-6px] h-[26px] w-[116px] rounded-[10px] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.4)]"
+    91→          style={{ background: "linear-gradient(160deg, #5AB4FF, #0A6FE0)" }}
+    92→        >
+    93→          <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" />
+    94→          <div className="absolute inset-0 rounded-[10px] bg-[linear-gradient(180deg,rgba(255,255,255,0.4),transparent_60%)]" />
+    95→        </motion.div>
+    96→        {/* bow */}
+    97→        <motion.div
+    98→          animate={open ? { y: -120, rotate: -30, opacity: 0.9 } : { y: 0, rotate: 0 }}
+    99→          transition={{ type: "spring", stiffness: 260, damping: 18 }}
+   100→          className="absolute -top-[34px] left-1/2 flex -translate-x-1/2 items-center justify-center text-white drop-shadow-md"
+   101→        >
+   102→          <Heart size={22} fill="currentColor" strokeWidth={0} />
+   103→        </motion.div>
+   104→      </motion.div>
+   105→    </button>
+   106→  );
+   107→}
+   108→
+   109→/** Progress dots (scene indicator) — adapts to light/dark scenes */
+   110→function SceneDots({ total, current, light }: { total: number; current: number; light?: boolean }) {
+   111→  return (
+   112→    <div
+   113→      className={cn(
+   114→        "flex items-center gap-1.5 rounded-full px-2.5 py-2",
+   115→        light ? "bg-black/[0.06]" : "bg-[#1D1D1F]/35"
+   116→      )}
+   117→      style={{ WebkitBackdropFilter: "blur(12px)", backdropFilter: "blur(12px)" }}
+   118→    >
+   119→      {Array.from({ length: total }, (_, i) => (
+   120→        <span
+   121→          key={i}
+   122→          aria-hidden
+   123→          className={cn(
+   124→            "h-[6px] rounded-full transition-all duration-300",
+   125→            i === current
+   126→              ? light
+   127→                ? "w-5 bg-black"
+   128→                : "w-5 bg-white"
+   129→              : light
+   130→                ? "w-[6px] bg-black/30"
+   131→                : "w-[6px] bg-white/40"
+   132→          )}
+   133→        />
+   134→      ))}
+   135→    </div>
+   136→  );
+   137→}
+   138→
+   139→/** Floating heart burst (double-tap / love reaction) */
+   140→function HeartBurst() {
+   141→  return (
+   142→    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+   143→      <motion.span
+   144→        initial={{ scale: 0.4, opacity: 0, rotate: -12 }}
+   145→        animate={{ scale: [0.4, 1.25, 1.1], opacity: [0, 1, 0], rotate: [-12, 6, 0] }}
+   146→        transition={{ duration: 0.9, ease: "easeOut" }}
+   147→        className="text-[#FF6482] drop-shadow-[0_12px_32px_rgba(255,100,130,0.6)]"
+   148→      >
+   149→        <Heart size={110} fill="currentColor" strokeWidth={0} />
+   150→      </motion.span>
+   151→      {Array.from({ length: 10 }, (_, i) => {
+   152→        const angle = (i / 10) * 360;
+   153→        const rad = (angle * Math.PI) / 180;
+   154→        const d = 70 + (i % 3) * 26;
+   155→        return (
+   156→          <motion.span
+   157→            key={i}
+   158→            initial={{ x: 0, y: 0, opacity: 1, scale: 0.6 }}
+   159→            animate={{ x: Math.cos(rad) * d, y: Math.sin(rad) * d, opacity: 0, scale: 1 }}
+   160→            transition={{ duration: 0.75, ease: "easeOut", delay: 0.06 * (i % 3) }}
+   161→            className="absolute rounded-full"
+   162→            style={{
+   163→              width: 8 + (i % 4) * 3,
+   164→              height: 8 + (i % 4) * 3,
+   165→              backgroundColor: ["#FF6482", "#FFD60A", "#64D2FF"][i % 3],
+   166→            }}
+   167→          />
+   168→        );
+   169→      })}
+   170→    </div>
+   171→  );
+   172→}
+   173→
+   174→/** Recipient-answerable quiz (abstract — every answer is the recipient) */
+   175→const QUIZ_OPTIONS = [
+   176→  { label: "You", correct: true },
+   177→  { label: "Not you", correct: false },
+   178→  { label: "Someone else", correct: false },
+   179→];
+   180→
+   181→const SCENE_COUNT = 5;
+   182→
+   183→export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClose: () => void }) {
+   184→  const { setTab, notify, openShare, sheet } = useMD();
+   185→  const [scene, setScene] = useState(0);
+   186→  const [giftOpen, setGiftOpen] = useState(false);
+   187→  const [quizSolved, setQuizSolved] = useState(false);
+   188→  const [wrongPick, setWrongPick] = useState<number | null>(null);
+   189→  const [loved, setLoved] = useState(false);
+   190→  const [burstKey, setBurstKey] = useState(0);
+   191→  const track = moment.trackId ? (SOUNDTRACKS.find((t) => t.id === moment.trackId) ?? null) : null;
+   192→
+   193→  const advance = useCallback(() => {
+   194→    // Quiz scene: requires a correct answer first
+   195→    if (scene === 2 && !quizSolved) return;
+   196→    // Gift scene: first tap opens the gift
+   197→    if (scene === 3) {
+   198→      if (!giftOpen) {
+   199→        setGiftOpen(true);
+   200→        return;
+   201→      }
+   202→    }
+   203→    setScene((s) => Math.min(s + 1, SCENE_COUNT - 1));
+   204→  }, [scene, giftOpen, quizSolved]);
+   205→
+   206→  /** Love reaction — heart burst + filled state (idempotent per session) */
+   207→  const love = useCallback(() => {
+   208→    setLoved((prev) => {
+   209→      if (!prev) setBurstKey((k) => k + 1);
+   210→      return true;
+   211→    });
+   212→  }, []);
+   213→
+   214→  // Escape to close (deferred while a sheet is layered above the player)
+   215→  useEffect(() => {
+   216→    const onKey = (e: KeyboardEvent) => {
+   217→      if (e.key === "Escape" && !sheet) onClose();
+   218→    };
+   219→    window.addEventListener("keydown", onKey);
+   220→    return () => window.removeEventListener("keydown", onKey);
+   221→  }, [onClose, sheet]);
+   222→
+   223→  const isFinal = scene === SCENE_COUNT - 1;
+   224→  const isLightScene = isFinal;
+   225→
+   226→  const replay = () => {
+   227→    setScene(0);
+   228→    setGiftOpen(false);
+   229→    setQuizSolved(false);
+   230→    setWrongPick(null);
+   231→  };
+   232→
+   233→  return (
+   234→    <motion.div
+   235→      role="dialog"
+   236→      aria-modal="true"
+   237→      aria-label={`Experience: ${moment.title}`}
+   238→      initial={{ opacity: 0, scale: 1.04 }}
+   239→      animate={{ opacity: 1, scale: 1 }}
+   240→      exit={{ opacity: 0, scale: 1.04 }}
+   241→      transition={{ duration: 0.28, ease: "easeOut" }}
+   242→      className="absolute inset-0 z-[70] flex flex-col overflow-hidden bg-[#1D1D1F]"
+   243→    >
+   244→      {/* Scenes */}
+   245→      <div
+   246→        className="relative flex-1 cursor-pointer select-none"
+   247→        onClick={isFinal ? undefined : advance}
+   248→        onDoubleClick={isFinal ? undefined : love}
+   249→      >
+   250→        <AnimatePresence mode="wait" initial={false}>
+   251→          {/* Scene 1 — Intro */}
+   252→          {scene === 0 && (
+   253→            <motion.section
+   254→              key="s0"
+   255→              initial={{ opacity: 0, x: 70 }}
+   256→              animate={{ opacity: 1, x: 0 }}
+   257→              exit={{ opacity: 0, x: -70 }}
+   258→              transition={{ duration: 0.32, ease: "easeOut" }}
+   259→              className="absolute inset-0"
+   260→            >
+   261→              <CoverArt variant={moment.cover} className="absolute inset-0">
+   262→                <div className="absolute inset-0 bg-[#1D1D1F]/35" />
+   263→              </CoverArt>
+   264→              <div className="relative flex h-full flex-col items-center justify-center px-8 text-center">
+   265→                <motion.p
+   266→                  initial={{ opacity: 0, y: 14 }}
+   267→                  animate={{ opacity: 1, y: 0 }}
+   268→                  transition={{ delay: 0.15 }}
+   269→                  className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/75"
+   270→                >
+   271→                  MemorableDay presents
+   272→                </motion.p>
+   273→                <motion.h1
+   274→                  initial={{ opacity: 0, y: 18, scale: 0.96 }}
+   275→                  animate={{ opacity: 1, y: 0, scale: 1 }}
+   276→                  transition={{ delay: 0.25, type: "spring", stiffness: 200, damping: 20 }}
+   277→                  className="mt-3 text-[40px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-lg md:text-[56px]"
+   278→                >
+   279→                  {moment.title}
+   280→                </motion.h1>
+   281→                <motion.p
+   282→                  initial={{ opacity: 0 }}
+   283→                  animate={{ opacity: 1 }}
+   284→                  transition={{ delay: 0.45 }}
+   285→                  className="mt-3 text-[16px] font-medium text-white/85 md:text-[19px]"
+   286→                >
+   287→                  {moment.dedication}
+   288→                </motion.p>
+   289→              </div>
+   290→            </motion.section>
+   291→          )}
+   292→
+   293→          {/* Scene 2 — Message */}
+   294→          {scene === 1 && (
+   295→            <motion.section
+   296→              key="s1"
+   297→              initial={{ opacity: 0, x: 70 }}
+   298→              animate={{ opacity: 1, x: 0 }}
+   299→              exit={{ opacity: 0, x: -70 }}
+   300→              transition={{ duration: 0.32, ease: "easeOut" }}
+   301→              className="absolute inset-0"
+   302→            >
+   303→              <div className="absolute inset-0 bg-[#1D1D1F]" />
+   304→              <div
+   305→                aria-hidden
+   306→                className="absolute left-1/2 top-1/2 h-[380px] w-[380px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-[90px]"
+   307→                style={{ background: "radial-gradient(circle, rgba(0,122,255,0.55), transparent 70%)" }}
+   308→              />
+   309→              <div
+   310→                aria-hidden
+   311→                className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full opacity-40 blur-[70px]"
+   312→                style={{ background: "radial-gradient(circle, rgba(255,100,130,0.5), transparent 70%)" }}
+   313→              />
+   314→              <div className="relative flex h-full flex-col items-center justify-center px-9 text-center">
+   315→                <motion.p
+   316→                  initial={{ opacity: 0, y: 16 }}
+   317→                  animate={{ opacity: 1, y: 0 }}
+   318→                  transition={{ delay: 0.12 }}
+   319→                  className="text-[27px] font-bold leading-[1.25] tracking-[-0.02em] text-white md:max-w-[560px] md:text-[36px]"
+   320→                >
+   321→                  Some moments deserve more than a text message.
+   322→                </motion.p>
+   323→                <motion.p
+   324→                  initial={{ opacity: 0 }}
+   325→                  animate={{ opacity: 1 }}
+   326→                  transition={{ delay: 0.4 }}
+   327→                  className="mt-4 text-[15px] leading-relaxed text-white/60 md:text-[17px]"
+   328→                >
+   329→                  This one is interactive — keep going.
+   330→                </motion.p>
+   331→              </div>
+   332→            </motion.section>
+   333→          )}
+   334→
+   335→          {/* Scene 3 — Quiz (interactive) */}
+   336→          {scene === 2 && (
+   337→            <motion.section
+   338→              key="s2-quiz"
+   339→              initial={{ opacity: 0, x: 70 }}
+   340→              animate={{ opacity: 1, x: 0 }}
+   341→              exit={{ opacity: 0, x: -70 }}
+   342→              transition={{ duration: 0.32, ease: "easeOut" }}
+   343→              className="absolute inset-0"
+   344→            >
+   345→              <div className="absolute inset-0 bg-[#1D1D1F]" />
+   346→              <div
+   347→                aria-hidden
+   348→                className="absolute -right-16 top-10 h-64 w-64 rounded-full opacity-40 blur-[80px]"
+   349→                style={{ background: "radial-gradient(circle, rgba(94,92,230,0.6), transparent 70%)" }}
+   350→              />
+   351→              <div
+   352→                aria-hidden
+   353→                className="absolute -bottom-16 -left-12 h-56 w-56 rounded-full opacity-35 blur-[70px]"
+   354→                style={{ background: "radial-gradient(circle, rgba(100,210,255,0.55), transparent 70%)" }}
+   355→              />
+   356→              <div className="relative flex h-full flex-col items-center justify-center px-9 text-center">
+   357→                <motion.p
+   358→                  initial={{ opacity: 0, y: 12 }}
+   359→                  animate={{ opacity: 1, y: 0 }}
+   360→                  className="text-[13px] font-bold uppercase tracking-[0.2em] text-white/70"
+   361→                >
+   362→                  Pop quiz
+   363→                </motion.p>
+   364→                <motion.h2
+   365→                  initial={{ opacity: 0, y: 16 }}
+   366→                  animate={{ opacity: 1, y: 0 }}
+   367→                  transition={{ delay: 0.12 }}
+   368→                  className="mt-3 max-w-[300px] text-[26px] font-bold leading-[1.2] tracking-[-0.02em] text-white md:max-w-[480px] md:text-[36px]"
+   369→                >
+   370→                  Who is this moment for?
+   371→                </motion.h2>
+   372→
+   373→                <div className="mt-9 flex w-full max-w-[280px] flex-col gap-3 md:max-w-[400px]" role="group" aria-label="Quiz answers">
+   374→                  {QUIZ_OPTIONS.map((o, i) => {
+   375→                    const isCorrectPick = quizSolved && o.correct;
+   376→                    const isWrongPick = wrongPick === i;
+   377→                    return (
+   378→                      <motion.button
+   379→                        key={o.label}
+   380→                        type="button"
+   381→                        aria-label={`Answer: ${o.label}`}
+   382→                        disabled={quizSolved}
+   383→                        onClick={(e) => {
+   384→                          e.stopPropagation();
+   385→                          if (quizSolved) return;
+   386→                          if (o.correct) {
+   387→                            setQuizSolved(true);
+   388→                            setWrongPick(null);
+   389→                          } else {
+   390→                            setWrongPick(i);
+   391→                            window.setTimeout(() => setWrongPick((w) => (w === i ? null : w)), 600);
+   392→                          }
+   393→                        }}
+   394→                        initial={{ opacity: 0, y: 14 }}
+   395→                        animate={
+   396→                          isWrongPick
+   397→                            ? { opacity: 1, y: 0, x: [0, -8, 8, -5, 0] }
+   398→                            : { opacity: 1, y: 0, x: 0 }
+   399→                        }
+   400→                        transition={isWrongPick ? { duration: 0.45 } : { delay: 0.2 + i * 0.09 }}
+   401→                        className={cn(
+   402→                          "flex items-center justify-center gap-2 rounded-full border py-3.5 text-[16px] font-semibold transition-colors",
+   403→                          isCorrectPick
+   404→                            ? "border-[#30D158]/60 bg-[#30D158]/25 text-white"
+   405→                            : isWrongPick
+   406→                              ? "border-[#FF6482]/60 bg-[#FF6482]/20 text-white"
+   407→                              : quizSolved
+   408→                                ? "border-white/10 bg-white/[0.04] text-white/35"
+   409→                                : "border-white/25 bg-white/10 text-white backdrop-blur-md active:scale-[0.96]"
+   410→                        )}
+   411→                      >
+   412→                        {o.label}
+   413→                        {isCorrectPick ? <Check size={16} strokeWidth={3} aria-hidden /> : null}
+   414→                      </motion.button>
+   415→                    );
+   416→                  })}
+   417→                </div>
+   418→
+   419→                <AnimatePresence>
+   420→                  {quizSolved ? (
+   421→                    <motion.p
+   422→                      initial={{ opacity: 0, y: 10 }}
+   423→                      animate={{ opacity: 1, y: 0 }}
+   424→                      exit={{ opacity: 0 }}
+   425→                      className="mt-8 text-[14px] font-medium text-white/70"
+   426→                    >
+   427→                      Obviously. Keep going —
+   428→                    </motion.p>
+   429→                  ) : (
+   430→                    <motion.p
+   431→                      initial={{ opacity: 0 }}
+   432→                      animate={{ opacity: [0.45, 1, 0.45] }}
+   433→                      transition={{ repeat: Infinity, duration: 1.8 }}
+   434→                      className="mt-8 text-[12.5px] font-semibold text-white/60"
+   435→                    >
+   436→                      Pick an answer to continue
+   437→                    </motion.p>
+   438→                  )}
+   439→                </AnimatePresence>
+   440→              </div>
+   441→            </motion.section>
+   442→          )}
+   443→
+   444→          {/* Scene 4 — Gift reveal */}
+   445→          {scene === 3 && (
+   446→            <motion.section
+   447→              key="s3-gift"
+   448→              initial={{ opacity: 0, x: 70 }}
+   449→              animate={{ opacity: 1, x: 0 }}
+   450→              exit={{ opacity: 0, x: -70 }}
+   451→              transition={{ duration: 0.32, ease: "easeOut" }}
+   452→              className="absolute inset-0"
+   453→            >
+   454→              <CoverArt variant={moment.cover + 3} className="absolute inset-0">
+   455→                <div className="absolute inset-0 bg-[#1D1D1F]/45" />
+   456→              </CoverArt>
+   457→              {giftOpen ? <ConfettiBurst /> : null}
+   458→              <div className="relative flex h-full flex-col items-center justify-center px-9 text-center">
+   459→                {!giftOpen ? (
+   460→                  <>
+   461→                    <motion.p
+   462→                      initial={{ opacity: 0, y: 12 }}
+   463→                      animate={{ opacity: 1, y: 0 }}
+   464→                      className="text-[13px] font-bold uppercase tracking-[0.2em] text-white/70"
+   465→                    >
+   466→                      A surprise
+   467→                    </motion.p>
+   468→                    <motion.p
+   469→                      initial={{ opacity: 0, y: 12 }}
+   470→                      animate={{ opacity: 1, y: 0 }}
+   471→                      transition={{ delay: 0.1 }}
+   472→                      className="mb-10 mt-2 text-[22px] font-bold tracking-[-0.02em] text-white md:text-[30px]"
+   473→                    >
+   474→                      There&apos;s something for you.
+   475→                    </motion.p>
+   476→                    <GiftBox open={false} onOpen={() => setGiftOpen(true)} />
+   477→                    <motion.p
+   478→                      initial={{ opacity: 0 }}
+   479→                      animate={{ opacity: [0.45, 1, 0.45] }}
+   480→                      transition={{ repeat: Infinity, duration: 1.8 }}
+   481→                      className="mt-10 text-[13px] font-semibold text-white/70"
+   482→                    >
+   483→                      Tap the gift to open it
+   484→                    </motion.p>
+   485→                  </>
+   486→                ) : (
+   487→                  <>
+   488→                    <motion.div
+   489→                      initial={{ scale: 0.6, opacity: 0 }}
+   490→                      animate={{ scale: 1, opacity: 1 }}
+   491→                      transition={{ type: "spring", stiffness: 260, damping: 16 }}
+   492→                      className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 backdrop-blur-md"
+   493→                    >
+   494→                      <Heart size={38} className="text-[#FF6482]" fill="currentColor" strokeWidth={0} />
+   495→                    </motion.div>
+   496→                    <motion.h2
+   497→                      initial={{ opacity: 0, y: 18 }}
+   498→                      animate={{ opacity: 1, y: 0 }}
+   499→                      transition={{ delay: 0.18, type: "spring", stiffness: 220, damping: 20 }}
+   500→                      className="mt-6 text-[28px] font-extrabold leading-tight tracking-[-0.025em] text-white drop-shadow-md md:text-[38px]"
+   501→                    >
+   502→                      You are unforgettable.
+   503→                    </motion.h2>
+   504→                    <motion.p
+   505→                      initial={{ opacity: 0 }}
+   506→                      animate={{ opacity: 1 }}
+   507→                      transition={{ delay: 0.4 }}
+   508→                      className="mt-2.5 text-[15px] text-white/75"
+   509→                    >
+   510→                      A small moment, made just for you.
+   511→                    </motion.p>
+   512→                  </>
+   513→                )}
+   514→              </div>
+   515→            </motion.section>
+   516→          )}
+   517→
+   518→          {/* Scene 5 — Signature */}
+   519→          {scene === 4 && (
+   520→            <motion.section
+   521→              key="s4"
+   522→              initial={{ opacity: 0, y: 50 }}
+   523→              animate={{ opacity: 1, y: 0 }}
+   524→              exit={{ opacity: 0, y: 50 }}
+   525→              transition={{ duration: 0.34, ease: "easeOut" }}
+   526→              className="absolute inset-0 overflow-y-auto bg-[#F5F5F7]"
+   527→            >
+   528→              <div
+   529→                aria-hidden
+   530→                className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#007AFF]/[0.14] blur-[80px]"
+   531→              />
+   532→              <div
+   533→                aria-hidden
+   534→                className="absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-[#FF6482]/[0.12] blur-[80px]"
+   535→              />
+   536→              <div className="relative flex min-h-full flex-col items-center justify-center px-8 py-16 text-center">
+   537→                <motion.div
+   538→                  initial={{ scale: 0.7, opacity: 0 }}
+   539→                  animate={{ scale: 1, opacity: 1 }}
+   540→                  transition={{ type: "spring", stiffness: 240, damping: 18 }}
+   541→                >
+   542→                  <LogoMark size={56} />
+   543→                </motion.div>
+   544→                <motion.p
+   545→                  initial={{ opacity: 0, y: 14 }}
+   546→                  animate={{ opacity: 1, y: 0 }}
+   547→                  transition={{ delay: 0.16 }}
+   548→                  className="mt-5 flex items-center gap-1.5 text-[17px] font-semibold tracking-[-0.01em] text-[#1D1D1F]"
+   549→                >
+   550→                  {moment.dedication}
+   551→                  <Heart size={15} className="text-[#FF375F]" fill="currentColor" strokeWidth={0} aria-hidden />
+   552→                </motion.p>
+   553→                <motion.div
+   554→                  initial={{ opacity: 0, scaleX: 0 }}
+   555→                  animate={{ opacity: 1, scaleX: 1 }}
+   556→                  transition={{ delay: 0.3, duration: 0.4 }}
+   557→                  className="my-6 h-[1.5px] w-40 origin-center rounded-full bg-[#1D1D1F]/[0.08]"
+   558→                />
+   559→                <motion.div
+   560→                  initial={{ opacity: 0, y: 12 }}
+   561→                  animate={{ opacity: 1, y: 0 }}
+   562→                  transition={{ delay: 0.38 }}
+   563→                >
+   564→                  <p className="text-[13px] font-semibold text-[#AAAAAA]">Created with MemorableDay</p>
+   565→                  <p className="mt-1 text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+   566→                    Make every moment memorable.
+   567→                  </p>
+   568→                </motion.div>
+   569→                <motion.div
+   570→                  initial={{ opacity: 0, y: 18 }}
+   571→                  animate={{ opacity: 1, y: 0 }}
+   572→                  transition={{ delay: 0.5 }}
+   573→                  className="mt-9 flex w-full max-w-[300px] flex-col gap-3 md:max-w-[380px]"
+   574→                >
+   575→                  <button
+   576→                    type="button"
+   577→                    onClick={(e) => {
+   578→                      e.stopPropagation();
+   579→                      onClose();
+   580→                      setTab("create");
+   581→                      notify("Start your own moment — Create tab");
+   582→                    }}
+   583→                    className="w-full rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
+   584→                  >
+   585→                    Create your own moment
+   586→                  </button>
+   587→                  <button
+   588→                    type="button"
+   589→                    onClick={(e) => {
+   590→                      e.stopPropagation();
+   591→                      openShare({ id: moment.id, title: moment.title });
+   592→                    }}
+   593→                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.1] bg-white py-3 text-[14px] font-semibold text-[#007AFF] hairline transition-transform active:scale-[0.97]"
+   594→                  >
+   595→                    <Share2 size={14} aria-hidden /> Share this moment
+   596→                  </button>
+   597→                  <button
+   598→                    type="button"
+   599→                    onClick={(e) => {
+   600→                      e.stopPropagation();
+   601→                      replay();
+   602→                    }}
+   603→                    className="flex w-full items-center justify-center gap-1.5 rounded-full py-2 text-[13.5px] font-semibold text-[#AAAAAA] transition-colors active:text-[#1D1D1F]"
+   604→                  >
+   605→                    <RotateCcw size={13} aria-hidden /> Replay
+   606→                  </button>
+   607→                </motion.div>
+   608→              </div>
+   609→            </motion.section>
+   610→          )}
+   611→        </AnimatePresence>
+   612→
+   613→        {/* Love burst (double-tap or heart button) */}
+   614→        {burstKey > 0 ? <HeartBurst key={burstKey} /> : null}
+   615→
+   616→        {/* Soundtrack chip — "now playing" (dark scenes only) */}
+   617→        {track && !isFinal ? (
+   618→          <motion.div
+   619→            initial={{ opacity: 0, y: 10 }}
+   620→            animate={{ opacity: 1, y: 0 }}
+   621→            transition={{ delay: 0.5 }}
+   622→            className="pointer-events-none absolute bottom-[70px] left-4 flex items-center gap-2 rounded-full bg-[#1D1D1F]/40 py-1.5 pl-2.5 pr-3.5 text-white backdrop-blur-md"
+   623→          >
+   624→            <span aria-hidden className="md-eq h-3 w-4 text-[#64D2FF]">
+   625→              <span />
+   626→              <span />
+   627→              <span />
+   628→            </span>
+   629→            <span className="text-[11.5px] font-semibold tracking-[-0.01em]">{track.title}</span>
+   630→          </motion.div>
+   631→        ) : null}
+   632→
+   633→        {/* Continue hint */}
+   634→        <AnimatePresence>
+   635→          {!isFinal && !(scene === 2 && !quizSolved) ? (
+   636→            <motion.button
+   637→              type="button"
+   638→              aria-label="Continue"
+   639→              onClick={(e) => {
+   640→                e.stopPropagation();
+   641→                advance();
+   642→              }}
+   643→              initial={{ opacity: 0 }}
+   644→              animate={{ opacity: 1, y: [0, -3, 0] }}
+   645→              exit={{ opacity: 0 }}
+   646→              transition={{ y: { repeat: Infinity, duration: 1.6, ease: "easeInOut" } }}
+   647→              className="absolute inset-x-0 bottom-9 mx-auto flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-[12.5px] font-semibold text-white backdrop-blur-md"
+   648→            >
+   649→              Tap to continue <ChevronRight size={13} aria-hidden />
+   650→            </motion.button>
+   651→          ) : null}
+   652→        </AnimatePresence>
+   653→      </div>
+   654→
+   655→      {/* Top chrome: close + scene dots + share (adapts to light/dark scenes) */}
+   656→      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 pt-4">
+   657→        <button
+   658→          type="button"
+   659→          aria-label="Close experience"
+   660→          onClick={onClose}
+   661→          className={cn(
+   662→            "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+   663→            isLightScene
+   664→              ? "bg-white/80 text-[#1D1D1F] hairline backdrop-blur-xl"
+   665→              : "bg-[#1D1D1F]/35 text-white backdrop-blur-md"
+   666→          )}
+   667→        >
+   668→          <X size={19} strokeWidth={2.4} />
+   669→        </button>
+   670→        <SceneDots total={SCENE_COUNT} current={scene} light={isLightScene} />
+   671→        <div className="pointer-events-auto flex items-center gap-2">
+   672→          <button
+   673→            type="button"
+   674→            aria-label={loved ? "Loved — thank you" : "Love this moment"}
+   675→            aria-pressed={loved}
+   676→            onClick={(e) => {
+   677→              e.stopPropagation();
+   678→              love();
+   679→              if (!loved) notify("Loved — they’ll know you cared");
+   680→            }}
+   681→            className={cn(
+   682→              "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+   683→              isLightScene
+   684→                ? "bg-white/80 hairline backdrop-blur-xl"
+   685→                : "bg-[#1D1D1F]/35 backdrop-blur-md",
+   686→              loved ? "text-[#FF375F]" : isLightScene ? "text-[#1D1D1F]" : "text-white"
+   687→            )}
+   688→          >
+   689→            <motion.span
+   690→              key={String(loved)}
+   691→              initial={{ scale: loved ? 0.5 : 1 }}
+   692→              animate={{ scale: 1 }}
+   693→              transition={{ type: "spring", stiffness: 500, damping: 16 }}
+   694→              className="flex"
+   695→            >
+   696→              <Heart size={17} fill={loved ? "currentColor" : "none"} strokeWidth={2.2} aria-hidden />
+   697→            </motion.span>
+   698→          </button>
+   699→          <button
+   700→            type="button"
+   701→            aria-label="Share experience"
+   702→            onClick={(e) => {
+   703→              e.stopPropagation();
+   704→              openShare({ id: moment.id, title: moment.title });
+   705→            }}
+   706→            className={cn(
+   707→              "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+   708→              isLightScene
+   709→                ? "bg-white/80 text-[#007AFF] hairline backdrop-blur-xl"
+   710→                : "bg-[#1D1D1F]/35 text-white backdrop-blur-md"
+   711→            )}
+   712→          >
+   713→            <Share2 size={17} strokeWidth={2.2} />
+   714→          </button>
+   715→        </div>
+   716→      </div>
+   717→    </motion.div>
+   718→  );
+   719→}
+   720→

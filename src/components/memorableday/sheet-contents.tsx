@@ -55,7 +55,7 @@ import {
   type ExploreItem,
   USER,
 } from "@/lib/mock-data";
-import { useMD, type AuthMode, type PlayerPayload, type SettingsTopic } from "./md-context";
+import { useMD, type AuthMode, type PlayerPayload, type SettingsTopic, type StatsPayload } from "./md-context";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
 import { SegmentedControl } from "./segmented-control";
@@ -1579,6 +1579,214 @@ export function AuthContent({
           By continuing you agree to MemorableDay&apos;s Terms of Service and Privacy Policy.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Per-moment stats sheet                                              */
+/* ------------------------------------------------------------------ */
+
+/** Deterministic 0–99 pseudo-random from a seed string (stable per moment) */
+function hashSeed(s: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h ^= h << 13;
+    h ^= h >>> 17;
+    h ^= h << 5;
+    return Math.abs(h) % 100;
+  };
+}
+
+const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+
+export function StatsContent({
+  moment,
+  onNotify,
+  onOpenFullInsights,
+}: {
+  moment: StatsPayload;
+  onNotify: (message: string) => void;
+  onOpenFullInsights: () => void;
+}) {
+  const stats = useMemo(() => {
+    const r = hashSeed(moment.id);
+    const loves = Math.max(2, Math.round(moment.views * (0.42 + r() / 250)));
+    const completionPct = moment.completion === "—" ? 64 + r() % 30 : parseInt(moment.completion, 10) || 78;
+    const minutes = 1 + r() % 2;
+    const seconds = 12 + r() % 48;
+    const avgTime = `${minutes}:${String(seconds).padStart(2, "0")}`;
+    // 7-day view bars — gently rising, today strongest
+    const bars = Array.from({ length: 7 }, (_, i) => {
+      const base = 28 + r() % 34;
+      const lift = i === 6 ? 26 : i >= 4 ? 10 : 0;
+      return Math.min(100, base + lift);
+    });
+    const topScene = Math.min(moment.scenes, 1 + (r() % Math.max(1, moment.scenes - 1)));
+    const topSceneDrop = 100 - (r() % 22);
+    const sharedBack = 18 + r() % 20;
+    return { loves, completionPct, avgTime, bars, topScene, topSceneDrop, sharedBack };
+  }, [moment.id, moment.views, moment.completion, moment.scenes]);
+
+  const journey = [
+    { label: "Sent", detail: moment.date.replace(/^Sent /, ""), done: true },
+    { label: "Opened", detail: `${moment.views} views`, done: moment.views > 0 },
+    { label: "Completed", detail: `${stats.completionPct}% finished all scenes`, done: true },
+    { label: "Loved", detail: `${stats.loves} hearts received`, done: stats.loves > 0 },
+  ];
+
+  return (
+    <div className="pb-2">
+      {/* Hero — cover + identity */}
+      <div className="card-shadow hairline flex items-center gap-3.5 rounded-[22px] bg-white p-3.5">
+        <CoverArt variant={moment.cover} className="h-[62px] w-[62px] shrink-0 rounded-[16px]" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[16.5px] font-bold tracking-[-0.015em] text-[#1D1D1F]">{moment.title}</p>
+          <p className="mt-0.5 truncate text-[12.5px] font-medium text-[#AAAAAA]">
+            To {moment.recipient} · {moment.date} · {moment.scenes} scenes
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-[#007AFF]/[0.1] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#007AFF]">
+          Live
+        </span>
+      </div>
+
+      {/* KPI grid */}
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        {[
+          { label: "Views", value: String(moment.views), icon: Eye, tint: "#007AFF", note: "unique opens" },
+          { label: "Loves", value: String(stats.loves), icon: Heart, tint: "#FF375F", note: "hearts tapped" },
+          { label: "Completion", value: `${stats.completionPct}%`, icon: CheckCheck, tint: "#30D158", note: "finished all scenes" },
+          { label: "Avg. time", value: stats.avgTime, icon: Clock, tint: "#FF9F0A", note: "per session" },
+        ].map((k, i) => {
+          const KIcon = k.icon;
+          return (
+            <motion.div
+              key={k.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 * i, duration: 0.3 }}
+              className="card-shadow hairline rounded-[20px] bg-white px-3.5 py-3"
+            >
+              <div className="flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-[#AAAAAA]">
+                  <KIcon size={11} strokeWidth={2.4} aria-hidden />
+                  {k.label}
+                </p>
+              </div>
+              <p className="mt-1.5 text-[24px] font-bold tracking-[-0.02em] tabular-nums text-[#1D1D1F]">{k.value}</p>
+              <p className="mt-0.5 text-[11px] font-medium text-[#AAAAAA]">{k.note}</p>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* 7-day views chart */}
+      <div className="card-shadow hairline mt-3 rounded-[22px] bg-white p-4">
+        <div className="flex items-center justify-between px-0.5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">Views · last 7 days</p>
+          <p className="flex items-center gap-1 text-[11.5px] font-bold text-[#1E9E4A]">
+            <TrendingUp size={12} strokeWidth={2.6} aria-hidden /> trending
+          </p>
+        </div>
+        <div className="mt-3 flex h-[96px] items-end gap-2" role="img" aria-label="Daily views, last 7 days">
+          {stats.bars.map((h, i) => (
+            <div key={i} className="flex flex-1 flex-col items-center justify-end gap-1.5">
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: Math.max(8, Math.round(h * 0.72)) }}
+                transition={{ delay: 0.08 + i * 0.05, type: "spring", stiffness: 260, damping: 24 }}
+                className={cn(
+                  "w-full rounded-[6px]",
+                  i === 6
+                    ? "bg-gradient-to-t from-[#007AFF] to-[#64D2FF] shadow-[0_6px_14px_-4px_rgba(0,122,255,0.55)]"
+                    : "bg-[#007AFF]/[0.16]"
+                )}
+              />
+              <span className={cn("text-[10px] font-semibold", i === 6 ? "text-[#007AFF]" : "text-[#AAAAAA]")}>
+                {DAY_LABELS[i]}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Scene retention — top scene */}
+      <div className="card-shadow hairline mt-3 rounded-[22px] bg-white p-4">
+        <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">Strongest scene</p>
+        <div className="mt-2.5 flex items-center gap-3">
+          <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#AF52DE]/[0.1] text-[14px] font-bold text-[#AF52DE]">
+            {stats.topScene}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between">
+              <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Scene {stats.topScene} retention</p>
+              <p className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F]">{stats.topSceneDrop}%</p>
+            </div>
+            <div className="mt-1.5 h-[7px] overflow-hidden rounded-full bg-[#1D1D1F]/[0.06]">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${stats.topSceneDrop}%` }}
+                transition={{ delay: 0.25, duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
+                className="h-full rounded-full bg-gradient-to-r from-[#AF52DE] to-[#FF6482]"
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] font-medium text-[#AAAAAA]">
+              Recipients who reach this scene keep going to the end · {stats.sharedBack}% shared it forward
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Recipient journey */}
+      <div className="card-shadow hairline mt-3 overflow-hidden rounded-[22px] bg-white">
+        <p className="px-4 pb-1 pt-3.5 text-[11px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+          Recipient journey
+        </p>
+        <div className="px-4 pb-3 pt-1.5">
+          {journey.map((j, i) => (
+            <div key={j.label} className="flex items-center gap-3">
+              <div className="flex flex-col items-center">
+                <span
+                  className={cn(
+                    "flex h-[22px] w-[22px] items-center justify-center rounded-full text-white",
+                    j.done ? "bg-[#30D158]" : "bg-[#D1D1D6]"
+                  )}
+                >
+                  <Check size={12} strokeWidth={3.2} aria-hidden />
+                </span>
+                {i < journey.length - 1 ? (
+                  <span className={cn("h-[16px] w-[2px] rounded-full", journey[i + 1].done ? "bg-[#30D158]/50" : "bg-[#D1D1D6]/60")} />
+                ) : null}
+              </div>
+              <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3 pb-3">
+                <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">{j.label}</p>
+                <p className="truncate text-[12px] font-medium text-[#AAAAAA]">{j.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Open the full dashboard */}
+      <button
+        type="button"
+        onClick={onOpenFullInsights}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-[#007AFF]/[0.08] py-3 text-[13.5px] font-semibold text-[#007AFF] transition-transform active:scale-[0.98]"
+      >
+        Open full insights <ChevronRight size={14} strokeWidth={2.6} aria-hidden />
+      </button>
+      <button
+        type="button"
+        onClick={() => onNotify(`Report for “${moment.title}” copied`)}
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-[13px] font-semibold text-[#AAAAAA] transition-colors active:text-[#1D1D1F]"
+      >
+        <Copy size={13} aria-hidden /> Copy stats summary
+      </button>
     </div>
   );
 }

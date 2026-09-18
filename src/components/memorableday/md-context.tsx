@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { RefObject } from "react";
-import type { AppNotification, ExploreItem, InsightRange } from "@/lib/mock-data";
+import type { AppNotification, ExploreItem, InsightRange, MomentStatus } from "@/lib/mock-data";
 
 export type Tab = "home" | "create" | "explore" | "gallery" | "profile";
 export type ThemeMode = "light" | "dark" | "system";
@@ -14,6 +14,7 @@ export type Sheet =
   | "settings"
   | "explore"
   | "insights"
+  | "stats"
   | "composer"
   | "auth"
   | null;
@@ -34,6 +35,19 @@ export interface PlayerPayload {
 export interface SharePayload {
   id: string;
   title: string;
+}
+
+/** Payload for the per-moment stats sheet */
+export interface StatsPayload {
+  id: string;
+  title: string;
+  cover: number;
+  recipient: string;
+  date: string;
+  status: MomentStatus;
+  views: number;
+  completion: string;
+  scenes: number;
 }
 
 /** A moment draft saved by the user from the builder (persisted in localStorage) */
@@ -144,6 +158,16 @@ export interface MDContextValue {
   saveDraft: (draft: UserDraft) => void;
   /** Deletes a draft — returns the removed draft so callers can offer Undo */
   deleteDraft: (id: string) => UserDraft | null;
+  /** Renames a draft in place (persisted) */
+  renameDraft: (id: string, title: string) => void;
+  /** Duplicates a draft — returns the copy (or null if the original vanished) */
+  duplicateDraft: (id: string) => UserDraft | null;
+  /** Seeded moment ids the user archived (persisted in localStorage) */
+  archivedIds: string[];
+  /** Archives / unarchives a seeded moment (persisted) */
+  toggleArchived: (id: string) => void;
+  /** Opens the per-moment stats sheet */
+  openStats: (moment: StatsPayload) => void;
   /** Spotlight-style command palette (⌘K) visibility */
   paletteOpen: boolean;
   /** Opens the command palette */
