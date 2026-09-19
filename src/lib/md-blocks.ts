@@ -73,6 +73,10 @@ export interface BlockData {
   /** reward */
   rewardKind?: string;
   code?: string;
+  /** coupon draw: the promo headline above the claw machine ("쿠폰 뽑기") */
+  heading?: string;
+  /** coupon draw: the step indicator above the headline ("01") */
+  stepLabel?: string;
   /** cta */
   label?: string;
   action?: string;

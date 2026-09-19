@@ -18,6 +18,7 @@ import {
   GripVertical,
   Heart,
   Images as ImagesIcon,
+  LayoutGrid,
   Link2,
   ListChecks,
   MousePointerClick,
@@ -70,6 +71,7 @@ import {
   type ConfettiStyleName,
 } from "./confetti";
 import { RewardTicket, rewardKindMeta } from "./reward-ticket";
+import { CouponDraw } from "./coupon-draw";
 import {
   GiftBox,
   GiftConfetti,
@@ -107,6 +109,7 @@ const BLOCKS: BlockDef[] = [
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
   { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
+  { type: "coupon", label: "Coupon Draw", icon: Ticket, tint: "#8B5CF6" },
   { type: "cta", label: "Button", icon: MousePointerClick, tint: "#007AFF" },
   { type: "confetti", label: "Confetti", icon: PartyPopper, tint: "#FF375F" },
 ];
@@ -525,6 +528,46 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
               </p>
             ) : null}
           </div>
+        </div>
+      );
+    }
+    case "coupon": {
+      const step = d?.stepLabel?.trim() || "01";
+      const heading = d?.heading?.trim() || "쿠폰 뽑기";
+      const ccode = d?.code?.trim();
+      return (
+        <div className="flex items-center gap-3 rounded-[14px] bg-[#1A1A1E] px-3.5 py-3 shadow-[0_10px_24px_-14px_rgba(29,29,31,0.7)]">
+          {/* a miniature of the machine card */}
+          <span
+            aria-hidden
+            className="relative flex h-[52px] w-[46px] shrink-0 items-start justify-center overflow-hidden rounded-[10px] pt-[6px]"
+            style={{ background: "linear-gradient(180deg, #F3E8FF 0%, #DCCBFF 100%)" }}
+          >
+            <span className="absolute top-0 h-[16px] w-[3px] rounded-full bg-[#6366F1]" />
+            <span className="absolute top-[13px] h-[10px] w-[12px] rounded-b-full border-[3px] border-t-0 border-[#6366F1]" />
+            <span className="absolute top-[20px] block h-[11px] w-[68%] -rotate-6 rounded-[4px] bg-[#1F2937] shadow-[0_3px_8px_rgba(29,29,31,0.35)]" />
+            <span className="absolute bottom-[4px] left-[2px] h-[8px] w-[40%] -rotate-[14deg] rounded-[3px] bg-[#818CF8]" />
+            <span className="absolute bottom-[2px] left-[30%] h-[8px] w-[44%] rotate-[7deg] rounded-[3px] bg-[#C084FC]" />
+            <span className="absolute bottom-[4px] right-[2px] h-[7px] w-[34%] rotate-[16deg] rounded-[3px] bg-[#F472B6]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-white">{heading}</p>
+            {ccode ? (
+              <p className="mt-0.5 truncate font-mono text-[12px] font-semibold tracking-[0.08em] text-[#C4B5FD]">
+                {ccode}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-[12px] text-white/50">Tap the machine to draw a prize</p>
+            )}
+          </div>
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="text-[11px] font-extrabold tabular-nums tracking-[0.18em] text-[#8B5CF6]">
+              {step}
+            </span>
+            <span className="rounded-full bg-[#8B5CF6]/25 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#C4B5FD]">
+              Draw
+            </span>
+          </span>
         </div>
       );
     }
@@ -1990,6 +2033,619 @@ function ConfettiBlockEditor({ block, onChange }: { block: Block; onChange: (dat
 }
 
 /* ------------------------------------------------------------------ */
+/* Block Library — a categorized gallery of ready-made blocks.          */
+/* Every entry is a template: block type + curated defaults, dropped    */
+/* into the current scene fully editable. The Coupon Draw (claw         */
+/* machine) is the flagship template.                                   */
+/* ------------------------------------------------------------------ */
+
+const LIBRARY_CATEGORIES = [
+  { id: "All", label: "All", icon: LayoutGrid },
+  { id: "Rewards", label: "Rewards & Prizes", icon: Gift },
+  { id: "Story", label: "Story", icon: Type },
+  { id: "Media", label: "Media", icon: ImagesIcon },
+  { id: "Interactive", label: "Interactive", icon: MousePointerClick },
+  { id: "Celebration", label: "Celebration", icon: PartyPopper },
+] as const;
+
+type LibraryCategoryId = (typeof LIBRARY_CATEGORIES)[number]["id"];
+
+interface LibraryTemplate {
+  id: string;
+  type: string;
+  name: string;
+  blurb: string;
+  category: Exclude<LibraryCategoryId, "All">;
+  accent: string;
+  /** Curated starting configuration — block drops in pre-styled. */
+  data?: BlockData;
+  isNew?: boolean;
+}
+
+const LIBRARY_TEMPLATES: LibraryTemplate[] = [
+  {
+    id: "coupon-draw",
+    type: "coupon",
+    name: "Coupon Draw",
+    blurb: "Claw-machine prize screen — they tap to draw a winning code",
+    category: "Rewards",
+    accent: "#8B5CF6",
+    isNew: true,
+    data: {
+      stepLabel: "01",
+      body: "올려만 하면 100% 당첨",
+      heading: "쿠폰 뽑기",
+      label: "쿠폰 뽑기",
+      code: "MD-COUPON",
+    },
+  },
+  {
+    id: "gift-box",
+    type: "gift",
+    name: "Gift Box",
+    blurb: "A wrapped surprise that opens with confetti",
+    category: "Rewards",
+    accent: "#5E5CE6",
+  },
+  {
+    id: "reward-ticket",
+    type: "reward",
+    name: "Reward Ticket",
+    blurb: "A golden ticket that reveals a secret code",
+    category: "Rewards",
+    accent: "#30D158",
+  },
+  {
+    id: "message",
+    type: "text",
+    name: "Message",
+    blurb: "Say it with words — any length, any language",
+    category: "Story",
+    accent: "#007AFF",
+  },
+  {
+    id: "photo",
+    type: "photo",
+    name: "Photo",
+    blurb: "A framed photo with warm, mono & vivid filters",
+    category: "Media",
+    accent: "#30D158",
+  },
+  {
+    id: "video",
+    type: "video",
+    name: "Video",
+    blurb: "A clip that plays right inside the scene",
+    category: "Media",
+    accent: "#FF9F0A",
+  },
+  {
+    id: "song",
+    type: "audio",
+    name: "Song Card",
+    blurb: "A track with the exact snippet you choose",
+    category: "Media",
+    accent: "#FF375F",
+  },
+  {
+    id: "backdrop",
+    type: "background",
+    name: "Backdrop",
+    blurb: "A full-screen photo behind everything",
+    category: "Media",
+    accent: "#64D2FF",
+  },
+  {
+    id: "quiz",
+    type: "quiz",
+    name: "Quiz",
+    blurb: "A question with tappable answers",
+    category: "Interactive",
+    accent: "#007AFF",
+  },
+  {
+    id: "countdown",
+    type: "countdown",
+    name: "Countdown",
+    blurb: "A timed lock before the next scene opens",
+    category: "Interactive",
+    accent: "#FF9F0A",
+  },
+  {
+    id: "button",
+    type: "cta",
+    name: "Button",
+    blurb: "A link, claim or reply button",
+    category: "Interactive",
+    accent: "#007AFF",
+  },
+  {
+    id: "confetti-pop",
+    type: "confetti",
+    name: "Confetti Pop",
+    blurb: "The luminous burst of paper and sparkles",
+    category: "Celebration",
+    accent: "#FF375F",
+    data: { style: "Burst" },
+  },
+  {
+    id: "gold-rush",
+    type: "confetti",
+    name: "Gold Rush",
+    blurb: "An elegant champagne-gold shimmer",
+    category: "Celebration",
+    accent: "#FFB340",
+    data: { style: "Gold" },
+  },
+];
+
+/** Miniature art for one library card — a hand-tuned vignette per type. */
+function LibraryThumb({ t }: { t: LibraryTemplate }) {
+  switch (t.type) {
+    case "coupon":
+      /* The flagship: a miniature of the claw-machine poster. */
+      return (
+        <span
+          aria-hidden
+          className="relative flex h-[68px] w-[60px] flex-col items-center rounded-[10px] px-1.5 pb-1.5 pt-1.5"
+          style={{
+            background: "linear-gradient(180deg, #1E1E23 0%, #17171B 100%)",
+            boxShadow: "0 6px 14px -6px rgba(29,29,31,0.5)",
+          }}
+        >
+          <span className="text-[6px] font-extrabold tracking-[0.22em] text-[#8B5CF6]">01</span>
+          <span className="text-[6.5px] font-extrabold leading-none text-white">쿠폰 뽑기</span>
+          <span
+            className="relative mt-1 h-[34px] w-full overflow-hidden rounded-[5px]"
+            style={{ background: "linear-gradient(180deg, #F3E8FF 0%, #DCCBFF 100%)" }}
+          >
+            <span
+              className="absolute inset-x-1 mx-auto h-[14px] rounded-[3px] bg-[#F5F5F7]"
+              style={{ top: "6px" }}
+            />
+            {/* claw */}
+            <span className="absolute left-1/2 top-0 h-[8px] w-[2px] -translate-x-1/2 rounded-full bg-[#6366F1]" />
+            <span className="absolute left-1/2 top-[6px] h-[6px] w-[7px] -translate-x-1/2 rounded-b-full border-[2px] border-t-0 border-[#6366F1]" />
+            {/* grabbed winner */}
+            <span className="absolute left-1/2 top-[10px] h-[6px] w-[20px] -translate-x-1/2 -rotate-6 rounded-[2px] bg-[#1F2937]" />
+            {/* pile */}
+            <span className="absolute bottom-[2px] left-[2px] h-[5px] w-[14px] -rotate-[15deg] rounded-[2px] bg-[#818CF8]" />
+            <span className="absolute bottom-[1px] left-[10px] h-[5px] w-[15px] rotate-[8deg] rounded-[2px] bg-[#C084FC]" />
+            <span className="absolute bottom-[2px] right-[2px] h-[5px] w-[12px] rotate-[18deg] rounded-[2px] bg-[#F472B6]" />
+          </span>
+          <span className="mt-[3px] h-[6px] w-full rounded-full bg-[#E9E4F0]" />
+        </span>
+      );
+    case "gift":
+      return (
+        <span aria-hidden className="flex items-center justify-center">
+          <GiftBox wrap="#5E5CE6" ribbon="classic" still scale={0.3} sparkle={false} />
+        </span>
+      );
+    case "reward":
+      return (
+        <span
+          aria-hidden
+          className="flex w-[86px] flex-col items-center rounded-[10px] bg-white px-2.5 py-2 shadow-[0_8px_18px_-8px_rgba(30,158,74,0.4)]"
+        >
+          <span className="h-3.5 w-3.5 rounded-full bg-gradient-to-br from-[#5BE07E] to-[#1E9E4A]" />
+          <span className="mt-1.5 h-1.5 w-4/5 rounded-full bg-[#1D1D1F]/25" />
+          <span className="mt-1 flex w-full items-center gap-0.5">
+            <span className="h-1 w-1 rotate-45 rounded-[1px] bg-[#1D1D1F]/20" />
+            <span className="h-px flex-1 border-t border-dashed border-[#1D1D1F]/25" />
+            <span className="h-1 w-1 rotate-45 rounded-[1px] bg-[#1D1D1F]/20" />
+          </span>
+        </span>
+      );
+    case "text":
+      return (
+        <span aria-hidden className="flex w-[76px] flex-col items-center gap-[5px]">
+          <span className="h-[7px] w-full rounded-full bg-[#1D1D1F]/70" />
+          <span className="h-[6px] w-4/5 rounded-full bg-[#1D1D1F]/25" />
+          <span className="h-[6px] w-3/5 rounded-full bg-[#1D1D1F]/25" />
+          <span className="h-[6px] w-2/5 rounded-full bg-[#1D1D1F]/15" />
+        </span>
+      );
+    case "photo":
+      return (
+        <span
+          aria-hidden
+          className="block rounded-[8px] bg-white p-[3px] shadow-[0_8px_18px_-8px_rgba(29,29,31,0.3)]"
+        >
+          <span className="relative block h-[52px] w-[72px] overflow-hidden rounded-[6px]">
+            <span className="absolute inset-0" style={{ background: "linear-gradient(160deg, #64D2FF 0%, #A7F3C6 55%, #30D158 100%)" }} />
+            <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-[#FFD60A]" />
+            <span className="absolute -bottom-2 left-1 h-8 w-8 rotate-[14deg] rounded-[6px] bg-white/60" />
+            <span className="absolute -bottom-3 right-0 h-10 w-10 rotate-[-9deg] rounded-[6px] bg-white/85" />
+          </span>
+        </span>
+      );
+    case "video":
+      return (
+        <span
+          aria-hidden
+          className="relative flex h-[52px] w-[74px] items-center justify-center overflow-hidden rounded-[10px]"
+          style={{ background: "linear-gradient(140deg, #3A3A44 0%, #1D1D1F 100%)" }}
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/95">
+            <Play size={11} className="ml-0.5 text-[#1D1D1F]" />
+          </span>
+          <span className="absolute inset-x-2 bottom-1.5 h-[3px] overflow-hidden rounded-full bg-white/25">
+            <span className="block h-full w-1/3 rounded-full bg-[#FF9F0A]" />
+          </span>
+        </span>
+      );
+    case "audio":
+      return (
+        <span
+          aria-hidden
+          className="flex items-end gap-[3px] rounded-[10px] bg-white px-3 pb-0 pt-0 shadow-[0_8px_18px_-8px_rgba(255,55,95,0.35)]"
+          style={{ height: 52 }}
+        >
+          {[18, 30, 40, 26, 34, 16, 28, 38, 22].map((h, i) => (
+            <span
+              key={i}
+              className="w-[3px] rounded-full"
+              style={{ height: h - 12, backgroundColor: i % 2 ? "#FF375F" : "#FF8FA8" }}
+            />
+          ))}
+        </span>
+      );
+    case "background":
+      return (
+        <span aria-hidden className="relative block h-[52px] w-[76px] overflow-hidden rounded-[10px]">
+          <span className="absolute inset-0" style={{ background: "linear-gradient(135deg, #0A84FF 0%, #5E5CE6 60%, #BF5AF2 100%)" }} />
+          <span className="absolute inset-0 bg-[#1D1D1F]/45" />
+          <span className="absolute inset-0 flex items-center justify-center text-[13px] font-bold text-white/95">
+            Aa
+          </span>
+        </span>
+      );
+    case "quiz":
+      return (
+        <span aria-hidden className="flex w-[80px] flex-col items-start gap-[5px]">
+          <span className="h-[7px] w-full rounded-full bg-[#1D1D1F]/70" />
+          <span className="flex w-full items-center gap-1 rounded-full border border-[#30D158]/45 bg-[#30D158]/[0.12] px-2 py-[3px]">
+            <Check size={7} strokeWidth={3.5} className="text-[#1E9E4A]" />
+            <span className="h-[4px] w-2/5 rounded-full bg-[#1E9E4A]/50" />
+          </span>
+          <span className="flex items-center gap-1 rounded-full border border-[#1D1D1F]/10 bg-white px-2 py-[3px]">
+            <span className="h-[4px] w-3/5 rounded-full bg-[#1D1D1F]/25" />
+          </span>
+        </span>
+      );
+    case "countdown":
+      return (
+        <span
+          aria-hidden
+          className="flex items-center gap-1.5 rounded-full bg-[#FF9F0A]/[0.12] px-3 py-2"
+        >
+          <Clock size={13} className="text-[#B26A00]" />
+          <span className="text-[13px] font-bold tabular-nums tracking-wide text-[#1D1D1F]">
+            24 : 00
+          </span>
+        </span>
+      );
+    case "cta":
+      return (
+        <span aria-hidden className="flex flex-col items-center gap-1.5">
+          <span className="flex items-center gap-1 rounded-full bg-[#007AFF] px-4 py-2 text-[11px] font-semibold text-white shadow-[0_8px_18px_-6px_rgba(0,122,255,0.55)]">
+            Continue
+          </span>
+          <span className="h-[4px] w-2/3 rounded-full bg-[#1D1D1F]/15" />
+        </span>
+      );
+    case "confetti": {
+      const palette = CONFETTI_PALETTES[(t.data?.style as ConfettiStyleName) ?? "Burst"] ?? CONFETTI_PALETTES.Burst;
+      return (
+        <span aria-hidden className="flex items-center gap-1.5">
+          <span
+            className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+            style={{
+              background:
+                t.data?.style === "Gold"
+                  ? "linear-gradient(135deg, #FFD60A, #FF9F0A)"
+                  : "linear-gradient(135deg, #FF6482, #FF9F0A)",
+            }}
+          >
+            <PartyPopper size={15} strokeWidth={2.2} />
+          </span>
+          <span className="flex flex-col gap-[3px]">
+            <span className="h-2 w-[10px] rotate-[-18deg] rounded-full" style={{ backgroundColor: palette[0] }} />
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: palette[1] }} />
+            <span className="h-[7px] w-[7px] rounded-[2px]" style={{ backgroundColor: palette[2] }} />
+          </span>
+          <span className="flex flex-col gap-[3px]">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: palette[3] }} />
+            <span className="h-2.5 w-[5px] rotate-[24deg] rounded-full" style={{ backgroundColor: palette[4] }} />
+          </span>
+        </span>
+      );
+    }
+    default:
+      return null;
+  }
+}
+
+/** Sheet body for the Block Library — categories + template grid. */
+function BlockLibraryContent({
+  scenePos,
+  onPick,
+}: {
+  scenePos: number;
+  onPick: (t: LibraryTemplate) => void;
+}) {
+  const [category, setCategory] = useState<LibraryCategoryId>("All");
+  const shown =
+    category === "All" ? LIBRARY_TEMPLATES : LIBRARY_TEMPLATES.filter((t) => t.category === category);
+  const countFor = (id: LibraryCategoryId) =>
+    id === "All" ? LIBRARY_TEMPLATES.length : LIBRARY_TEMPLATES.filter((t) => t.category === id).length;
+
+  return (
+    <div className="pb-2">
+      <p className="px-1 text-[12.5px] font-medium leading-relaxed text-[#AAAAAA]">
+        Ready-made blocks with curated defaults — everything drops into{" "}
+        <span className="font-bold text-[#1D1D1F]">Scene {scenePos}</span> fully editable.
+      </p>
+
+      {/* Category pills */}
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar" role="tablist" aria-label="Block categories">
+        {LIBRARY_CATEGORIES.map((c) => {
+          const Icon = c.icon;
+          const active = category === c.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setCategory(c.id)}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12.5px] font-bold transition-all active:scale-[0.96]",
+                active
+                  ? "border-transparent bg-[#1D1D1F] text-white"
+                  : "border-[#1D1D1F]/[0.1] bg-white text-[#1D1D1F]/70 hover:border-[#1D1D1F]/[0.2]"
+              )}
+            >
+              <Icon size={13} strokeWidth={2.3} aria-hidden />
+              {c.label}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-px text-[10px] font-extrabold tabular-nums",
+                  active ? "bg-white/20 text-white/90" : "bg-[#1D1D1F]/[0.06] text-[#AAAAAA]"
+                )}
+              >
+                {countFor(c.id)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Template grid */}
+      <div className="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        {shown.map((t) => (
+          <motion.button
+            key={t.id}
+            type="button"
+            onClick={() => onPick(t)}
+            aria-label={`Add ${t.name} block to Scene ${scenePos}`}
+            whileTap={{ scale: 0.96 }}
+            className="group relative flex flex-col overflow-hidden rounded-[20px] border border-[#1D1D1F]/[0.07] bg-white p-2.5 text-left transition-all hover:border-[#8B5CF6]/40 hover:shadow-[0_14px_30px_-14px_rgba(139,92,246,0.35)]"
+          >
+            {t.isNew ? (
+              <span className="absolute right-2.5 top-2.5 z-10 rounded-full bg-[#8B5CF6] px-2 py-[3px] text-[9px] font-extrabold uppercase tracking-[0.08em] text-white shadow-[0_4px_10px_-3px_rgba(139,92,246,0.7)]">
+                New
+              </span>
+            ) : null}
+            <span
+              aria-hidden
+              className="relative flex h-[84px] items-center justify-center overflow-hidden rounded-[14px]"
+              style={{
+                background: `radial-gradient(120% 100% at 50% 0%, ${t.accent}17 0%, transparent 70%), #FAFAFC`,
+              }}
+            >
+              <LibraryThumb t={t} />
+            </span>
+            <span className="flex items-center gap-1.5 px-1 pt-2.5">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: t.accent }}
+                aria-hidden
+              />
+              <span className="truncate text-[13px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+                {t.name}
+              </span>
+            </span>
+            <span className="mt-0.5 line-clamp-2 min-h-[28px] px-1 text-[11px] font-medium leading-snug text-[#AAAAAA]">
+              {t.blurb}
+            </span>
+            <span
+              className={cn(
+                "mt-2 flex items-center justify-between rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors",
+                "bg-[#1D1D1F]/[0.04] text-[#1D1D1F]/70 group-hover:bg-[#8B5CF6] group-hover:text-white"
+              )}
+            >
+              <span className="flex items-center gap-1">
+                <Plus size={11} strokeWidth={2.6} aria-hidden /> Add to Scene {scenePos}
+              </span>
+              <ChevronRight
+                size={12}
+                strokeWidth={2.6}
+                aria-hidden
+                className="opacity-0 transition-opacity group-hover:opacity-100"
+              />
+            </span>
+          </motion.button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Coupon Draw editor — live claw-machine stage + copy & code fields    */
+/* ------------------------------------------------------------------ */
+
+function CouponDrawEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const code = (d.code ?? "").trim() || "MD-COUPON";
+  const domain = d.url?.trim() ? urlDomain(d.url) : null;
+  const { demoOpen, play } = useRevealDemo(3800);
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview stage — the real machine, tap to play the draw */}
+      <div
+        className="relative overflow-hidden rounded-[22px] border border-[#1D1D1F]/[0.06]"
+        style={{
+          background:
+            "radial-gradient(120% 85% at 50% 0%, rgba(139,92,246,0.13) 0%, transparent 58%), linear-gradient(180deg, #F5F5F7 0%, #FFFFFF 100%)",
+        }}
+      >
+        <div className="relative flex flex-col items-center px-5 pt-4">
+          <CouponDraw
+            stepLabel={d.stepLabel?.trim() || "01"}
+            subtitle={d.body?.trim() || "올려만 하면 100% 당첨"}
+            title={d.heading?.trim() || "쿠폰 뽑기"}
+            buttonLabel={d.label?.trim() || "쿠폰 뽑기"}
+            code={code}
+            open={demoOpen}
+            onDraw={play}
+          />
+          <div className="h-2" />
+        </div>
+        <div className="relative flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3.5 py-2.5">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
+            {demoOpen ? "What they’ll see" : "Live preview — tap the machine"}
+          </p>
+          <button
+            type="button"
+            onClick={play}
+            className="flex items-center gap-1.5 rounded-full bg-[#1D1D1F]/[0.05] px-3 py-1.5 text-[11.5px] font-bold text-[#1D1D1F]/70 transition-all hover:bg-[#1D1D1F]/[0.09] active:scale-95"
+          >
+            <Play size={11} aria-hidden /> Preview the draw
+          </button>
+        </div>
+      </div>
+
+      {/* Copy fields */}
+      <div className="flex gap-2.5">
+        <div className="w-[76px] shrink-0">
+          <FieldLabel>Step</FieldLabel>
+          <input
+            value={d.stepLabel ?? ""}
+            onChange={(e) => set({ stepLabel: e.target.value })}
+            maxLength={3}
+            placeholder="01"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className={cn(fieldInput, "px-3 text-center")}
+            aria-label="Step label"
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <FieldLabel>Headline</FieldLabel>
+          <input
+            value={d.heading ?? ""}
+            onChange={(e) => set({ heading: e.target.value })}
+            maxLength={22}
+            placeholder="쿠폰 뽑기"
+            className={fieldInput}
+            aria-label="Headline"
+          />
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Subtitle</FieldLabel>
+        <input
+          value={d.body ?? ""}
+          onChange={(e) => set({ body: e.target.value })}
+          maxLength={40}
+          placeholder="올려만 하면 100% 당첨"
+          className={fieldInput}
+          aria-label="Subtitle"
+        />
+      </div>
+
+      <div>
+        <FieldLabel>Draw button</FieldLabel>
+        <input
+          value={d.label ?? ""}
+          onChange={(e) => set({ label: e.target.value })}
+          maxLength={18}
+          placeholder="쿠폰 뽑기"
+          className={fieldInput}
+          aria-label="Draw button label"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="md-coupon-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          Prize code
+        </label>
+        <input
+          id="md-coupon-code"
+          maxLength={24}
+          value={d.code ?? ""}
+          onChange={(e) => set({ code: e.target.value })}
+          placeholder="Summer-24!"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          className={cn(fieldInput, "font-mono tracking-[0.08em]")}
+        />
+        <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
+          <p className="text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+            Any format works — capitals, lowercase, numbers &amp; symbols.
+          </p>
+          <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[#AAAAAA]">
+            {(d.code ?? "").length}/24
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="md-coupon-url" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          Redeem link · optional
+        </label>
+        <div className="relative">
+          <Link2
+            size={15}
+            aria-hidden
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
+          />
+          <input
+            id="md-coupon-url"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            maxLength={200}
+            value={d.url ?? ""}
+            onChange={(e) => set({ url: e.target.value })}
+            placeholder="https://your-shop.com/redeem"
+            className={cn(fieldInput, "pl-9")}
+          />
+        </div>
+        {domain ? (
+          <p className="mt-2 flex items-center gap-1.5 rounded-full bg-[#7C3AED]/[0.08] px-3 py-1.5 text-[12px] font-semibold text-[#7C3AED]">
+            <ExternalLink size={12} aria-hidden />
+            Redeem at <span className="font-bold">{domain}</span>
+          </p>
+        ) : (
+          <p className="mt-1.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+            Where they use the code — a button appears after the draw.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Audio block editor — catalog search | file upload + play mode        */
 /* ------------------------------------------------------------------ */
 
@@ -2380,6 +3036,8 @@ function BlockEditorContent({
     }
     case "reward":
       return <RewardBlockEditor block={block} onChange={onChange} />;
+    case "coupon":
+      return <CouponDrawEditor block={block} onChange={onChange} />;
     case "cta": {
       const action = d.action ?? "Open link";
       const domain = d.url?.trim() ? urlDomain(d.url) : null;
@@ -2739,6 +3397,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const [editBlockId, setEditBlockId] = useState<string | null>(null);
   const [musicOpen, setMusicOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [coverOpen, setCoverOpen] = useState(false);
   /** Send-flow recipient prompt (iOS alert) + in-flight flag */
   const [sendPromptOpen, setSendPromptOpen] = useState(false);
@@ -2760,7 +3419,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const scenePos = sceneIdx + 1;
   const editBlock = editBlockId ? (scenes.flatMap((s) => s.blocks).find((b) => b.id === editBlockId) ?? null) : null;
   /** Any builder-local sheet open? (Escape / ⌘Z defer to it) */
-  const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen || sendPromptOpen;
+  const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen || sendPromptOpen || libraryOpen;
 
   /* ---------- Undo / redo ---------- */
 
@@ -2807,12 +3466,20 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
   /* ---------- Mutations (each pushes history) ---------- */
 
-  const addBlock = (type: string, text?: string) => {
+  const addBlock = (type: string, text?: string, data?: BlockData) => {
     const id = freshBlockId();
-    pushHistory(text ? "AI message added" : `${BLOCK_BY_TYPE[type]?.label ?? "Block"} added`);
+    pushHistory(
+      data
+        ? `${BLOCK_BY_TYPE[type]?.label ?? "Block"} added from library`
+        : text
+          ? "AI message added"
+          : `${BLOCK_BY_TYPE[type]?.label ?? "Block"} added`
+    );
     setScenes((prev) =>
       prev.map((s, i) =>
-        i === sceneIdx ? { ...s, blocks: [...s.blocks, { id, type, text }] } : s
+        i === sceneIdx
+          ? { ...s, blocks: [...s.blocks, { id, type, text, ...(data ? { data } : {}) }] }
+          : s
       )
     );
     setSelectedBlock(id);
@@ -2820,6 +3487,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
     requestAnimationFrame(() => {
       blocksEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
+    return id;
   };
 
   const removeBlock = (id: string) => {
@@ -3377,6 +4045,24 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               onScroll={checkPaletteScroll}
               className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-1 no-scrollbar lg:mx-0 lg:flex-wrap lg:px-0 lg:overflow-visible"
             >
+              {/* Block Library — the categorized gallery (featured, first) */}
+              <button
+                type="button"
+                onClick={() => setLibraryOpen(true)}
+                aria-label="Browse the block library"
+                className="flex shrink-0 items-center gap-2 rounded-full bg-[#1D1D1F] py-2.5 pl-3 pr-4 text-white transition-transform active:scale-[0.94] pill-shadow"
+              >
+                <span
+                  className="flex h-[30px] w-[30px] items-center justify-center rounded-full"
+                  style={{ background: "linear-gradient(135deg, #8B5CF6, #6366F1)" }}
+                >
+                  <LayoutGrid size={15} strokeWidth={2.2} aria-hidden />
+                </span>
+                <span className="text-[13px] font-semibold tracking-[-0.01em]">Library</span>
+                <span className="rounded-full bg-[#8B5CF6] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.08em]">
+                  New
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => openComposer()}
@@ -3505,6 +4191,18 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
 
       <BottomSheet open={coverOpen} onClose={() => setCoverOpen(false)} title="Cover art">
         <CoverArtContent selected={cover} onSelect={selectCover} />
+      </BottomSheet>
+
+      {/* Block Library — categorized gallery of ready-made blocks */}
+      <BottomSheet open={libraryOpen} onClose={() => setLibraryOpen(false)} title="Block Library">
+        <BlockLibraryContent
+          scenePos={scenePos}
+          onPick={(t) => {
+            const id = addBlock(t.type, undefined, t.data);
+            setLibraryOpen(false);
+            openBlockEditor(id);
+          }}
+        />
       </BottomSheet>
 
       <BottomSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Schedule send">
