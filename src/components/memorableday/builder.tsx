@@ -59,6 +59,14 @@ import {
   type SongResult,
 } from "@/lib/md-blocks";
 import { SegmentedControl } from "./segmented-control";
+import {
+  GiftBox,
+  GiftConfetti,
+  GIFT_RIBBON_STYLES,
+  GIFT_WRAP_PALETTE,
+  isLightWrap,
+  useRevealDemo,
+} from "./gift-box";
 import { CoverArt, COVER_NAMES } from "./cover-art";
 import { BottomSheet } from "./bottom-sheet";
 import { RenameDialog } from "./moment-menu";
@@ -106,13 +114,8 @@ interface Snapshot {
   cover: number;
 }
 
-/* Block editor option catalogues (abstract, no themed content) */
-const GIFT_WRAPS = ["#5E5CE6", "#007AFF", "#FF375F", "#30D158", "#FF9F0A", "#64D2FF", "#AF52DE", "#1D1D1F"];
-const GIFT_RIBBONS = [
-  { value: "classic", label: "Classic" },
-  { value: "cross", label: "Cross" },
-  { value: "none", label: "None" },
-] as const;
+/* Block editor option catalogues (abstract, no themed content) —
+   gift wrap colors + ribbon styles live in ./gift-box (shared with the player) */
 const COUNTDOWN_PRESETS = [
   { label: "1 min", minutes: 1 },
   { label: "10 min", minutes: 10 },
@@ -420,12 +423,8 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
       const message = d?.message?.trim();
       return (
         <div className="flex items-center gap-3">
-          <span
-            aria-hidden
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] text-white"
-            style={{ background: `linear-gradient(135deg, ${wrap} 0%, ${wrap}C4 60%, ${wrap}8C 100%)` }}
-          >
-            <Gift size={22} strokeWidth={2} />
+          <span aria-hidden className="flex h-[92px] w-[72px] shrink-0 items-center justify-center">
+            <GiftBox wrap={wrap} ribbon={d?.ribbon ?? "classic"} still scale={0.5} sparkle={false} />
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Gift reveal</p>
@@ -1598,53 +1597,53 @@ function UploadAudioContent({
 /* Gift block — wrapped box reveal (note, wrap color, ribbon)           */
 /* ------------------------------------------------------------------ */
 
-/** Static mini replica of the player's gift box for the editor preview */
-function MiniGiftPreview({ wrap, ribbon }: { wrap: string; ribbon: string }) {
-  const showBand = ribbon !== "none";
-  const cross = ribbon === "cross";
-  return (
-    <div aria-hidden className="relative mx-auto h-[118px] w-[112px] select-none">
-      {/* box body */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-[84px] rounded-[18px] shadow-[0_16px_30px_-12px_rgba(29,29,31,0.4)]"
-        style={{ background: `linear-gradient(160deg, ${wrap}D9, ${wrap})` }}
-      >
-        {showBand ? <div className="absolute inset-y-0 left-1/2 w-[16px] -translate-x-1/2 bg-white/80" /> : null}
-        {cross ? <div className="absolute inset-x-0 top-1/2 h-[16px] -translate-y-1/2 bg-white/80" /> : null}
-        <div className="absolute inset-0 rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.28),transparent_45%)]" />
-      </div>
-      {/* lid */}
-      <div
-        className="absolute top-[16px] left-[-6px] h-[28px] w-[124px] rounded-[10px] shadow-[0_10px_20px_-8px_rgba(29,29,31,0.3)]"
-        style={{ background: `linear-gradient(160deg, ${wrap}, ${wrap}B3)` }}
-      >
-        {showBand ? <div className="absolute inset-y-0 left-1/2 w-[16px] -translate-x-1/2 bg-white/80" /> : null}
-        <div className="absolute inset-0 rounded-[10px] bg-[linear-gradient(180deg,rgba(255,255,255,0.4),transparent_60%)]" />
-      </div>
-      {/* bow */}
-      {showBand ? (
-        <span className="absolute top-[-6px] left-1/2 flex -translate-x-1/2 items-center justify-center text-white drop-shadow-md">
-          <Heart size={24} fill="currentColor" strokeWidth={0} />
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
   const d = block.data ?? {};
   const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
   const wrap = d.wrap ?? "#5E5CE6";
   const ribbon = d.ribbon ?? "classic";
+  const { demoOpen, play } = useRevealDemo();
 
   return (
     <div className="space-y-4 pb-2">
-      {/* Live preview */}
-      <div className="rounded-[20px] border border-[#1D1D1F]/[0.06] bg-gradient-to-b from-[#F5F5F7] to-white pb-3 pt-5">
-        <MiniGiftPreview wrap={wrap} ribbon={ribbon} />
-        <p className="mt-1 text-center text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
-          Live preview
-        </p>
+      {/* Live preview stage — exactly what the recipient will see */}
+      <div
+        className="relative overflow-hidden rounded-[22px] border border-[#1D1D1F]/[0.06]"
+        style={{
+          background: `radial-gradient(120% 85% at 50% 0%, ${wrap}24 0%, transparent 58%), linear-gradient(180deg, #F5F5F7 0%, #FFFFFF 100%)`,
+        }}
+      >
+        {demoOpen ? <GiftConfetti tint={wrap} onDark={false} /> : null}
+        <div className="relative flex flex-col items-center pt-4">
+          <GiftBox wrap={wrap} ribbon={ribbon} open={demoOpen} onOpen={play} scale={0.9} />
+          <div className="flex min-h-[44px] w-full max-w-[300px] items-start justify-center pt-1">
+            <AnimatePresence>
+              {demoOpen ? (
+                <motion.p
+                  initial={{ opacity: 0, y: 10, scale: 0.94 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 22, delay: 0.18 }}
+                  className="rounded-[18px] border border-[#1D1D1F]/[0.06] bg-white/80 px-4 py-2.5 text-center text-[13.5px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_24px_-10px_rgba(29,29,31,0.25)] backdrop-blur"
+                >
+                  {d.message?.trim() || "This is for you."}
+                </motion.p>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        </div>
+        <div className="relative flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3.5 py-2.5">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
+            {demoOpen ? "What they’ll see" : "Live preview — tap the box"}
+          </p>
+          <button
+            type="button"
+            onClick={play}
+            className="flex items-center gap-1.5 rounded-full bg-[#1D1D1F]/[0.05] px-3 py-1.5 text-[11.5px] font-bold text-[#1D1D1F]/70 transition-all hover:bg-[#1D1D1F]/[0.09] active:scale-95"
+          >
+            <Play size={11} aria-hidden /> Preview the reveal
+          </button>
+        </div>
       </div>
 
       <div>
@@ -1673,23 +1672,35 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
       <div>
         <FieldLabel>Wrap color</FieldLabel>
         <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Gift wrap color">
-          {GIFT_WRAPS.map((c) => {
-            const active = wrap === c;
+          {GIFT_WRAP_PALETTE.map((c) => {
+            const active = wrap === c.value;
+            const light = isLightWrap(c.value);
             return (
               <button
-                key={c}
+                key={c.value}
                 type="button"
                 role="radio"
                 aria-checked={active}
-                aria-label={`Wrap color ${c}`}
-                onClick={() => set({ wrap: c })}
+                aria-label={`${c.name} wrap`}
+                title={c.name}
+                onClick={() => set({ wrap: c.value })}
                 className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
                   active && "ring-2 ring-[#1D1D1F] ring-offset-2 ring-offset-white"
                 )}
-                style={{ backgroundColor: c }}
+                style={{
+                  backgroundColor: c.value,
+                  boxShadow: "inset 0 2px 3px rgba(255,255,255,0.32), inset 0 -3px 5px rgba(0,0,0,0.18)",
+                }}
               >
-                {active ? <Check size={15} strokeWidth={3} className="text-white drop-shadow" aria-hidden /> : null}
+                {active ? (
+                  <Check
+                    size={15}
+                    strokeWidth={3}
+                    className={cn("drop-shadow", light ? "text-[#1D1D1F]" : "text-white")}
+                    aria-hidden
+                  />
+                ) : null}
               </button>
             );
           })}
@@ -1698,8 +1709,8 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
 
       <div>
         <FieldLabel>Ribbon</FieldLabel>
-        <div className="flex gap-2.5" role="radiogroup" aria-label="Ribbon style">
-          {GIFT_RIBBONS.map((r) => {
+        <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Ribbon style">
+          {GIFT_RIBBON_STYLES.map((r) => {
             const active = ribbon === r.value;
             return (
               <button
@@ -1709,7 +1720,7 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
                 aria-checked={active}
                 onClick={() => set({ ribbon: r.value })}
                 className={cn(
-                  "flex-1 rounded-[14px] border-2 px-3 py-2.5 text-[12.5px] font-bold transition-all active:scale-[0.97]",
+                  "rounded-[14px] border-2 px-2 py-2.5 text-[12.5px] font-bold transition-all active:scale-[0.97]",
                   active
                     ? "border-[#5E5CE6] bg-[#5E5CE6]/[0.06] text-[#5E5CE6]"
                     : "border-[#1D1D1F]/[0.08] bg-white text-[#1D1D1F]/60"

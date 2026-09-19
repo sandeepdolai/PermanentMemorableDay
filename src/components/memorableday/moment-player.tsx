@@ -27,6 +27,7 @@ import type { PlayerPayload } from "./md-context";
 import type { BlockDoc, SceneDoc, SongPick } from "@/lib/md-blocks";
 import { backgroundDimClass, formatClock, normalizeUrl, photoFilterCss, urlDomain } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
+import { GiftBox, GiftConfetti, isLightWrap } from "./gift-box";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
 import { cn } from "@/lib/utils";
@@ -75,74 +76,6 @@ function ConfettiBurst() {
         />
       ))}
     </div>
-  );
-}
-
-/** Wrapped gift box — tap to open (spring lid + bow, idle wiggle) */
-function GiftBox({
-  open,
-  wrap,
-  ribbon = "classic",
-  onOpen,
-}: {
-  open: boolean;
-  wrap?: string;
-  ribbon?: string;
-  onOpen: () => void;
-}) {
-  const base = wrap ?? "#5E5CE6";
-  const showBand = ribbon !== "none";
-  const cross = ribbon === "cross";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation(); // the gift opens on its own tap, not the scene advance
-        onOpen();
-      }}
-      aria-label={open ? "Gift opened" : "Tap to open the gift"}
-      className="relative mx-auto block h-[104px] w-[104px] outline-none"
-    >
-      <motion.div
-        animate={open ? { scale: 1.06, rotate: -2 } : { scale: 1, rotate: [0, -1.5, 1.5, 0] }}
-        transition={
-          open
-            ? { type: "spring", stiffness: 300, damping: 16 }
-            : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
-        }
-        className="relative h-full w-full"
-      >
-        {/* box */}
-        <div
-          className="absolute inset-x-0 bottom-0 h-[76px] rounded-[18px] shadow-[0_18px_40px_-10px_rgba(0,0,0,0.55)]"
-          style={{ background: `linear-gradient(160deg, ${base}CC, ${base})` }}
-        >
-          {showBand ? <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" /> : null}
-          {cross ? <div className="absolute inset-x-0 top-1/2 h-[14px] -translate-y-1/2 bg-white/75" /> : null}
-          <div className="absolute inset-0 rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.3),transparent_45%)]" />
-        </div>
-        {/* lid */}
-        <motion.div
-          animate={open ? { y: -84, rotate: -24, opacity: 1 } : { y: 0, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 260, damping: 18 }}
-          className="absolute -top-[14px] left-[-6px] h-[26px] w-[116px] rounded-[10px] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.4)]"
-          style={{ background: `linear-gradient(160deg, ${base}, ${base}B3)` }}
-        >
-          {showBand ? <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" /> : null}
-          <div className="absolute inset-0 rounded-[10px] bg-[linear-gradient(180deg,rgba(255,255,255,0.4),transparent_60%)]" />
-        </motion.div>
-        {/* bow */}
-        {showBand ? (
-          <motion.div
-            animate={open ? { y: -120, rotate: -30, opacity: 0.9 } : { y: 0, rotate: 0 } }
-            transition={{ type: "spring", stiffness: 260, damping: 18 }}
-            className="absolute -top-[34px] left-1/2 flex -translate-x-1/2 items-center justify-center text-white drop-shadow-md"
-          >
-            <Heart size={22} fill="currentColor" strokeWidth={0} />
-          </motion.div>
-        ) : null}
-      </motion.div>
-    </button>
   );
 }
 
@@ -764,6 +697,8 @@ function GiftBlockView({
   onOpen: () => void;
 }) {
   const d = block.data;
+  const wrap = d?.wrap ?? "#5E5CE6";
+  const iconTint = isLightWrap(wrap) ? "#1D1D1F" : wrap;
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -771,20 +706,36 @@ function GiftBlockView({
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      {open ? <ConfettiBurst /> : null}
+      {open ? <GiftConfetti tint={wrap} /> : null}
       {!open ? (
         <>
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">A surprise</p>
-          <p className="mb-8 mt-1.5 text-[19px] font-bold tracking-[-0.02em] text-white md:text-[24px]">
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">
+            <Sparkles size={11} aria-hidden /> A surprise
+          </p>
+          <p className="mb-7 mt-1.5 text-[19px] font-bold tracking-[-0.02em] text-white md:text-[24px]">
             There&apos;s something for you.
           </p>
         </>
       ) : (
-        <p className="mb-6 max-w-[340px] text-center text-[19px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[24px]">
-          {d?.message?.trim() || "This is for you."}
-        </p>
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 21, delay: 0.16 }}
+          className="mb-5 w-full max-w-[340px] rounded-[22px] border border-white/20 bg-white/10 px-6 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl"
+        >
+          <span
+            aria-hidden
+            className="mx-auto mb-2.5 flex h-8 w-8 items-center justify-center rounded-full"
+            style={{ backgroundColor: `${wrap}40` }}
+          >
+            <Gift size={15} style={{ color: iconTint }} aria-hidden />
+          </span>
+          <p className="text-[18px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[22px]">
+            {d?.message?.trim() || "This is for you."}
+          </p>
+        </motion.div>
       )}
-      <GiftBox open={open} wrap={d?.wrap} ribbon={d?.ribbon} onOpen={onOpen} />
+      <GiftBox open={open} wrap={d?.wrap} ribbon={d?.ribbon} onOpen={onOpen} onDark />
       {!open ? (
         <button
           type="button"
@@ -792,9 +743,9 @@ function GiftBlockView({
             e.stopPropagation(); // keep the pill tap from also advancing the scene
             onOpen();
           }}
-          className="mt-8 flex items-center gap-2 rounded-full bg-white/95 px-5 py-2.5 text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_30px_rgba(0,0,0,0.4)] transition-transform active:scale-95"
+          className="mt-7 flex items-center gap-2 rounded-full bg-white/95 px-5 py-2.5 text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_30px_rgba(0,0,0,0.4)] ring-1 ring-black/[0.06] transition-all hover:scale-[1.03] active:scale-95"
         >
-          <Gift size={15} aria-hidden /> Open the gift
+          <Gift size={15} style={{ color: iconTint }} aria-hidden /> Open the gift
         </button>
       ) : null}
     </motion.div>

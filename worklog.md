@@ -853,3 +853,43 @@ Stage Summary:
 - Files touched: DELETED src/app/api/md/gift3d/route.ts; modified src/lib/md-blocks.ts, src/lib/md-client.ts, src/lib/mock-data.ts, src/components/memorableday/builder.tsx, src/components/memorableday/moment-player.tsx, src/components/memorableday/views/create-view.tsx.
 - SECURITY: the GitHub classic PAT was posted in chat in an earlier session — user must rotate it.
 - Next-phase candidates: gift lid "peek" hover micro-interaction, more confetti styles on gift open, per-scene soundtrack override, public /e/[slug] recipient page, Spotify credentials drop-in, image thumbnail generation for grid performance.
+
+---
+Task ID: 23
+Agent: Z.ai Code (main orchestrator)
+Task: User request — "Make the Boxes More Good Looking And should Look Aesthetic." Redesign the classic CSS gift box into a genuinely aesthetic, premium wrapped-box experience (following Round 22's removal of the Sketchfab 3D library).
+
+Work Log:
+- BASELINE QA first: opened the Gift quick-start builder + editor, screenshotted the old box, ran VLM critique — verdict: "flat, 2D icon... competent but uninspired... fails to generate emotional anticipation" (confirmed the user's complaint).
+- NEW shared component src/components/memorableday/gift-box.tsx — ONE source of truth for the box art, used by BOTH the builder editor and the moment player (recipient sees exactly what the creator styled; killed the old duplicated MiniGiftPreview/GiftBox pair):
+  - Curved 3D body illusion: 4-stop vertical shade gradient + inset left/right edge shadows + glossy specular sweep + layered drop shadows (deeper on dark player scenes via onDark).
+  - Overhanging lid with its own gradient/shine + a soft CAST SHADOW strip on the box body below the lid.
+  - Woven-fabric ribbon with cylindrical sheen (lo→base→hi→base→lo gradient) + side shadows on the band: 4 styles — Classic (vertical), Cross (vertical+horizontal), NEW Diagonal (rotated band clipped to the box), None.
+  - Real fabric BOW (replaces the old heart icon): two gradient-shaded teardrop loops with fold shading, center knot, two notched (clip-path v-cut) tails, plus a bow drop-shadow on the lid.
+  - Auto-contrast ribbon tone: warm ivory fabric on rich wraps, deep cocoa on light (Cream) wraps (luminance-based).
+  - Warm golden interior glow at the box mouth when opened (light "escaping" the box).
+  - Ambient wrap-colored radial glow behind the box, elliptical breathing ground shadow, 3 twinkling golden 4-point star sparkles (staggered opacity/scale/rotate loop).
+  - Motion: gentle levitate float (y ±5) synced with the ground shadow while idle; on open the lid+bow fly off together (spring, -82px/-21°) while the body does a hop (y keyframes) and scales 1.045; press feedback active:scale-0.965 on the button variant.
+  - scale prop renders the same art at any size via a non-animated transform frame (player 1.0, editor 0.9, block-card 0.5); still prop for card thumbnails; sparkle toggle.
+- NEW GiftConfetti — richer gift-reveal burst: two staggered waves (26+16 particles), mixed shapes (rects/circles/thin strips), upward-biased trajectories, wrap-tinted palette. (The generic ConfettiBurst remains for quiz/reward/confetti blocks.)
+- NEW useRevealDemo hook — powers the editor's reveal preview (plays open animation + confetti for 3s, auto-resets; restart-safe via rAF).
+- Builder rework (builder.tsx):
+  - GiftBlockEditor: new preview STAGE with wrap-tinted radial backdrop; the live shared GiftBox (tap the box itself to play the reveal); "Preview the reveal" pill button; the note appears in a frosted white card during the demo ("What they'll see" caption swap); 9 curated premium wrap swatches (Iris/Rose/Honey/Emerald/Lagoon/Orchid/Terracotta/Midnight/Cream) with inner-sheen styling, names in aria-labels + titles, contrast-aware check marks; 4-option ribbon grid (added Diagonal).
+  - Block-card gift preview: replaced the flat gradient icon tile with a real still mini-GiftBox (scale 0.5) — the card list now shows the actual styled box.
+  - Removed local GIFT_WRAPS/GIFT_RIBBONS + MiniGiftPreview (~45 lines); old draft hex values still render fine (data is a plain hex string — backward compatible).
+- Player rework (moment-player.tsx): deleted the old local GiftBox (~66 lines); GiftBlockView now uses the shared GiftBox (onDark); "A SURPRISE" eyebrow gained a Sparkles icon; opened note is now a frosted-glass card (backdrop-blur, white/10, border-white/20, spring pop-in) with a wrap-tinted gift icon chip; "Open the gift" pill gained ring + hover lift + wrap-tinted gift icon (dark icon on light wraps).
+- E2E VERIFIED (agent-browser desktop 1512×900 + mobile 390×844, VLM-checked at every step):
+  - Editor: box renders dimensional with bow + sheen ribbon (VLM: "dimensional and shaded (3D-ish)... premium"); 9 named swatches; 4 ribbon buttons; reveal demo plays (lid flies, two-wave confetti, note card, warm glow confirmed in zoomed crop: "soft, luminous rim... something magical inside"); live updates instant (Rose wrap + Diagonal band verified); Cream wrap auto-switches ribbon to dark cocoa (contrast logic verified); None removes band + bow; no layout issues.
+  - Persistence: note + Rose + Diagonal → Save Draft → SQLite sceneData verified → reload → Gallery → reopen: radios + note restored.
+  - Player: hero → gift scene: rose box + ivory DIAGONAL ribbon + bow + ground shadow + glow + golden sparkles + sparkle eyebrow + tinted pill (all VLM-confirmed, "no visual defects"); tap box → lid+bow fly, confetti burst (pink/gold/mint/white shapes), frosted note card "You make every day brighter" with rose icon chip, warm mouth glow; polished verdict.
+  - Mobile 390px: opened player state + editor sheet both fully in-viewport, centered, no horizontal overflow (VLM: "layout quality is excellent").
+  - Hygiene: bun run lint exit 0; fresh reload console clean (one stale HMR error from mid-edit double-GiftBox definition was transient and gone after the edit settled); dev.log all 200s; all 5 QA draft moments deleted via API (gallery now clean).
+- Tool gotchas this round: Edit tool old_str must match EXACT bytes (escaped quotes + stray spaces both failed — verify with Read, fall back to sed line-range delete); z-ai vision sometimes ignores instructions and returns HTML mockups — re-ask with "Do NOT write code" preamble; agent-browser "covered by" errors on the sheet backdrop button are expected (full-viewport Close sheet) — close via programmatic backdrop .click() or Escape; clicking "Tap to continue" can double-advance the hero (button + hero onclick) — use programmatic .click() on the button only; builder autosave is debounced — always click Save Draft and verify in SQLite before reload-based persistence tests.
+- SECURITY (carried over): the GitHub classic PAT was posted in chat in earlier sessions — user must rotate it.
+
+Stage Summary:
+- The gift boxes are now genuinely aesthetic and premium: a single shared CSS-art GiftBox (3D-shaded curved body, overhanging lid with cast shadow, satin-sheen ribbon in 4 styles incl. new Diagonal, fabric bow with loops/knot/notched tails, auto-contrast ivory/cocoa ribbon, ambient glow, breathing ground shadow, golden sparkles, levitating idle + springy lid-off reveal with warm interior light) renders identically in the builder (with a full "Preview the reveal" demo) and the player (with frosted note card + tinted confetti). 9 curated wrap colors, mobile-clean, lint 0, E2E-verified end-to-end.
+- Files added: src/components/memorableday/gift-box.tsx (GiftBox + GiftConfetti + useRevealDemo + GIFT_WRAP_PALETTE + GIFT_RIBBON_STYLES + isLightWrap).
+- Files modified: src/components/memorableday/builder.tsx (editor stage + demo + palette + card mini-box, −MiniGiftPreview), src/components/memorableday/moment-player.tsx (shared box + frosted note + tinted pill/confetti, −local GiftBox).
+- Next-phase candidates: per-wrap subtle pattern/texture (dots, stripes, kraft), gift open sound effect, "peek" hover micro-interaction on the lid, more confetti styles per gift, per-scene soundtrack override, public /e/[slug] recipient page, Spotify credentials drop-in.
+- Recurring 15-min webDevReview cron re-created (job_id 397269).
