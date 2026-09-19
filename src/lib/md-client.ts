@@ -142,16 +142,33 @@ export function apiAdjustCredits(creditsDelta: number): Promise<{ user: { name: 
 /* Media + music                                                       */
 /* ------------------------------------------------------------------ */
 
-/** Uploads a photo/video for a builder block — returns the served URL. */
-export async function apiUploadFile(file: File): Promise<string> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch("/api/md/upload", { method: "POST", body: form });
-  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
-  if (!res.ok || data.ok === false || !data.url) {
-    throw new Error(data.error || "Upload failed");
-  }
-  return data.url;
+/** Uploads a photo/video/audio file — REAL request with progress, no mocks.
+ *  Rejects with the server's error message when validation fails. */
+export function apiUploadFile(file: File, onProgress?: (pct: number) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/md/upload");
+    xhr.responseType = "json";
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error — upload didn't reach the server"));
+    xhr.ontimeout = () => reject(new Error("Upload timed out — try again"));
+    xhr.onload = () => {
+      const data = (xhr.response ?? {}) as { ok?: boolean; url?: string; error?: string };
+      if (xhr.status >= 200 && xhr.status < 300 && data.ok && data.url) {
+        if (onProgress) onProgress(100);
+        resolve(data.url);
+        return;
+      }
+      reject(new Error(data.error || `Upload failed (${xhr.status})`));
+    };
+    xhr.send(form);
+  });
 }
 
 /** Searches the song catalog (iTunes today, Spotify when configured). */

@@ -745,6 +745,8 @@ function MediaUploadField({
   const { notify } = useMD();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Real upload progress from the XHR (null = idle) */
+  const [pct, setPct] = useState<number | null>(null);
   const isPhoto = kind === "photo";
   const isAuto = kind === "auto";
   // In auto mode the preview kind comes from the caller's hint; in the
@@ -769,8 +771,9 @@ function MediaUploadField({
       return;
     }
     setBusy(true);
+    setPct(0);
     try {
-      const url = await apiUploadFile(file);
+      const url = await apiUploadFile(file, (p) => setPct(p));
       setAutoIsVideo(isVideo);
       onUploaded(url, isVideo ? "video" : "photo");
       notify(isVideo ? "Video uploaded" : "Photo uploaded");
@@ -778,6 +781,7 @@ function MediaUploadField({
       notify(e instanceof Error ? e.message : "Upload failed — try again");
     } finally {
       setBusy(false);
+      setPct(null);
     }
   };
 
@@ -815,7 +819,7 @@ function MediaUploadField({
               disabled={busy}
               className="flex-1 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97] disabled:opacity-50"
             >
-              {busy ? "Uploading…" : "Replace"}
+              {busy ? `Uploading…${pct !== null ? ` ${pct}%` : ""}` : "Replace"}
             </button>
             <button
               type="button"
@@ -849,8 +853,16 @@ function MediaUploadField({
             )}
           </span>
           <span className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
-            {busy ? "Uploading…" : isAuto ? "Upload a photo or video" : isPhoto ? "Upload a photo" : "Upload a video"}
+            {busy ? `Uploading…${pct !== null ? ` ${pct}%` : ""}` : isAuto ? "Upload a photo or video" : isPhoto ? "Upload a photo" : "Upload a video"}
           </span>
+          {busy && pct !== null ? (
+            <span className="mt-2.5 block h-[5px] w-40 overflow-hidden rounded-full bg-[#1D1D1F]/[0.08]" aria-hidden>
+              <span
+                className="block h-full rounded-full bg-[#007AFF] transition-[width] duration-200"
+                style={{ width: `${pct}%` }}
+              />
+            </span>
+          ) : null}
           <span className="mt-1 text-[11.5px] text-[#AAAAAA]">
             {isAuto ? "Any image or video · covers the whole scene · up to 16 MB" : isPhoto ? "JPG, PNG, WebP or GIF · up to 16 MB" : "MP4 or WebM · up to 16 MB"}
           </span>
@@ -1366,6 +1378,8 @@ function UploadAudioContent({
   const { notify } = useMD();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Real upload progress from the XHR (null = idle) */
+  const [pct, setPct] = useState<number | null>(null);
   /** A freshly uploaded (or re-staged) file awaiting snippet confirmation */
   const [staged, setStaged] = useState<{ url: string; name: string; duration: number } | null>(null);
   const [start, setStart] = useState(0);
@@ -1382,8 +1396,9 @@ function UploadAudioContent({
       return;
     }
     setBusy(true);
+    setPct(0);
     try {
-      const url = await apiUploadFile(file);
+      const url = await apiUploadFile(file, (p) => setPct(p));
       const secs = Math.max(1, Math.round(await probeAudioDuration(url)));
       setStaged({ url, name: file.name.replace(/\.[^.]+$/, ""), duration: secs });
       setStart(0);
@@ -1393,6 +1408,7 @@ function UploadAudioContent({
       notify(e instanceof Error ? e.message : "Upload failed — try again");
     } finally {
       setBusy(false);
+      setPct(null);
     }
   };
 
@@ -1497,7 +1513,7 @@ function UploadAudioContent({
             disabled={busy}
             className="w-full rounded-full bg-[#1D1D1F]/[0.06] py-2.5 text-[13px] font-semibold text-[#1D1D1F]/75 transition-transform active:scale-[0.97] disabled:opacity-50"
           >
-            {busy ? "Uploading…" : "Upload a different file"}
+            {busy ? `Uploading…${pct !== null ? ` ${pct}%` : ""}` : "Upload a different file"}
           </button>
         </div>
       ) : null}
@@ -1547,8 +1563,16 @@ function UploadAudioContent({
             )}
           </span>
           <span className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
-            {busy ? "Uploading…" : "Upload an audio file"}
+            {busy ? `Uploading…${pct !== null ? ` ${pct}%` : ""}` : "Upload an audio file"}
           </span>
+          {busy && pct !== null ? (
+            <span className="mt-2.5 block h-[5px] w-40 overflow-hidden rounded-full bg-[#1D1D1F]/[0.08]" aria-hidden>
+              <span
+                className="block h-full rounded-full bg-[#FF375F] transition-[width] duration-200"
+                style={{ width: `${pct}%` }}
+              />
+            </span>
+          ) : null}
           <span className="mt-1 text-center text-[11.5px] leading-relaxed text-[#AAAAAA]">
             MP3, M4A, WAV or OGG · up to 16 MB — voice notes, demos, anything
           </span>
