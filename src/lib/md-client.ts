@@ -178,3 +178,31 @@ export async function apiSearchMusic(q: string): Promise<SongResult[]> {
   );
   return data.songs;
 }
+
+/* ------------------------------------------------------------------ */
+/* 3D gift boxes (Sketchfab library)                                   */
+/* ------------------------------------------------------------------ */
+
+export interface Gift3dModel {
+  id: string;
+  name: string;
+  author: string;
+  thumb: string;
+  embedUrl: string;
+  viewerUrl: string;
+  views: number;
+  likes: number;
+  animated: boolean;
+  downloadable: boolean;
+}
+
+/** Searches the live Sketchfab model library for 3D gift boxes. */
+export async function apiSearchGift3d(
+  q: string,
+  cursor = 0
+): Promise<{ models: Gift3dModel[]; nextCursor: number | null }> {
+  const data = await req<{ models: Gift3dModel[]; nextCursor: number | null }>(
+    `/api/md/gift3d?q=${encodeURIComponent(q)}&cursor=${cursor}`
+  );
+  return data;
+}

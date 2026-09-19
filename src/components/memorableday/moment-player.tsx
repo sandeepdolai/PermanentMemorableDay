@@ -10,6 +10,7 @@ import {
   Clock,
   Copy,
   ExternalLink,
+  Gift,
   Heart,
   MousePointerClick,
   Music as MusicIcon,
@@ -744,6 +745,7 @@ function GiftBlockView({
   onOpen: () => void;
 }) {
   const d = block.data;
+  const modelId = d?.modelId;
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -760,14 +762,56 @@ function GiftBlockView({
           </p>
         </>
       ) : (
-        <p className="mb-4 max-w-[340px] text-center text-[19px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[24px]">
+        <p className="mb-6 max-w-[340px] text-center text-[19px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[24px]">
           {d?.message?.trim() || "This is for you."}
         </p>
       )}
-      <GiftBox open={open} wrap={d?.wrap} onOpen={onOpen} />
-      {!open ? (
-        <p className="mt-8 animate-pulse text-[12.5px] font-semibold text-white/70">Tap the gift to open it</p>
-      ) : null}
+      {modelId ? (
+        <motion.div
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 240, damping: 22 }}
+          className="w-full max-w-[min(80vw,400px)]"
+        >
+          <div className="relative aspect-square w-full overflow-hidden rounded-[28px] bg-black/35 shadow-[0_28px_60px_-18px_rgba(0,0,0,0.65)] ring-1 ring-white/25 backdrop-blur-sm">
+            <iframe
+              key={modelId}
+              src={`https://sketchfab.com/models/${modelId}/embed?autospin=0.35&autostart=1&preload=1&ui_theme=dark&ui_infos=0&ui_controls=0&dnt=1`}
+              title={d?.modelName ?? "3D gift box"}
+              allow="autoplay; fullscreen; xr-spatial-tracking"
+              allowFullScreen
+              loading="lazy"
+              className={cn("h-full w-full bg-transparent", !open && "pointer-events-none")}
+            />
+            {!open ? (
+              <button
+                type="button"
+                onClick={onOpen}
+                aria-label="Tap to open the gift"
+                className="absolute inset-0 flex items-end justify-center pb-7 outline-none"
+              >
+                <span className="flex items-center gap-2 rounded-full bg-white/95 px-5 py-2.5 text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+                  <Gift size={15} aria-hidden /> Open the gift
+                </span>
+              </button>
+            ) : (
+              <span className="pointer-events-none absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/[0.45] px-2 py-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-white/90 backdrop-blur-sm">
+                <Sparkles size={9} aria-hidden /> drag to spin
+              </span>
+            )}
+          </div>
+          <p className="mt-3 px-4 text-center text-[10.5px] font-medium leading-relaxed tracking-wide text-white/55">
+            3D box “{d?.modelName ?? "gift box"}” by {d?.modelAuthor ?? "its creator"} · Sketchfab
+          </p>
+        </motion.div>
+      ) : (
+        <>
+          <GiftBox open={open} wrap={d?.wrap} onOpen={onOpen} />
+          {!open ? (
+            <p className="mt-8 animate-pulse text-[12.5px] font-semibold text-white/70">Tap the gift to open it</p>
+          ) : null}
+        </>
+      )}
     </motion.div>
   );
 }
