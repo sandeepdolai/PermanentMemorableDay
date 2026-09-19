@@ -768,3 +768,28 @@ Stage Summary:
 - Tool gotchas logged: Bash tool output display strips "[m" (looks like corrupted `const [mode…` lines — verify with Read tool before panicking); agent-browser eval quoting breaks on nested quotes — write JS to a temp file and eval "$(cat file)"; programmatic .click() bypasses overlay hit-testing (verify overlays via z-index/rect, not innerText).
 - Next-phase candidates: per-block quick-start from ⌘K palette, template gallery inside the builder (premade layouts picker), Spotify credentials drop-in, public /e/[slug] recipient page, e2e harness for builder→player.
 - Reminder: user should rotate the GitHub PAT shared earlier in chat.
+
+---
+Task ID: 20
+Agent: Z.ai Code (main orchestrator)
+Task: "This website must not be a static-only website. Fix the upload functionality by implementing a real backend/API endpoint and persistent file storage… Do not use mock upload behavior or fake success messages." + push whole source to GitHub (classic PAT, user sandeepdolai).
+
+Work Log:
+- AUDIT: apiUploadFile POSTed to /api/md/upload — a route that DID NOT EXIST. Every upload in the app (photo/video/background blocks + audio picker) 404'd. Built the real pipeline:
+- NEW src/lib/md-storage.ts — storage core: UPLOAD_DIR = storage/uploads; 16 MB cap; magic-byte sniffing for png/jpg/gif/webp/mp4/webm/mov/m4a/mp3/m4a/wav/ogg/aac/flac (never trusts MIME/name); claimed-vs-sniffed mismatch (declared MIME else filename ext) → 415 "contents don't match its type"; writes <uuid>.<ext> via crypto.randomUUID; UploadError carries HTTP status.
+- NEW POST /api/md/upload — multipart "file" field → storeUpload → { ok, url, kind, bytes, name }. formData parse failure → 400; no file → 400; UploadError → its status; unexpected → 500 + server log.
+- NEW GET /api/md/files/[name] — serves stored files: strict uuid.ext regex (traversal-proof), per-ext Content-Type, ETag + 304, immutable cache (uuid never changes), single-part + suffix Range requests (206/416) so <video>/<audio> scrubbing works.
+- md-client.ts apiUploadFile: fetch → XHR with real upload.onprogress (capped 99 until resolve); network/timeout/server errors reject with the server's message.
+- builder.tsx UI: MediaUploadField + UploadAudioContent now show "Uploading… N%" plus a 5px animated progress bar (blue for media, pink for audio) in both dropzone and Replace states.
+- API TEST MATRIX (curl): valid PNG/MP4/WAV → 200 + stored on disk; fake .txt → 415; PNG renamed .mp3 → 415 (after tightening claimed-ext check — first pass stored it truthfully as .png, now rejected); no file → 400; 17 MB → 413; traversal name → 400; unknown uuid → 404. Serving: image/png + video/mp4 + audio/wav content-types verified, ETag/304, Range 0-1023 → 206 + content-range, suffix range → 206, bad range → 416.
+- UI E2E (agent-browser + ffmpeg-generated real media): testsrc2 PNG (800x500), 4s testsrc2 MP4, 6s 440Hz sine WAV. Photo block → upload → editor <img> loads from /api/md/files/<uuid>.png at natural 800x500 ✓. Background block → MP4 upload → <video> readyState 4, videoWidth 640, duration 4 ✓. Audio block → Upload tab → WAV upload → real probed duration 0:06 staged → "Use this audio" ✓. Save Draft → page reload → reopen draft from Gallery: photo + background video + audio all restored from server URLs ✓. Player preview: VLM confirmed full-screen test-pattern video backdrop + photo card + "md-test-audio / Your upload" player widget; dev.log shows the WAV served 206 (Range probe).
+- GITHUB PUSH: token verified (login sandeepdolai). Existing repo sandeepdolai/Memorableday contained only PRD + zip; merged (--allow-unrelated-histories, README conflict resolved keeping our new comprehensive README). Hygiene: untracked db/custom.db, .env (local-only, no secrets inside), removed QA artifacts (tool-results/, upload/, download/, stray "--full-page" screenshot); .gitignore extended for all. Pushed to main — remote now has the complete source (src/, prisma/, config, README, PRD docs preserved).
+- `bun run lint` exit 0; app 200; dev.log all 200s.
+
+Stage Summary:
+- Uploads are REAL end-to-end: browser → multipart POST → magic-byte validation → persistent disk storage → served back with correct types, caching and Range. Zero mocks. Progress bars show true XHR percentages. Files survive reloads/restarts and are referenced by stable uuid URLs in drafts.
+- Files added: src/lib/md-storage.ts, src/app/api/md/upload/route.ts, src/app/api/md/files/[name]/route.ts. Modified: src/lib/md-client.ts (XHR progress), src/components/memorableday/builder.tsx (progress UI), .gitignore, README.md (new).
+- Repo: https://github.com/sandeepdolai/Memorableday (main) — full source + docs, secrets excluded (.env untracked, token never committed).
+- Gotchas: `git rm -- '--full-page'` (pathspec after --, options before); agent-browser `upload` command needs a plain 'input[type="file"]' selector; addBlock AUTO-SELECTS the new block — scripting a card click right after toggles selection OFF.
+- SECURITY: the GitHub classic token was posted in chat again — user must rotate it after this session.
+- Next-phase candidates: image thumbnail generation for grid performance, upload DELETE/GC for orphaned files, per-upload antivirus/heuristics hook, Spotify credentials drop-in, public /e/[slug] recipient page.
