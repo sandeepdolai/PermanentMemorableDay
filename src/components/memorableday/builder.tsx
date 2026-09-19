@@ -60,6 +60,13 @@ import {
 } from "@/lib/md-blocks";
 import { SegmentedControl } from "./segmented-control";
 import {
+  CONFETTI_DESCRIPTIONS,
+  CONFETTI_PALETTES,
+  CONFETTI_STYLES,
+  ConfettiFX,
+  type ConfettiStyleName,
+} from "./confetti";
+import {
   GiftBox,
   GiftConfetti,
   GIFT_RIBBON_STYLES,
@@ -126,7 +133,6 @@ const COUNTDOWN_PRESETS = [
 ];
 const REWARD_KINDS = ["Coupon", "Gift card", "Download"];
 const CTA_ACTIONS = ["Open link", "Claim", "Reply"];
-const CONFETTI_STYLES = ["Burst", "Rain", "Hearts"];
 const SCHEDULE_TIMES = ["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "9:00 PM", "12:00 AM"];
 
 /** Pretty countdown label from a minutes value */
@@ -540,25 +546,26 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
       );
     }
     case "confetti": {
-      const style = d?.style;
+      const raw = d?.style as string | undefined;
+      const style: ConfettiStyleName = (CONFETTI_STYLES as string[]).includes(raw ?? "")
+        ? (raw as ConfettiStyleName)
+        : "Burst";
+      const palette = CONFETTI_PALETTES[style];
       return (
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#FF375F]/[0.1] text-[#FF375F]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-gradient-to-br from-[#FF6482] to-[#FF9F0A] text-white shadow-[0_6px_14px_-4px_rgba(255,100,130,0.55)]">
             <PartyPopper size={16} strokeWidth={2.2} aria-hidden />
           </span>
           <p className="flex-1 text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
-            {style ? `${style} celebration` : "Celebration burst"}
+            {style} celebration
           </p>
+          {/* a tiny confetti cluster echoing the style's palette */}
           <span className="flex shrink-0 items-center gap-1" aria-hidden>
-            {[
-              style === "Hearts" ? "#FF375F" : "#FF375F",
-              style === "Rain" ? "#64D2FF" : "#FF9F0A",
-              "#30D158",
-              "#007AFF",
-              "#5E5CE6",
-            ].map((c, i) => (
-              <span key={i} className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
-            ))}
+            <span className="h-3.5 w-[4px] rounded-full" style={{ backgroundColor: palette[0] }} />
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: palette[1] }} />
+            <span className="h-2.5 w-[7px] rounded-[2px]" style={{ backgroundColor: palette[2] }} />
+            <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: palette[3] }} />
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: palette[4] }} />
           </span>
         </div>
       );
@@ -1740,6 +1747,76 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
 }
 
 /* ------------------------------------------------------------------ */
+/* Confetti block editor — four curated styles with a live preview     */
+/* stage that plays exactly what the recipient will see                */
+/* ------------------------------------------------------------------ */
+
+function ConfettiBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const raw = d.style as string | undefined;
+  const style: ConfettiStyleName = (CONFETTI_STYLES as string[]).includes(raw ?? "")
+    ? (raw as ConfettiStyleName)
+    : "Burst";
+  // Starts at 1 so the preview auto-plays on mount; bumping it remounts the
+  // one-shot ConfettiFX (its particles settle at opacity 0, so it can stay
+  // mounted between runs with zero visual or interaction cost).
+  const [runId, setRunId] = useState(1);
+
+  const replay = () => setRunId((r) => r + 1);
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview stage — exactly what the recipient will see */}
+      <div
+        className="relative overflow-hidden rounded-[22px] border border-[#1D1D1F]/[0.06]"
+        style={{
+          background:
+            "radial-gradient(120% 90% at 50% 0%, rgba(255,55,95,0.09) 0%, transparent 58%), linear-gradient(180deg, #F5F5F7 0%, #FFFFFF 100%)",
+        }}
+      >
+        <ConfettiFX key={runId} style={style} onDark={false} />
+        <div className="relative flex h-[150px] flex-col items-center justify-center">
+          <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#FF6482] to-[#FF9F0A] text-white shadow-[0_10px_26px_-8px_rgba(255,100,130,0.6)]">
+            <PartyPopper size={21} aria-hidden />
+          </span>
+          <p className="mt-3 text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+            {style} celebration
+          </p>
+          <p className="mt-0.5 text-[11px] font-medium text-[#AAAAAA]">Fires the moment this scene opens</p>
+        </div>
+        <div className="relative flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3.5 py-2.5">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">Live preview</p>
+          <button
+            type="button"
+            onClick={replay}
+            className="flex items-center gap-1.5 rounded-full bg-[#1D1D1F]/[0.05] px-3 py-1.5 text-[11.5px] font-bold text-[#1D1D1F]/70 transition-all hover:bg-[#1D1D1F]/[0.09] active:scale-95"
+          >
+            <Play size={11} aria-hidden /> Replay
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Celebration style</FieldLabel>
+        <ChipGroup
+          options={CONFETTI_STYLES.map((s) => ({ value: s, label: s }))}
+          value={style}
+          onChange={(v) => {
+            set({ style: v });
+            replay();
+          }}
+          groupLabel="Confetti style"
+        />
+        <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+          {CONFETTI_DESCRIPTIONS[style]}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Audio block editor — catalog search | file upload + play mode        */
 /* ------------------------------------------------------------------ */
 
@@ -2260,20 +2337,7 @@ function BlockEditorContent({
       );
     }
     case "confetti":
-      return (
-        <div className="pb-2">
-          <FieldLabel>Celebration style</FieldLabel>
-          <ChipGroup
-            options={CONFETTI_STYLES.map((s) => ({ value: s, label: s }))}
-            value={d.style}
-            onChange={(v) => set({ style: v })}
-            groupLabel="Confetti style"
-          />
-          <p className="mt-3 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
-            Fires the moment this scene opens.
-          </p>
-        </div>
-      );
+      return <ConfettiBlockEditor block={block} onChange={onChange} />;
     default:
       return null;
   }

@@ -28,56 +28,11 @@ import type { BlockDoc, SceneDoc, SongPick } from "@/lib/md-blocks";
 import { backgroundDimClass, formatClock, normalizeUrl, photoFilterCss, urlDomain } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
 import { GiftBox, GiftConfetti, isLightWrap } from "./gift-box";
+import { CONFETTI_PALETTES, ConfettiFX, type ConfettiStyleName } from "./confetti";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
 import { cn } from "@/lib/utils";
 
-const CONFETTI_COLORS = ["#007AFF", "#64D2FF", "#FF6482", "#FFD60A", "#FFFFFF", "#30D158"];
-
-interface Particle {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-  rotate: number;
-  delay: number;
-  color: string;
-}
-
-/** One-shot confetti burst (gift reveal / confetti blocks) */
-function ConfettiBurst() {
-  const [particles] = useState<Particle[]>(() =>
-    Array.from({ length: 28 }, (_, i) => {
-      const angle = (i / 28) * 360 + (Math.random() - 0.5) * 18;
-      const distance = 90 + Math.random() * 120;
-      const rad = (angle * Math.PI) / 180;
-      return {
-        id: i,
-        x: Math.cos(rad) * distance,
-        y: Math.sin(rad) * distance,
-        size: 6 + Math.random() * 7,
-        rotate: Math.random() * 720 - 360,
-        delay: Math.random() * 0.14,
-        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-      };
-    })
-  );
-
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      {particles.map((p) => (
-        <motion.span
-          key={p.id}
-          initial={{ x: 0, y: 0, opacity: 1, rotate: 0, scale: 0.5 }}
-          animate={{ x: p.x, y: p.y, opacity: 0, rotate: p.rotate, scale: 1 }}
-          transition={{ duration: 1.05, ease: "easeOut", delay: p.delay }}
-          className="absolute rounded-[2px]"
-          style={{ width: p.size, height: p.size * 0.72, backgroundColor: p.color }}
-        />
-      ))}
-    </div>
-  );
-}
 
 /** Progress dots (scene indicator) — adapts to light/dark scenes */
 function SceneDots({ total, current, light }: { total: number; current: number; light?: boolean }) {
@@ -909,7 +864,7 @@ function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
             <Check size={12} strokeWidth={3} aria-hidden /> Yours to use
           </p>
         )}
-        {revealed ? <ConfettiBurst /> : null}
+        {revealed ? <ConfettiFX /> : null}
       </button>
 
       {/* Post-reveal actions — copy the code, open the redeem link */}
@@ -1006,6 +961,8 @@ function CtaBlockView({ block, index, onAction }: { block: BlockDoc; index: numb
 
 function ConfettiBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const style = block.data?.style;
+  const isKnown = ["Burst", "Rain", "Hearts", "Gold"].includes(style as string);
+  const palette = CONFETTI_PALETTES[(isKnown ? style : "Burst") as ConfettiStyleName];
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -1013,14 +970,31 @@ function ConfettiBlockView({ block, index }: { block: BlockDoc; index: number })
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      <ConfettiBurst />
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FF375F]/25 text-[#FF9FB2]">
-        <PartyPopper size={21} aria-hidden />
+      <ConfettiFX style={style} />
+      <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#FF6482] to-[#FF9F0A] text-white shadow-[0_12px_30px_-8px_rgba(255,100,130,0.65)]">
+        <PartyPopper size={24} aria-hidden />
+        {/* breathing halo — the block stays alive after the burst */}
+        <motion.span
+          aria-hidden
+          className="absolute inset-0 rounded-full border border-white/50"
+          animate={{ scale: [1, 1.32], opacity: [0.55, 0] }}
+          transition={{ duration: 1.9, repeat: Infinity, ease: "easeOut" }}
+        />
       </span>
-      <p className="mt-3 text-[15px] font-bold tracking-[-0.01em] text-white">
+      <p className="mt-3.5 text-[15px] font-bold tracking-[-0.01em] text-white">
         {style ? `${style} celebration` : "Celebration!"}
       </p>
-      <p className="mt-1 text-[12.5px] text-white/60">Fired the moment this scene opened</p>
+      {/* the style's palette, echoed as tiny dots */}
+      <span className="mt-2 flex items-center gap-1.5" aria-hidden>
+        {palette.slice(0, 5).map((c) => (
+          <span
+            key={c}
+            className="h-[5px] w-[5px] rounded-full"
+            style={{ backgroundColor: c, boxShadow: `0 0 6px ${c}66` }}
+          />
+        ))}
+      </span>
+      <p className="mt-2.5 text-[12.5px] text-white/60">Fired the moment this scene opened</p>
     </motion.div>
   );
 }
@@ -1512,7 +1486,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
               <CoverArt variant={moment.cover + 3} className="absolute inset-0 h-full">
                 <div className="absolute inset-0 bg-[#1D1D1F]/45" />
               </CoverArt>
-              {giftOpen ? <ConfettiBurst /> : null}
+              {giftOpen ? <ConfettiFX /> : null}
               <div className="relative flex h-full flex-col items-center justify-center px-9 text-center">
                 {!giftOpen ? (
                   <>

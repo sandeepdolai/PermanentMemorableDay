@@ -893,3 +893,34 @@ Stage Summary:
 - Files modified: src/components/memorableday/builder.tsx (editor stage + demo + palette + card mini-box, −MiniGiftPreview), src/components/memorableday/moment-player.tsx (shared box + frosted note + tinted pill/confetti, −local GiftBox).
 - Next-phase candidates: per-wrap subtle pattern/texture (dots, stripes, kraft), gift open sound effect, "peek" hover micro-interaction on the lid, more confetti styles per gift, per-scene soundtrack override, public /e/[slug] recipient page, Spotify credentials drop-in.
 - Recurring 15-min webDevReview cron re-created (job_id 397269).
+
+---
+Task ID: 24
+Agent: Z.ai Code (main orchestrator)
+Task: User: "Make this confetti more aesthetic and beautiful" — redesign the confetti system (block editor + player) into a premium, physics-based celebration engine.
+
+Work Log:
+- Audited the old confetti: ConfettiBurst in moment-player.tsx was a flat 28-rect radial burst; the confetti block's style chips (Burst/Rain/Hearts) did NOTHING in the player (only changed the caption text); the editor had no preview; the block-card showed generic dots.
+- NEW src/components/memorableday/confetti.tsx — a shared celebration engine, ConfettiFX, with 4 curated styles:
+  - Burst: soft luminous flash (glow orb + expanding ring), two staggered waves (30+16 pieces) launched on true gravity arcs (y keyframes [0, apex, apex+fall] with times [0,.58,1] and eases ["easeOut","easeIn"] = parabolic), paper flutter (scaleY oscillation), mixed shapes (paper/dot/strip/heart/4-point-star), 7 twinkling star sparkles, dim veil behind pieces on light backgrounds.
+  - Rain: 38 pieces falling the full viewport height (y "-12vh"→"112vh", left % spread), sine-like sway keyframes, spin, staggered delays 0–1.55s, pastel palette, fade in/out — transform-only so no scroll overflow.
+  - Hearts: rose radial aura, 18 glowing hearts (drop-shadow) floating up with sway/tilt/decelerating rise + 9 gold twinkles.
+  - Gold: champagne aesthetic — breathing warm aura, golden strips/dots/stars fountain (tight ±55° cone, high apex), per-piece golden glow boxShadow.
+  - Exports: CONFETTI_STYLES (now 4, incl. new "Gold"), CONFETTI_PALETTES, CONFETTI_DESCRIPTIONS, ConfettiStyleName; unknown/legacy style strings normalize to Burst (backward compatible with old drafts).
+- moment-player.tsx: deleted old ConfettiBurst + CONFETTI_COLORS + Particle type; reward reveal and legacy gift scene now use ConfettiFX (Burst default); ConfettiBlockView rewritten — style-aware FX actually fires the chosen style, gradient rose→orange party-popper icon with breathing halo ring (infinite pulse), caption + tiny palette-dot row echoing the style palette, kept "Fired the moment this scene opened" subtext.
+- builder.tsx: new ConfettiBlockEditor mirroring the gift editor pattern — live preview stage (rounded 22px card, rose-tinted radial + #F5F5F7→white gradient, 150px) that AUTO-PLAYS the real ConfettiFX on mount and re-plays instantly on every style change (runId-keyed remount; FX settles at opacity 0 so it stays mounted at zero cost), "Live preview"/Replay footer bar, 4 style chips with per-style description lines, no useEffect-setState (React Compiler clean: replays driven purely from event handlers).
+- Block-card (canvas list) confetti preview: gradient mini party-popper tile + "{style} celebration" + a tiny confetti cluster (strip + dots + square) rendered from the style's actual palette.
+- E2E VERIFIED (agent-browser 1512×900 + 390×844, VLM-checked at every step):
+  - Editor: all 4 styles captured mid-animation — Burst (vibrant mixed shapes fanning radially + center glow), Rain (pieces drifting at staggered heights, streamers + hearts), Hearts (floating pink hearts + star twinkles, "highly aesthetic, no glitches"), Gold (champagne strips/dots/four-point stars in warm glow, "premium celebration effect"); Replay button works; chips switch + auto-replay instantly; captions update.
+  - Block card: gradient icon + "Gold celebration" + gold cluster confirmed.
+  - Player: Gold celebration verified live mid-animation (champagne glow behind icon, star clusters fanning up, golden dots + ribbons — VLM: "dynamic mid-air celebration feel"); Rain verified live (full-screen shower at multiple depths, streamers/dots/squares/hearts, palette-dot row, "gentle storm of happiness"); persistence proven end-to-end (preview reads the autosaved draft — style changes showed in the player after close/reopen).
+  - Mobile 390px: player scene + editor sheet both fully in-viewport, no overflow, chips well-spaced (only artifact = Next.js dev "N" badge, not app UI).
+  - Hygiene: bun run lint exit 0; fresh reload console 0 errors (one stale mid-edit HMR error observed transiently — gone after settle, matches the known gotcha); no DB cleanup needed (QA draft never saved).
+- React Compiler lint learnings this round: (1) react-hooks/preserve-manual-memoization fires when a useMemo references prop-derived values not in deps — fixed by adding [glow] deps; (2) setState synchronously inside useEffect is now an ERROR — fixed by driving replays from event handlers + key-remount instead of effects; (3) eslint-disable-next-line react-hooks/exhaustive-deps is itself flagged as unused directive in this project (reportUnusedDisableDirectives) — don't add them.
+
+Stage Summary:
+- The confetti is now a genuine celebration engine: 4 aesthetic, physics-based styles (gravity-arc Burst, full-viewport Rain, glowing Hearts, champagne Gold) with flash/aura/sparkle layering, actually style-aware in the player (the old gap where chips did nothing is fixed), with a live auto-playing preview stage in the builder, palette-echoing block cards, backward-compatible data, lint 0, and E2E-verified on desktop + mobile.
+- Files added: src/components/memorableday/confetti.tsx (ConfettiFX + BurstFX/RainFX/HeartsFX/GoldFX + palettes/descriptions).
+- Files modified: src/components/memorableday/moment-player.tsx (−ConfettiBurst/CONFETTI_COLORS, style-aware ConfettiBlockView, ConfettiFX in reward + legacy gift), src/components/memorableday/builder.tsx (+ConfettiBlockEditor with live stage, 4 chips incl. Gold, palette cluster block card; −local CONFETTI_STYLES const).
+- SECURITY (carried over): the GitHub classic PAT was posted in chat in earlier sessions — user must rotate it.
+- Next-phase candidates (queue): REAL upload backend (multipart API + persistent storage — user mandate "no mock upload"), GitHub push of full source (token rotation reminder), Spotify credentials drop-in, per-gift confetti style picker, confetti replay button in the player, public /e/[slug] recipient page, per-scene soundtrack override.
