@@ -61,3 +61,6 @@ server.log
 
 # agent QA artifacts
 /tool-results/
+upload/
+download/
+--full-page
