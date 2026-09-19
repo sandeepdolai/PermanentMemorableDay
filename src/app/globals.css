@@ -330,6 +330,16 @@
   }
 }
 
+/* Reward ticket — a diagonal light band sweeping across the code zone */
+@keyframes md-ticket-shine {
+  0% {
+    transform: translateX(-160%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(340%) skewX(-12deg);
+  }
+}
+
 /* ================================================================== */
 /* DARK-MODE BRIDGE                                                    */
 /* The app styles with the exact light palette via arbitrary-value     */

@@ -924,3 +924,42 @@ Stage Summary:
 - Files modified: src/components/memorableday/moment-player.tsx (−ConfettiBurst/CONFETTI_COLORS, style-aware ConfettiBlockView, ConfettiFX in reward + legacy gift), src/components/memorableday/builder.tsx (+ConfettiBlockEditor with live stage, 4 chips incl. Gold, palette cluster block card; −local CONFETTI_STYLES const).
 - SECURITY (carried over): the GitHub classic PAT was posted in chat in earlier sessions — user must rotate it.
 - Next-phase candidates (queue): REAL upload backend (multipart API + persistent storage — user mandate "no mock upload"), GitHub push of full source (token rotation reminder), Spotify credentials drop-in, per-gift confetti style picker, confetti replay button in the player, public /e/[slug] recipient page, per-scene soundtrack override.
+
+---
+Task ID: 25
+Agent: Z.ai Code (main orchestrator)
+Task: User: "Now work on Reward block make this aesthetic and beautifull. And user can type capital letter lowercase letter every type." — redesign the Reward block into a premium coupon-ticket experience + remove the forced uppercase on the code input.
+
+Work Log:
+- Audited the old reward block: player view was a flat dashed-border card (plain icon circle, mono text, "Tap to reveal"); the builder editor force-uppercased the code input (`set({ code: e.target.value.toUpperCase() })` — the exact bug the user reported); editor had no preview; block card was a dashed green box.
+- NEW src/components/memorableday/reward-ticket.tsx — shared "golden coupon" component (RewardTicket + REWARD_KIND_META + rewardKindMeta):
+  - Frosted-glass ticket card (dark scenes: white/7 glass + backdrop-blur + emerald radial wash + top sheen line; editor: white card + soft emerald shadow).
+  - Medallion: gradient emerald disc (5BE07E→30D158→1E9E4A) with Award glyph, ambient glow, and a slowly rotating conic-gradient sheen ring (masked to a ring) while sealed.
+  - Kind eyebrow pill (COUPON/GIFT CARD/DOWNLOAD; sparkle icon appears when revealed) + code zone (inset panel, mono, wide tracking, break-all for long codes): sealed = blurred + opacity 0.55 + looping shimmer band; revealed = crisp + one-shot diagonal shine sweep (md-ticket-shine keyframes added to globals.css).
+  - Perforation tear line: dashed rule with rotated-diamond cut marks at both ends + tiny Scissors icon (classic coupon cue).
+  - Status footer: pulsing "Tap to reveal" (CSS animate-pulse on inner span) ↔ spring-in green "Yours to use" ✓ pill (AnimatePresence mode="wait").
+  - Reveal fires the shared ConfettiFX (onDark-aware) — the same celebration engine as the confetti block.
+  - Renders as motion.button (tap feedback, stopPropagation) when onOpen given; static pointer-events-none otherwise.
+- moment-player.tsx: RewardBlockView now renders RewardTicket (revealed state via useState); action row upgraded — Copy code pill (frosted glass, morphs to green "Copied ✓"), redeem pill (gradient 5BE07E→1E9E4A + glow + domain), spring-in after reveal (delay 0.22); removed now-unused Award import.
+- builder.tsx:
+  - RewardBlockEditor (mirrors the gift/confetti stage pattern): live preview stage with the REAL RewardTicket (tap ticket or "Preview the reveal" button → useRevealDemo 3s play/reset), "Live preview — tap the ticket"/"What they'll see" caption swap.
+  - Reward type upgraded from plain chips to a 3-tile visual radiogroup (Ticket/CreditCard/Download icons in gradient medallions when active + blurbs; Coupon default, unknown kinds normalize).
+  - **Code input: removed .toUpperCase() — mixed case, numbers and symbols now preserved exactly as typed** (user's core request); autoCapitalize/autoCorrect/spellCheck off; new placeholder "Summer-24!"; helper "Any format works — capitals, lowercase, numbers & symbols." + 0/24 char counter.
+  - Redeem link unchanged + green domain chip.
+  - Block-card preview: white card + gradient award tile + "Gift card reveal" + mono code (truncates) + domain line.
+- BUG FOUND & FIXED during QA: the sealed hint used framer `animate` keyframes with `repeat: Infinity` on opacity — the exit animation inherited the infinite repeat, never completed, and with AnimatePresence mode="wait" the "Yours to use" pill never mounted (footer stuck on "Tap to reveal" while the code was already revealed). Fix: framer handles only enter/exit (0.22s), the pulse moved to CSS animate-pulse on an inner span (fully decoupled from framer's opacity).
+- E2E VERIFIED (agent-browser desktop 1512×900 + mobile 390×844, VLM-checked at every step):
+  - Editor: sealed ticket (medallion, Coupon pill, blurred code + shimmer, perforation + scissors, "Tap to reveal") all confirmed; typed "sUmMeR-24!xY" and it persisted as-typed in input, ticket, and player; type switch to Gift card updates the ticket pill + tile instantly; reveal demo plays confetti burst around the ticket; open state shows "Yours to use" ✓ pill (after fix), clear mixed-case code, sparkle kind pill — VLM verdict "premium and aesthetic".
+  - Persistence: Save Draft → Home "Continue editing Untitled Experience" → reopen → Preview: sealed GIFT CARD ticket in the dark player (frosted glass, medallion, blurred+shimmer code, perforation, pulsing hint — all VLM-confirmed); tap → confetti burst (stars/circles/sparkles) → open ticket with exact code sUmMeR-24!xY, "Yours to use" ✓, Copy code + gradient "shop.memorableday.in" redeem pill.
+  - Copy flow: headless clipboard is permission-blocked (expected); the app's fallback chain fired the "Code: sUmMeR-24!xY" toast — last-resort path works.
+  - Mobile 390px: ticket centered, action pills wrap cleanly, no overflow/clipping.
+  - Block card: gradient icon + "Gift card reveal" + mono sUmMeR-24!xY + "Redeem at shop.memorableday.in" confirmed.
+  - Hygiene: bun run lint exit 0; 0 page errors; 0 console errors on the flow; QA draft deleted via API (dmu83w9t40wow60, 200).
+- Tool gotchas this round: agent-browser a11y snapshots can go stale after overlay close (snapshot showed Home while the DOM was the builder — trust eval dumps over cached snapshots); the SCENE_BLOCKS tiles, block cards and Edit buttons are all hit-test-blocked by overlays in this build — programmatic .click() via eval is the reliable path; a fresh browser session re-triggers the welcome tour (Skip it before QA); the reward block card is an LI with aria-label (its only inner button is the drag grip — click the LI itself to select).
+
+Stage Summary:
+- The Reward block is now a premium golden-coupon experience: a shared frosted-glass ticket with medallion + rotating sheen ring, blurred/shimmering secret code that reveals with a one-shot shine sweep, perforation tear line with scissors, pulsing hint ↔ "Yours to use" ✓, and the shared ConfettiFX celebration — identical art in the builder's live preview stage (tap-to-play) and the player (with upgraded Copy code / gradient redeem pills). The code input accepts every character type exactly as typed (no more forced uppercase), with a 3-tile icon type picker and char counter. Lint 0, E2E-verified desktop + mobile, draft cleaned up.
+- Files added: src/components/memorableday/reward-ticket.tsx (RewardTicket + REWARD_KIND_META + rewardKindMeta).
+- Files modified: src/app/globals.css (+md-ticket-shine keyframes), src/components/memorableday/moment-player.tsx (RewardBlockView → RewardTicket + upgraded action row, −Award import), src/components/memorableday/builder.tsx (+RewardBlockEditor with live stage + type tiles + free-typing code input, block-card upgrade; −old inline reward case).
+- Next-phase candidates (queue): REAL upload backend (multipart API + persistent storage — user mandate "no mock upload"), GitHub push of full source (token rotation reminder), Spotify credentials drop-in, confetti style picker per gift/reward, public /e/[slug] recipient page, per-scene soundtrack override.
+- SECURITY (carried over): the GitHub classic PAT was posted in chat in earlier sessions — user must rotate it.

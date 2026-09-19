@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AudioLines,
-  Award,
   Check,
   ChevronRight,
   Clock,
@@ -29,6 +28,7 @@ import { backgroundDimClass, formatClock, normalizeUrl, photoFilterCss, urlDomai
 import { CoverArt } from "./cover-art";
 import { GiftBox, GiftConfetti, isLightWrap } from "./gift-box";
 import { CONFETTI_PALETTES, ConfettiFX, type ConfettiStyleName } from "./confetti";
+import { RewardTicket } from "./reward-ticket";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
 import { cn } from "@/lib/utils";
@@ -794,7 +794,7 @@ function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const d = block.data;
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
-  const kind = d?.rewardKind ?? "Reward";
+  const kind = d?.rewardKind;
   const code = d?.code?.trim() || "MD-REWARD";
   const url = d?.url?.trim();
   const domain = url ? urlDomain(url) : null;
@@ -836,75 +836,64 @@ function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation(); // keep the scene put while revealing
-          setRevealed(true);
-        }}
-        aria-label={revealed ? "Reward revealed" : "Tap to reveal your reward"}
-        className="relative w-full max-w-[340px] rounded-[22px] border-2 border-dashed border-[#30D158]/45 bg-[#30D158]/[0.08] px-6 py-7 text-center active:scale-[0.98]"
-      >
-        <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#30D158]/20 text-[#5BE07E]">
-          <Award size={20} aria-hidden />
-        </span>
-        <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#5BE07E]">{kind} reveal</p>
-        <p
-          className={cn(
-            "mt-2 font-mono text-[19px] font-bold tracking-[0.1em] transition-all duration-300",
-            revealed ? "text-white" : "select-none text-white/20 blur-[6px]"
-          )}
-        >
-          {code}
-        </p>
-        {!revealed ? (
-          <p className="mt-3 text-[12px] font-semibold text-white/60">Tap to reveal</p>
-        ) : (
-          <p className="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-[#5BE07E]">
-            <Check size={12} strokeWidth={3} aria-hidden /> Yours to use
-          </p>
-        )}
-        {revealed ? <ConfettiFX /> : null}
-      </button>
+      <RewardTicket
+        kind={kind}
+        code={code}
+        open={revealed}
+        onOpen={() => setRevealed(true)}
+      />
 
       {/* Post-reveal actions — copy the code, open the redeem link */}
-      {revealed ? (
-        <span className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              void copyCode();
-            }}
-            aria-label="Copy reward code"
-            className="flex items-center gap-1.5 rounded-full bg-white/12 px-4 py-2 text-[12.5px] font-semibold text-white backdrop-blur-md transition-transform active:scale-95"
+      <AnimatePresence>
+        {revealed ? (
+          <motion.span
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.22 }}
+            className="mt-4 flex flex-wrap items-center justify-center gap-2"
           >
-            {copied ? (
-              <>
-                <Check size={13} strokeWidth={3} aria-hidden /> Copied
-              </>
-            ) : (
-              <>
-                <Copy size={13} aria-hidden /> Copy code
-              </>
-            )}
-          </button>
-          {url && domain ? (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                window.open(normalizeUrl(url), "_blank", "noopener,noreferrer");
-                notify(`Opening ${domain}…`);
+                void copyCode();
               }}
-              aria-label={`Redeem at ${domain}`}
-              className="flex items-center gap-1.5 rounded-full bg-[#30D158]/25 px-4 py-2 text-[12.5px] font-semibold text-white backdrop-blur-md transition-transform active:scale-95"
+              aria-label="Copy reward code"
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-[1.1rem] py-2.5 text-[12.5px] font-semibold backdrop-blur-md transition-all active:scale-95",
+                copied
+                  ? "border-[#30D158]/50 bg-[#30D158]/25 text-[#8CE8B0]"
+                  : "border-white/15 bg-white/12 text-white hover:bg-white/20"
+              )}
             >
-              <ExternalLink size={13} aria-hidden /> {domain}
+              {copied ? (
+                <>
+                  <Check size={13} strokeWidth={3} aria-hidden /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy size={13} aria-hidden /> Copy code
+                </>
+              )}
             </button>
-          ) : null}
-        </span>
-      ) : null}
+            {url && domain ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(normalizeUrl(url), "_blank", "noopener,noreferrer");
+                  notify(`Opening ${domain}…`);
+                }}
+                aria-label={`Redeem at ${domain}`}
+                className="flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#5BE07E] to-[#1E9E4A] px-4 py-2.5 text-[12.5px] font-bold text-white shadow-[0_10px_26px_-8px_rgba(48,209,88,0.75)] transition-transform active:scale-95"
+              >
+                <ExternalLink size={13} aria-hidden /> {domain}
+              </button>
+            ) : null}
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
     </motion.div>
   );
 }

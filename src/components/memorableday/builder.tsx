@@ -10,6 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  CreditCard,
+  Download,
   ExternalLink,
   FileMusic,
   Gift,
@@ -30,6 +32,7 @@ import {
   Share2,
   Sparkles,
   Trash2,
+  Ticket,
   Type,
   Undo2,
   Upload,
@@ -66,6 +69,7 @@ import {
   ConfettiFX,
   type ConfettiStyleName,
 } from "./confetti";
+import { RewardTicket, rewardKindMeta } from "./reward-ticket";
 import {
   GiftBox,
   GiftConfetti,
@@ -496,21 +500,24 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     }
     case "reward": {
       const kind = d?.rewardKind;
+      const meta = rewardKindMeta(kind);
       const code = d?.code?.trim();
       const domain = d?.url?.trim() ? urlDomain(d.url) : null;
       return (
-        <div className="flex items-center gap-3 rounded-[14px] border border-dashed border-[#30D158]/40 bg-[#30D158]/[0.06] px-4 py-3">
-          <Award size={20} className="shrink-0 text-[#1E9E4A]" aria-hidden />
+        <div className="flex items-center gap-3 rounded-[14px] border border-[#1D1D1F]/[0.06] bg-white px-3.5 py-3 shadow-[0_8px_20px_-12px_rgba(30,158,74,0.35)]">
+          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-gradient-to-br from-[#5BE07E] to-[#1E9E4A] text-white shadow-[0_6px_14px_-4px_rgba(48,209,88,0.55)]">
+            <Award size={16} aria-hidden />
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1E9E4A]">
-              {kind ? `${kind} reveal` : "Reward reveal"}
+            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+              {meta.label} reveal
             </p>
             {code ? (
-              <p className="mt-0.5 font-mono text-[12px] font-semibold tracking-[0.08em] text-[#1E9E4A]/80">
+              <p className="mt-0.5 truncate font-mono text-[12px] font-semibold tracking-[0.08em] text-[#1E9E4A]/80">
                 {code}
               </p>
             ) : (
-              <p className="text-[12px] text-[#AAAAAA]">Attach a coupon, gift card or download</p>
+              <p className="text-[12px] text-[#AAAAAA]">{meta.blurb}</p>
             )}
             {domain ? (
               <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[#1E9E4A]/70">
@@ -1747,6 +1754,172 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
 }
 
 /* ------------------------------------------------------------------ */
+/* Reward block editor — the golden coupon with a live reveal stage    */
+/* ------------------------------------------------------------------ */
+
+/** Visual tiles for the three reward kinds (icon + blurb). */
+const REWARD_KIND_TILES: { value: string; icon: IconType; blurb: string }[] = [
+  { value: "Coupon", icon: Ticket, blurb: "Discount at checkout" },
+  { value: "Gift card", icon: CreditCard, blurb: "Prepaid balance" },
+  { value: "Download", icon: Download, blurb: "File or unlock link" },
+];
+
+function RewardBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const kind = d.rewardKind && REWARD_KINDS.includes(d.rewardKind) ? d.rewardKind : "Coupon";
+  const code = (d.code ?? "").trim() || "MD-REWARD";
+  const domain = d.url?.trim() ? urlDomain(d.url) : null;
+  const { demoOpen, play } = useRevealDemo(3000);
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview stage — exactly what the recipient will see */}
+      <div
+        className="relative overflow-hidden rounded-[22px] border border-[#1D1D1F]/[0.06]"
+        style={{
+          background:
+            "radial-gradient(120% 85% at 50% 0%, rgba(48,209,88,0.12) 0%, transparent 58%), linear-gradient(180deg, #F5F5F7 0%, #FFFFFF 100%)",
+        }}
+      >
+        <div className="relative flex flex-col items-center px-5 pt-4">
+          <RewardTicket
+            kind={kind}
+            code={code}
+            open={demoOpen}
+            onOpen={play}
+            onDark={false}
+          />
+          <div className="h-2" />
+        </div>
+        <div className="relative flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3.5 py-2.5">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
+            {demoOpen ? "What they’ll see" : "Live preview — tap the ticket"}
+          </p>
+          <button
+            type="button"
+            onClick={play}
+            className="flex items-center gap-1.5 rounded-full bg-[#1D1D1F]/[0.05] px-3 py-1.5 text-[11.5px] font-bold text-[#1D1D1F]/70 transition-all hover:bg-[#1D1D1F]/[0.09] active:scale-95"
+          >
+            <Play size={11} aria-hidden /> Preview the reveal
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Reward type</FieldLabel>
+        <div
+          className="grid grid-cols-3 gap-2"
+          role="radiogroup"
+          aria-label="Reward type"
+        >
+          {REWARD_KIND_TILES.map((t) => {
+            const active = kind === t.value;
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => set({ rewardKind: t.value })}
+                className={cn(
+                  "flex flex-col items-center gap-1 rounded-[16px] border-2 px-2 py-3 transition-all active:scale-[0.97]",
+                  active
+                    ? "border-[#30D158] bg-[#30D158]/[0.06]"
+                    : "border-[#1D1D1F]/[0.08] bg-white hover:border-[#1D1D1F]/[0.16]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+                    active
+                      ? "bg-gradient-to-br from-[#5BE07E] to-[#1E9E4A] text-white"
+                      : "bg-[#1D1D1F]/[0.05] text-[#1D1D1F]/55"
+                  )}
+                >
+                  <Icon size={15} aria-hidden />
+                </span>
+                <span
+                  className={cn(
+                    "text-[12px] font-bold tracking-[-0.01em]",
+                    active ? "text-[#1E9E4A]" : "text-[#1D1D1F]/70"
+                  )}
+                >
+                  {t.value}
+                </span>
+                <span className="text-[9.5px] font-medium leading-tight text-[#AAAAAA]">
+                  {t.blurb}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="md-reward-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          Code
+        </label>
+        <input
+          id="md-reward-code"
+          maxLength={24}
+          value={d.code ?? ""}
+          onChange={(e) => set({ code: e.target.value })}
+          placeholder="Summer-24!"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          className={cn(fieldInput, "font-mono tracking-[0.08em]")}
+        />
+        <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
+          <p className="text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+            Any format works — capitals, lowercase, numbers &amp; symbols.
+          </p>
+          <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[#AAAAAA]">
+            {(d.code ?? "").length}/24
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="md-reward-url" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          Redeem link · optional
+        </label>
+        <div className="relative">
+          <Link2
+            size={15}
+            aria-hidden
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
+          />
+          <input
+            id="md-reward-url"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            maxLength={200}
+            value={d.url ?? ""}
+            onChange={(e) => set({ url: e.target.value })}
+            placeholder="https://your-shop.com/redeem"
+            className={cn(fieldInput, "pl-9")}
+          />
+        </div>
+        {domain ? (
+          <p className="mt-2 flex items-center gap-1.5 rounded-full bg-[#1E9E4A]/[0.08] px-3 py-1.5 text-[12px] font-semibold text-[#1E9E4A]">
+            <ExternalLink size={12} aria-hidden />
+            Redeem at <span className="font-bold">{domain}</span>
+          </p>
+        ) : (
+          <p className="mt-1.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+            Where they use the code — a button appears after the reveal.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Confetti block editor — four curated styles with a live preview     */
 /* stage that plays exactly what the recipient will see                */
 /* ------------------------------------------------------------------ */
@@ -2205,68 +2378,8 @@ function BlockEditorContent({
         </div>
       );
     }
-    case "reward": {
-      const domain = d.url?.trim() ? urlDomain(d.url) : null;
-      return (
-        <div className="space-y-4 pb-2">
-          <div>
-            <FieldLabel>Reward type</FieldLabel>
-            <ChipGroup
-              options={REWARD_KINDS.map((k) => ({ value: k, label: k }))}
-              value={d.rewardKind}
-              onChange={(v) => set({ rewardKind: v })}
-              groupLabel="Reward type"
-            />
-          </div>
-          <div>
-            <label htmlFor="md-reward-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
-              Code
-            </label>
-            <input
-              id="md-reward-code"
-              maxLength={24}
-              value={d.code ?? ""}
-              onChange={(e) => set({ code: e.target.value.toUpperCase() })}
-              placeholder="SPRING24"
-              className={cn(fieldInput, "font-mono tracking-[0.08em]")}
-            />
-          </div>
-          <div>
-            <label htmlFor="md-reward-url" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
-              Redeem link · optional
-            </label>
-            <div className="relative">
-              <Link2
-                size={15}
-                aria-hidden
-                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
-              />
-              <input
-                id="md-reward-url"
-                type="url"
-                inputMode="url"
-                autoComplete="off"
-                maxLength={200}
-                value={d.url ?? ""}
-                onChange={(e) => set({ url: e.target.value })}
-                placeholder="https://your-shop.com/redeem"
-                className={cn(fieldInput, "pl-9")}
-              />
-            </div>
-            {domain ? (
-              <p className="mt-2 flex items-center gap-1.5 rounded-full bg-[#1E9E4A]/[0.08] px-3 py-1.5 text-[12px] font-semibold text-[#1E9E4A]">
-                <ExternalLink size={12} aria-hidden />
-                Redeem at <span className="font-bold">{domain}</span>
-              </p>
-            ) : (
-              <p className="mt-1.5 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
-                Where they use the code — a button appears after the reveal.
-              </p>
-            )}
-          </div>
-        </div>
-      );
-    }
+    case "reward":
+      return <RewardBlockEditor block={block} onChange={onChange} />;
     case "cta": {
       const action = d.action ?? "Open link";
       const domain = d.url?.trim() ? urlDomain(d.url) : null;
