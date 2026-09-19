@@ -170,7 +170,7 @@ export const PRICING_PLANS: Plan[] = [
 ];
 
 export const SEARCH_SUGGESTIONS: Array<{ label: string; hint: string }> = [
-  { label: "3D gift box", hint: "Interactive scene" },
+  { label: "Gift box reveal", hint: "Interactive scene" },
   { label: "Countdown reveal", hint: "Interaction" },
   { label: "Golden hour", hint: "Aesthetic" },
   { label: "Neon", hint: "Aesthetic" },

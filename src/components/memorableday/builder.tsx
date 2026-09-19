@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Clock,
   ExternalLink,
-  Eye,
   FileMusic,
   Gift,
   GripVertical,
@@ -29,7 +28,6 @@ import {
   Redo2,
   Search as SearchIcon,
   Share2,
-  Shuffle,
   Sparkles,
   Trash2,
   Type,
@@ -41,7 +39,7 @@ import {
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { formatDuration } from "@/lib/mock-data";
-import { apiSearchGift3d, apiSearchMusic, apiUploadFile, type Gift3dModel } from "@/lib/md-client";
+import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
 import {
   backgroundDimClass,
   dedupeScenes,
@@ -86,7 +84,7 @@ const BLOCKS: BlockDef[] = [
   { type: "video", label: "Video", icon: Video, tint: "#FF9F0A" },
   { type: "audio", label: "Audio", icon: Music, tint: "#FF375F" },
   { type: "background", label: "Background", icon: Wallpaper, tint: "#64D2FF" },
-  { type: "gift", label: "3D Gift", icon: Gift, tint: "#5E5CE6" },
+  { type: "gift", label: "Gift", icon: Gift, tint: "#5E5CE6" },
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
   { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
@@ -109,7 +107,12 @@ interface Snapshot {
 }
 
 /* Block editor option catalogues (abstract, no themed content) */
-const GIFT_WRAPS = ["#007AFF", "#FF375F", "#5E5CE6", "#30D158", "#FF9F0A"];
+const GIFT_WRAPS = ["#5E5CE6", "#007AFF", "#FF375F", "#30D158", "#FF9F0A", "#64D2FF", "#AF52DE", "#1D1D1F"];
+const GIFT_RIBBONS = [
+  { value: "classic", label: "Classic" },
+  { value: "cross", label: "Cross" },
+  { value: "none", label: "None" },
+] as const;
 const COUNTDOWN_PRESETS = [
   { label: "1 min", minutes: 1 },
   { label: "10 min", minutes: 10 },
@@ -415,43 +418,25 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     case "gift": {
       const wrap = d?.wrap ?? "#5E5CE6";
       const message = d?.message?.trim();
-      const model = d?.modelId;
       return (
         <div className="flex items-center gap-3">
-          {model && d?.modelThumb ? (
-            <span
-              aria-hidden
-              className="h-14 w-14 shrink-0 overflow-hidden rounded-[16px] bg-gradient-to-br from-[#5E5CE6] to-[#FF375F]/60"
-            >
-              <img src={d.modelThumb} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
-            </span>
-          ) : (
-            <span
-              aria-hidden
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] text-white"
-              style={{ background: `linear-gradient(135deg, ${wrap} 0%, ${wrap}C4 60%, ${wrap}8C 100%)` }}
-            >
-              <Gift size={22} strokeWidth={2} />
-            </span>
-          )}
+          <span
+            aria-hidden
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] text-white"
+            style={{ background: `linear-gradient(135deg, ${wrap} 0%, ${wrap}C4 60%, ${wrap}8C 100%)` }}
+          >
+            <Gift size={22} strokeWidth={2} />
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D gift box</p>
-            {model ? (
-              <p className="mt-1 truncate text-[12.5px] font-medium leading-snug text-[#5E5CE6]">
-                {d?.modelName ?? "Sketchfab model"} · drag to spin
-              </p>
-            ) : message ? (
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Gift reveal</p>
+            {message ? (
               <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{message}”</p>
             ) : (
               <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Recipient taps to open — confetti included</p>
             )}
           </div>
           <span className="flex shrink-0 items-center gap-1.5">
-            {model ? (
-              <span className="rounded-full bg-[#5E5CE6] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-white">
-                3D
-              </span>
-            ) : d?.wrap ? (
+            {d?.wrap ? (
               <span aria-hidden className="h-3.5 w-3.5 rounded-full ring-2 ring-white" style={{ backgroundColor: wrap }} />
             ) : null}
             <span className="rounded-full bg-[#5E5CE6]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#5E5CE6]">
@@ -1610,342 +1595,38 @@ function UploadAudioContent({
 }
 
 /* ------------------------------------------------------------------ */
-/* Gift block — classic wrap or a live 3D box from the Sketchfab store */
+/* Gift block — wrapped box reveal (note, wrap color, ribbon)           */
 /* ------------------------------------------------------------------ */
 
-/** Curated 3D box shelves → Sketchfab search queries */
-const GIFT3D_CATEGORIES = [
-  { label: "Gift boxes", q: "gift box" },
-  { label: "Christmas", q: "christmas gift" },
-  { label: "Birthday", q: "birthday gift" },
-  { label: "Hearts", q: "heart gift box" },
-  { label: "Treasure", q: "treasure chest" },
-  { label: "Cute", q: "cute gift box" },
-  { label: "Luxury", q: "luxury gift box" },
-] as const;
-
-/** 1.2k / 3.4M style compact counts for model stats */
-function compactCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
-  return String(n);
-}
-
-function Gift3dPickerContent({
-  selected,
-  onPick,
-  onRemove,
-}: {
-  selected: { id: string; name?: string; author?: string; thumb?: string } | null;
-  onPick: (m: Gift3dModel) => void;
-  onRemove: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [catIdx, setCatIdx] = useState(0);
-  /** Custom query (≥2 chars) overrides the active shelf. */
-  const effQ = query.trim().length >= 2 ? query.trim() : GIFT3D_CATEGORIES[catIdx].q;
-  const [results, setResults] = useState<{
-    q: string;
-    models: Gift3dModel[];
-    error: boolean;
-    nextCursor: number | null;
-  } | null>(null);
-  /** Models appended by "Show more" — keyed by query, so pages from a stale
-   *  query are ignored (and replaced) instead of being reset in an effect. */
-  const [extraPage, setExtraPage] = useState<{
-    q: string;
-    models: Gift3dModel[];
-    nextCursor: number | null;
-  } | null>(null);
-  const [moreBusy, setMoreBusy] = useState(false);
-  /** Bump to retry after an error. */
-  const [nonce, setNonce] = useState(0);
-
-  // Debounced live search against the Sketchfab proxy — states are derived
-  // from (effQ, results) exactly like the song picker, so query changes
-  // never need synchronous resets.
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      apiSearchGift3d(effQ)
-        .then((r) => setResults({ q: effQ, models: r.models, error: false, nextCursor: r.nextCursor }))
-        .catch(() => setResults({ q: effQ, models: [], error: true, nextCursor: null }));
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [effQ, nonce]);
-
-  const settled = results?.q === effQ;
-  const searching = !settled;
-  const error = settled && results.error;
-  const pageAligned = extraPage?.q === effQ ? extraPage : null;
-  const models =
-    settled && !results.error
-      ? [...results.models, ...(pageAligned ? pageAligned.models : [])]
-      : [];
-  const nextCursor = settled && !results.error ? (pageAligned ? pageAligned.nextCursor : results.nextCursor) : null;
-
-  const loadMore = async () => {
-    if (!settled || results.error || nextCursor == null || moreBusy) return;
-    setMoreBusy(true);
-    try {
-      const r = await apiSearchGift3d(effQ, nextCursor);
-      const seen = new Set(models.map((m) => m.id));
-      const merged = [
-        ...(pageAligned ? pageAligned.models : []),
-        ...r.models.filter((m) => !seen.has(m.id)),
-      ];
-      setExtraPage({ q: effQ, models: merged, nextCursor: r.nextCursor });
-    } catch {
-      /* keep the cursor so the creator can retry */
-    }
-    setMoreBusy(false);
-  };
-
-  const surprise = () => {
-    if (models.length === 0) return;
-    onPick(models[Math.floor(Math.random() * models.length)]);
-  };
-
+/** Static mini replica of the player's gift box for the editor preview */
+function MiniGiftPreview({ wrap, ribbon }: { wrap: string; ribbon: string }) {
+  const showBand = ribbon !== "none";
+  const cross = ribbon === "cross";
   return (
-    <div className="pb-2">
-      {/* Selected box — live interactive 3D preview */}
-      {selected ? (
-        <div className="mb-4 overflow-hidden rounded-[18px] border-2 border-[#5E5CE6] bg-[#5E5CE6]/[0.03]">
-          <div className="relative aspect-[4/3] w-full bg-gradient-to-br from-[#5E5CE6]/[0.14] via-[#1D1D1F]/[0.05] to-[#FF375F]/[0.1]">
-            <iframe
-              src={`https://sketchfab.com/models/${selected.id}/embed?autospin=0.5&autostart=1&preload=1&ui_theme=light&ui_infos=0&ui_controls=0&dnt=1`}
-              title={`3D preview — ${selected.name ?? "gift box"}`}
-              allow="autoplay; fullscreen; xr-spatial-tracking"
-              allowFullScreen
-              loading="lazy"
-              className="pointer-events-none absolute inset-0 h-full w-full"
-            />
-            <span className="pointer-events-none absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full bg-[#1D1D1F]/[0.55] px-2 py-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-white backdrop-blur-sm">
-              <Sparkles size={9} aria-hidden /> Live 3D
-            </span>
-          </div>
-          <div className="flex items-center gap-2.5 p-2.5">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
-                {selected.name ?? "3D gift box"}
-              </p>
-              <p className="mt-0.5 truncate text-[11.5px] font-medium text-[#AAAAAA]">
-                by {selected.author ?? "its creator"} · drag to spin · a tap opens your note
-              </p>
-            </div>
-            <a
-              href={`https://sketchfab.com/3d-models/${selected.id}`}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`View ${selected.name ?? "this model"} on Sketchfab`}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1D1D1F]/[0.06] text-[#AAAAAA] transition-colors hover:bg-[#1D1D1F]/[0.1] hover:text-[#1D1D1F]"
-            >
-              <ExternalLink size={14} strokeWidth={2.2} aria-hidden />
-            </a>
-            <button
-              type="button"
-              onClick={onRemove}
-              aria-label="Remove 3D box"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.09] text-[#FF375F] transition-transform active:scale-90"
-            >
-              <Trash2 size={14} strokeWidth={2.2} aria-hidden />
-            </button>
-          </div>
-        </div>
+    <div aria-hidden className="relative mx-auto h-[118px] w-[112px] select-none">
+      {/* box body */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-[84px] rounded-[18px] shadow-[0_16px_30px_-12px_rgba(29,29,31,0.4)]"
+        style={{ background: `linear-gradient(160deg, ${wrap}D9, ${wrap})` }}
+      >
+        {showBand ? <div className="absolute inset-y-0 left-1/2 w-[16px] -translate-x-1/2 bg-white/80" /> : null}
+        {cross ? <div className="absolute inset-x-0 top-1/2 h-[16px] -translate-y-1/2 bg-white/80" /> : null}
+        <div className="absolute inset-0 rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.28),transparent_45%)]" />
+      </div>
+      {/* lid */}
+      <div
+        className="absolute top-[16px] left-[-6px] h-[28px] w-[124px] rounded-[10px] shadow-[0_10px_20px_-8px_rgba(29,29,31,0.3)]"
+        style={{ background: `linear-gradient(160deg, ${wrap}, ${wrap}B3)` }}
+      >
+        {showBand ? <div className="absolute inset-y-0 left-1/2 w-[16px] -translate-x-1/2 bg-white/80" /> : null}
+        <div className="absolute inset-0 rounded-[10px] bg-[linear-gradient(180deg,rgba(255,255,255,0.4),transparent_60%)]" />
+      </div>
+      {/* bow */}
+      {showBand ? (
+        <span className="absolute top-[-6px] left-1/2 flex -translate-x-1/2 items-center justify-center text-white drop-shadow-md">
+          <Heart size={24} fill="currentColor" strokeWidth={0} />
+        </span>
       ) : null}
-
-      {/* Search field */}
-      <div className="relative">
-        <SearchIcon
-          size={15}
-          aria-hidden
-          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]"
-        />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search Sketchfab — “rose gold box”…"
-          aria-label="Search 3D gift boxes"
-          autoComplete="off"
-          className={cn(fieldInput, "pl-9")}
-        />
-        {query ? (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Clear search"
-            className="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[#1D1D1F]/[0.08] text-[#AAAAAA] transition-colors hover:text-[#1D1D1F]"
-          >
-            <X size={11} strokeWidth={2.6} aria-hidden />
-          </button>
-        ) : null}
-      </div>
-
-      {/* Category shelves */}
-      <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar" role="group" aria-label="3D box categories">
-        {GIFT3D_CATEGORIES.map((c, i) => {
-          const active = catIdx === i && query.trim().length < 2;
-          return (
-            <button
-              key={c.q}
-              type="button"
-              aria-pressed={active}
-              onClick={() => {
-                setQuery("");
-                setCatIdx(i);
-              }}
-              className={cn(
-                "shrink-0 rounded-full border px-3 py-[7px] text-[12.5px] font-semibold transition-all active:scale-[0.96]",
-                active
-                  ? "border-transparent bg-[#5E5CE6] text-white pill-shadow"
-                  : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
-              )}
-            >
-              {c.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Results */}
-      <div className="mt-3">
-        {searching ? (
-          <div className="grid grid-cols-2 gap-2.5 py-1" aria-live="polite">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="overflow-hidden rounded-[16px] border border-[#1D1D1F]/[0.06]">
-                <div className="aspect-[4/3] w-full animate-pulse bg-[#1D1D1F]/[0.06]" />
-                <div className="space-y-1.5 p-2">
-                  <div className="h-2.5 w-3/4 animate-pulse rounded-full bg-[#1D1D1F]/[0.06]" />
-                  <div className="h-2 w-1/2 animate-pulse rounded-full bg-[#1D1D1F]/[0.06]" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="py-7 text-center">
-            <span className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-[#FF375F]/[0.08] text-[#FF375F]">
-              <Gift size={17} aria-hidden />
-            </span>
-            <p className="text-[13px] font-semibold text-[#1D1D1F]">The 3D library didn&apos;t respond</p>
-            <p className="mt-1 px-6 text-[11.5px] leading-relaxed text-[#AAAAAA]">
-              Check your connection — your pick is kept.
-            </p>
-            <button
-              type="button"
-              onClick={() => setNonce((n) => n + 1)}
-              className="mt-3 rounded-full border border-[#1D1D1F]/[0.12] bg-white px-4 py-2 text-[12.5px] font-bold text-[#1D1D1F] transition-transform active:scale-[0.96]"
-            >
-              Try again
-            </button>
-          </div>
-        ) : models.length === 0 ? (
-          <div className="py-7 text-center">
-            <span className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-[#5E5CE6]/[0.08] text-[#5E5CE6]">
-              <SearchIcon size={16} aria-hidden />
-            </span>
-            <p className="text-[13px] font-semibold text-[#1D1D1F]">No 3D boxes found</p>
-            <p className="mt-1 px-6 text-[11.5px] leading-relaxed text-[#AAAAAA]">
-              Try another word — “present”, “christmas”, “heart”…
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="mb-2 flex items-center justify-between px-1">
-              <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
-                {models.length} box{models.length === 1 ? "" : "es"}
-              </p>
-              <button
-                type="button"
-                onClick={surprise}
-                className="flex items-center gap-1.5 rounded-full bg-[#5E5CE6]/[0.09] px-3 py-1.5 text-[11.5px] font-bold text-[#5E5CE6] transition-transform active:scale-[0.96]"
-              >
-                <Shuffle size={11} strokeWidth={2.4} aria-hidden /> Surprise me
-              </button>
-            </div>
-            <div className="md-scroll grid max-h-[320px] grid-cols-2 gap-2.5 overflow-y-auto pb-1 pr-0.5">
-              {models.map((m) => {
-                const isSel = selected?.id === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => onPick(m)}
-                    aria-label={`Use ${m.name} by ${m.author}`}
-                    aria-pressed={isSel}
-                    className={cn(
-                      "group overflow-hidden rounded-[16px] border-2 bg-white text-left transition-all active:scale-[0.97]",
-                      isSel ? "border-[#5E5CE6] shadow-[0_8px_22px_-8px_rgba(94,92,230,0.5)]" : "border-[#1D1D1F]/[0.07] hover:border-[#1D1D1F]/[0.18]"
-                    )}
-                  >
-                    <span className="relative block aspect-[4/3] w-full bg-gradient-to-br from-[#5E5CE6]/[0.14] to-[#FF375F]/[0.1]">
-                      {m.thumb ? (
-                        <img
-                          src={m.thumb}
-                          alt=""
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-                        />
-                      ) : (
-                        <span aria-hidden className="absolute inset-0 flex items-center justify-center text-[#5E5CE6]">
-                          <Gift size={22} strokeWidth={1.8} />
-                        </span>
-                      )}
-                      {m.animated ? (
-                        <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/[0.45] px-1.5 py-[3px] text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
-                          <Sparkles size={8} aria-hidden /> animated
-                        </span>
-                      ) : null}
-                      {isSel ? (
-                        <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#5E5CE6] text-white shadow-md">
-                          <Check size={11} strokeWidth={3} aria-hidden />
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="block p-2">
-                      <span className="block truncate text-[12.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
-                        {m.name}
-                      </span>
-                      <span className="mt-0.5 block truncate text-[10.5px] font-medium text-[#AAAAAA]">{m.author}</span>
-                      <span className="mt-1 flex items-center gap-2 text-[10px] font-semibold tabular-nums text-[#AAAAAA]">
-                        <span className="flex items-center gap-0.5">
-                          <Heart size={9} aria-hidden /> {compactCount(m.likes)}
-                        </span>
-                        <span className="flex items-center gap-0.5">
-                          <Eye size={9} aria-hidden /> {compactCount(m.views)}
-                        </span>
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            {settled && !error && nextCursor != null ? (
-              <button
-                type="button"
-                onClick={loadMore}
-                disabled={moreBusy}
-                className="mt-2.5 w-full rounded-full border border-[#1D1D1F]/[0.1] bg-white py-2.5 text-[12.5px] font-bold text-[#1D1D1F]/80 transition-transform active:scale-[0.98] disabled:opacity-60"
-              >
-                {moreBusy ? <span className="animate-pulse">Loading more boxes…</span> : "Show more boxes"}
-              </button>
-            ) : null}
-          </>
-        )}
-      </div>
-
-      {/* Attribution */}
-      <p className="mt-3 px-1 text-center text-[10.5px] font-medium leading-relaxed text-[#AAAAAA]">
-        Live 3D library by{" "}
-        <a
-          href="https://sketchfab.com"
-          target="_blank"
-          rel="noreferrer"
-          className="font-semibold text-[#5E5CE6] underline decoration-[#5E5CE6]/30 underline-offset-2"
-        >
-          Sketchfab
-        </a>{" "}
-        — models © their creators.
-      </p>
     </div>
   );
 }
@@ -1953,15 +1634,24 @@ function Gift3dPickerContent({
 function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
   const d = block.data ?? {};
   const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
-  const [tab, setTab] = useState<"classic" | "3d">(d.modelId ? "3d" : "classic");
-
-  const clearModel = () =>
-    set({ modelId: undefined, modelName: undefined, modelThumb: undefined, modelAuthor: undefined });
+  const wrap = d.wrap ?? "#5E5CE6";
+  const ribbon = d.ribbon ?? "classic";
 
   return (
     <div className="space-y-4 pb-2">
+      {/* Live preview */}
+      <div className="rounded-[20px] border border-[#1D1D1F]/[0.06] bg-gradient-to-b from-[#F5F5F7] to-white pb-3 pt-5">
+        <MiniGiftPreview wrap={wrap} ribbon={ribbon} />
+        <p className="mt-1 text-center text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
+          Live preview
+        </p>
+      </div>
+
       <div>
-        <label htmlFor="md-gift-note" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+        <label
+          htmlFor="md-gift-note"
+          className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]"
+        >
           Note inside the gift
         </label>
         <textarea
@@ -1973,61 +1663,67 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
           placeholder="Shown when the box opens"
           className={cn(fieldInput, "resize-none leading-relaxed")}
         />
-      </div>
-      <div>
-        <FieldLabel>Gift box</FieldLabel>
-        <SegmentedControl
-          id="md-gift-box-style"
-          options={[
-            { value: "classic", label: "Classic wrap" },
-            { value: "3d", label: "3D box" },
-          ]}
-          value={tab}
-          onChange={(v) => {
-            setTab(v);
-            if (v === "classic") clearModel();
-          }}
-        />
-      </div>
-      {tab === "classic" ? (
-        <div>
-          <FieldLabel>Wrap</FieldLabel>
-          <div className="flex gap-2.5" role="radiogroup" aria-label="Gift wrap color">
-            {GIFT_WRAPS.map((c) => {
-              const active = (d.wrap ?? "#5E5CE6") === c;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  aria-label={`Wrap color ${c}`}
-                  onClick={() => set({ wrap: c })}
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
-                    active && "ring-2 ring-[#1D1D1F] ring-offset-2 ring-offset-white"
-                  )}
-                  style={{ backgroundColor: c }}
-                >
-                  {active ? <Check size={15} strokeWidth={3} className="text-white drop-shadow" aria-hidden /> : null}
-                </button>
-              );
-            })}
-          </div>
+        <div className="mt-1.5 flex justify-end">
+          <span className="text-[10.5px] font-semibold tabular-nums text-[#AAAAAA]">
+            {(d.message ?? "").length}/90
+          </span>
         </div>
-      ) : (
-        <Gift3dPickerContent
-          selected={
-            d.modelId
-              ? { id: d.modelId, name: d.modelName, author: d.modelAuthor, thumb: d.modelThumb }
-              : null
-          }
-          onPick={(m) =>
-            set({ modelId: m.id, modelName: m.name, modelThumb: m.thumb, modelAuthor: m.author })
-          }
-          onRemove={clearModel}
-        />
-      )}
+      </div>
+
+      <div>
+        <FieldLabel>Wrap color</FieldLabel>
+        <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Gift wrap color">
+          {GIFT_WRAPS.map((c) => {
+            const active = wrap === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                aria-label={`Wrap color ${c}`}
+                onClick={() => set({ wrap: c })}
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
+                  active && "ring-2 ring-[#1D1D1F] ring-offset-2 ring-offset-white"
+                )}
+                style={{ backgroundColor: c }}
+              >
+                {active ? <Check size={15} strokeWidth={3} className="text-white drop-shadow" aria-hidden /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Ribbon</FieldLabel>
+        <div className="flex gap-2.5" role="radiogroup" aria-label="Ribbon style">
+          {GIFT_RIBBONS.map((r) => {
+            const active = ribbon === r.value;
+            return (
+              <button
+                key={r.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => set({ ribbon: r.value })}
+                className={cn(
+                  "flex-1 rounded-[14px] border-2 px-3 py-2.5 text-[12.5px] font-bold transition-all active:scale-[0.97]",
+                  active
+                    ? "border-[#5E5CE6] bg-[#5E5CE6]/[0.06] text-[#5E5CE6]"
+                    : "border-[#1D1D1F]/[0.08] bg-white text-[#1D1D1F]/60"
+                )}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2.5 px-1 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+          The recipient taps the box — the lid pops, confetti bursts, and your note appears.
+        </p>
+      </div>
     </div>
   );
 }

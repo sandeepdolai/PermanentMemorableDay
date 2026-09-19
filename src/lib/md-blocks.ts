@@ -62,12 +62,8 @@ export interface BlockData {
   /** gift */
   message?: string;
   wrap?: string;
-  /** gift: Sketchfab 3D box — when modelId is set the gift renders as a live
-   *  interactive 3D model (iframe embed) instead of the classic CSS box. */
-  modelId?: string;
-  modelName?: string;
-  modelThumb?: string;
-  modelAuthor?: string;
+  /** gift: ribbon style on the wrapped box — "classic" | "cross" | "none" */
+  ribbon?: string;
   /** countdown: unlock delay minutes */
   minutes?: number;
   /** quiz */

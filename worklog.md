@@ -817,3 +817,39 @@ Stage Summary:
 - Gotchas: react-hooks/set-state-in-effect bans `setExtra([])` resets in effects — fixed by keying the appended page by query (extraPage.q === effQ ? use : ignore); agent-browser dialog queries should match aria-label (textContent matching can hit the wrong overlay); `agent-browser set viewport <w> <h>` (not `viewport`/`set-viewport`); React state updates from a scripted click aren't visible in the SAME eval — re-check in a follow-up eval.
 - SECURITY: the GitHub classic PAT was posted in chat in an earlier session — user must rotate it.
 - Next-phase candidates: Sketchfab API key upgrade (some endpoints/quota benefits), curated "staff-picked boxes" first page, gift box auto-open animation timing, per-scene soundtrack override, public /e/[slug] recipient page, Spotify credentials drop-in.
+
+---
+Task ID: 22
+Agent: Z.ai Code (main orchestrator)
+Task: User feedback — "This Format Look Garbage, Remove the 3D box library and Sketchfab." Remove the entire Round-21 Sketchfab 3D gift-box library (proxy API, editor picker, player iframe) and restore the Gift block to a polished classic wrapped-box experience.
+
+Work Log:
+- REMOVED all Sketchfab/3D-library code end-to-end (net −655/+164 lines):
+  - DELETED src/app/api/md/gift3d/route.ts (the live Sketchfab search proxy).
+  - md-client.ts: removed Gift3dModel interface + apiSearchGift3d().
+  - md-blocks.ts: removed BlockData.modelId/modelName/modelThumb/modelAuthor; added `ribbon?: string` ("classic" | "cross" | "none").
+  - builder.tsx: removed Gift3dPickerContent (~320 lines), GIFT3D_CATEGORIES, compactCount, apiSearchGift3d/Gift3dModel imports, Eye/Shuffle icon imports; block-card gift preview reverted to classic (gradient icon + note + wrap dot + REVEAL badge); palette + Create-view tile renamed "3D Gift" → "Gift"; mock-data search suggestion "3D gift box" → "Gift box reveal".
+  - moment-player.tsx: GiftBlockView's Sketchfab-iframe branch deleted — always renders the CSS GiftBox.
+- REBUILT the classic Gift editor (better than pre-Round-21, per the "more styling + more features" mandate):
+  - NEW MiniGiftPreview — a static replica of the player's gift box rendered inside the editor, updating live with wrap color + ribbon choice (box body, overhanging lid, heart bow, glossy highlight bands).
+  - Wrap palette expanded 5 → 8 colors (#5E5CE6 indigo default, #007AFF, #FF375F, #30D158, #FF9F0A, #64D2FF, #AF52DE, #1D1D1F) with wrap layout.
+  - NEW Ribbon styles: Classic (vertical band) / Cross (vertical + horizontal) / None (band-less, bow hidden) as iOS-style segmented chips.
+  - Note field gained a live N/90 character counter.
+- PLAYER GiftBox upgraded: idle wiggle animation (subtle ±1.5° rotation loop) before open; ribbon-aware bands on box + lid; bow only when ribbon ≠ none; NEW white "Open the gift" pill button under the box (Gift icon + shadow + active:scale) alongside the tappable box itself — both stopPropagation so the gift gate stays first-tap.
+- BACKWARD COMPATIBILITY: legacy Round-21 drafts that still carry modelId in their JSON gracefully fall back to the classic wrapped box (the field is simply no longer read; extra JSON keys are ignored). Verified by injecting a draft with modelId via the API.
+- E2E VERIFIED (agent-browser desktop 1512×900 + mobile 390×844):
+  - Builder: Gift quick-start → classic card ("Gift reveal" + note, no 3D badge) → editor shows Live preview + note (0/90 counter) + 8 wrap radios + 3 ribbon radios, NO Sketchfab UI anywhere.
+  - Live updates: typed note, picked #FF375F wrap + Cross ribbon → preview box background changed to pink instantly; cross renders 3 white bands (box-v + box-h + lid-v).
+  - Persistence: Save Draft → reload → Gallery → reopen: pink wrap + Cross ribbon + note all restored (verified in editor radio states + card preview).
+  - Player: preview → hero → gift scene "A SURPRISE / There's something for you." + CSS box + "Open the gift" pill → tap → note + confetti; 0 iframes in the whole player; VLM confirmed pink box with white CROSS ribbon, popped lid, note, no 3D viewer/Sketchfab branding.
+  - Legacy fallback: injected draft with modelId/modelName → opens classic editor + renders classic box + note in player, 0 iframes, no errors.
+  - Mobile 390px: editor dialog edge-to-edge (390px wide), zero horizontal overflow, all 11 radios + preview + textarea reachable; VLM confirmed clean layout, 8 swatches, 3 ribbon buttons, nothing cut off.
+  - Create view: tile now "Gift" (aria-label "Start a scene with a Gift block"); palette "Add Gift block"; search suggestion "Gift box reveal".
+  - Hygiene: `bun run lint` exit 0; browser console zero errors; dev.log all 200s except the two intentional 404 probes of the deleted /api/md/gift3d route; QA drafts deleted via API (incl. the injected legacy one).
+- Tool gotchas this round: MultiEdit is NOT always atomic here — the GiftBox edit applied while the second edit failed on a curly-quote mismatch (check line counts after a "failed" MultiEdit); Explore "View" buttons get covered by the floating footer at some scroll positions — use programmatic .click(); the Explore template card's accessible name is NOT an aria-label attribute (querySelectorAll misses it) — click by snapshot ref instead; gallery data is stale after out-of-band API writes until reload.
+
+Stage Summary:
+- The Sketchfab 3D gift library is fully removed (API route, client fn, model fields, picker UI, player iframe, labels) and the Gift block is back to a fast, self-contained classic wrapped box — now noticeably better than before: 8 wrap colors, 3 ribbon styles, live editor preview with character counter, idle wiggle + "Open the gift" pill in the player. Old 3D-era drafts degrade gracefully to the classic box.
+- Files touched: DELETED src/app/api/md/gift3d/route.ts; modified src/lib/md-blocks.ts, src/lib/md-client.ts, src/lib/mock-data.ts, src/components/memorableday/builder.tsx, src/components/memorableday/moment-player.tsx, src/components/memorableday/views/create-view.tsx.
+- SECURITY: the GitHub classic PAT was posted in chat in an earlier session — user must rotate it.
+- Next-phase candidates: gift lid "peek" hover micro-interaction, more confetti styles on gift open, per-scene soundtrack override, public /e/[slug] recipient page, Spotify credentials drop-in, image thumbnail generation for grid performance.

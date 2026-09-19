@@ -78,9 +78,21 @@ function ConfettiBurst() {
   );
 }
 
-/** 3D gift box — tap to open (spring lid + bow) */
-function GiftBox({ open, wrap, onOpen }: { open: boolean; wrap?: string; onOpen: () => void }) {
+/** Wrapped gift box — tap to open (spring lid + bow, idle wiggle) */
+function GiftBox({
+  open,
+  wrap,
+  ribbon = "classic",
+  onOpen,
+}: {
+  open: boolean;
+  wrap?: string;
+  ribbon?: string;
+  onOpen: () => void;
+}) {
   const base = wrap ?? "#5E5CE6";
+  const showBand = ribbon !== "none";
+  const cross = ribbon === "cross";
   return (
     <button
       type="button"
@@ -92,8 +104,12 @@ function GiftBox({ open, wrap, onOpen }: { open: boolean; wrap?: string; onOpen:
       className="relative mx-auto block h-[104px] w-[104px] outline-none"
     >
       <motion.div
-        animate={open ? { scale: 1.06, rotate: -2 } : { scale: 1, rotate: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 16 }}
+        animate={open ? { scale: 1.06, rotate: -2 } : { scale: 1, rotate: [0, -1.5, 1.5, 0] }}
+        transition={
+          open
+            ? { type: "spring", stiffness: 300, damping: 16 }
+            : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
+        }
         className="relative h-full w-full"
       >
         {/* box */}
@@ -101,7 +117,8 @@ function GiftBox({ open, wrap, onOpen }: { open: boolean; wrap?: string; onOpen:
           className="absolute inset-x-0 bottom-0 h-[76px] rounded-[18px] shadow-[0_18px_40px_-10px_rgba(0,0,0,0.55)]"
           style={{ background: `linear-gradient(160deg, ${base}CC, ${base})` }}
         >
-          <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" />
+          {showBand ? <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" /> : null}
+          {cross ? <div className="absolute inset-x-0 top-1/2 h-[14px] -translate-y-1/2 bg-white/75" /> : null}
           <div className="absolute inset-0 rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.3),transparent_45%)]" />
         </div>
         {/* lid */}
@@ -111,17 +128,19 @@ function GiftBox({ open, wrap, onOpen }: { open: boolean; wrap?: string; onOpen:
           className="absolute -top-[14px] left-[-6px] h-[26px] w-[116px] rounded-[10px] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.4)]"
           style={{ background: `linear-gradient(160deg, ${base}, ${base}B3)` }}
         >
-          <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" />
+          {showBand ? <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-white/75" /> : null}
           <div className="absolute inset-0 rounded-[10px] bg-[linear-gradient(180deg,rgba(255,255,255,0.4),transparent_60%)]" />
         </motion.div>
         {/* bow */}
-        <motion.div
-          animate={open ? { y: -120, rotate: -30, opacity: 0.9 } : { y: 0, rotate: 0 } }
-          transition={{ type: "spring", stiffness: 260, damping: 18 }}
-          className="absolute -top-[34px] left-1/2 flex -translate-x-1/2 items-center justify-center text-white drop-shadow-md"
-        >
-          <Heart size={22} fill="currentColor" strokeWidth={0} />
-        </motion.div>
+        {showBand ? (
+          <motion.div
+            animate={open ? { y: -120, rotate: -30, opacity: 0.9 } : { y: 0, rotate: 0 } }
+            transition={{ type: "spring", stiffness: 260, damping: 18 }}
+            className="absolute -top-[34px] left-1/2 flex -translate-x-1/2 items-center justify-center text-white drop-shadow-md"
+          >
+            <Heart size={22} fill="currentColor" strokeWidth={0} />
+          </motion.div>
+        ) : null}
       </motion.div>
     </button>
   );
@@ -745,7 +764,6 @@ function GiftBlockView({
   onOpen: () => void;
 }) {
   const d = block.data;
-  const modelId = d?.modelId;
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -766,52 +784,19 @@ function GiftBlockView({
           {d?.message?.trim() || "This is for you."}
         </p>
       )}
-      {modelId ? (
-        <motion.div
-          initial={{ scale: 0.92, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 240, damping: 22 }}
-          className="w-full max-w-[min(80vw,400px)]"
+      <GiftBox open={open} wrap={d?.wrap} ribbon={d?.ribbon} onOpen={onOpen} />
+      {!open ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation(); // keep the pill tap from also advancing the scene
+            onOpen();
+          }}
+          className="mt-8 flex items-center gap-2 rounded-full bg-white/95 px-5 py-2.5 text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_30px_rgba(0,0,0,0.4)] transition-transform active:scale-95"
         >
-          <div className="relative aspect-square w-full overflow-hidden rounded-[28px] bg-black/35 shadow-[0_28px_60px_-18px_rgba(0,0,0,0.65)] ring-1 ring-white/25 backdrop-blur-sm">
-            <iframe
-              key={modelId}
-              src={`https://sketchfab.com/models/${modelId}/embed?autospin=0.35&autostart=1&preload=1&ui_theme=dark&ui_infos=0&ui_controls=0&dnt=1`}
-              title={d?.modelName ?? "3D gift box"}
-              allow="autoplay; fullscreen; xr-spatial-tracking"
-              allowFullScreen
-              loading="lazy"
-              className={cn("h-full w-full bg-transparent", !open && "pointer-events-none")}
-            />
-            {!open ? (
-              <button
-                type="button"
-                onClick={onOpen}
-                aria-label="Tap to open the gift"
-                className="absolute inset-0 flex items-end justify-center pb-7 outline-none"
-              >
-                <span className="flex items-center gap-2 rounded-full bg-white/95 px-5 py-2.5 text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
-                  <Gift size={15} aria-hidden /> Open the gift
-                </span>
-              </button>
-            ) : (
-              <span className="pointer-events-none absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/[0.45] px-2 py-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-white/90 backdrop-blur-sm">
-                <Sparkles size={9} aria-hidden /> drag to spin
-              </span>
-            )}
-          </div>
-          <p className="mt-3 px-4 text-center text-[10.5px] font-medium leading-relaxed tracking-wide text-white/55">
-            3D box “{d?.modelName ?? "gift box"}” by {d?.modelAuthor ?? "its creator"} · Sketchfab
-          </p>
-        </motion.div>
-      ) : (
-        <>
-          <GiftBox open={open} wrap={d?.wrap} onOpen={onOpen} />
-          {!open ? (
-            <p className="mt-8 animate-pulse text-[12.5px] font-semibold text-white/70">Tap the gift to open it</p>
-          ) : null}
-        </>
-      )}
+          <Gift size={15} aria-hidden /> Open the gift
+        </button>
+      ) : null}
     </motion.div>
   );
 }

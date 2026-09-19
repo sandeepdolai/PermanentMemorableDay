@@ -25,7 +25,7 @@ const SCENE_BLOCKS = [
   { label: "Video", type: "video", icon: Video, tint: "#FF9F0A" },
   { label: "Audio", type: "audio", icon: Music, tint: "#FF375F" },
   { label: "Background", type: "background", icon: Wallpaper, tint: "#64D2FF" },
-  { label: "3D Gift", type: "gift", icon: Gift, tint: "#5E5CE6" },
+  { label: "Gift", type: "gift", icon: Gift, tint: "#5E5CE6" },
   { label: "Countdown", type: "countdown", icon: Clock, tint: "#FF9F0A" },
   { label: "Quiz", type: "quiz", icon: ListChecks, tint: "#007AFF" },
   { label: "Reward", type: "reward", icon: Award, tint: "#30D158" },
