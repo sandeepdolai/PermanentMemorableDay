@@ -30,7 +30,7 @@ const SCENE_BLOCKS = [
   { label: "Countdown", type: "countdown", icon: Clock, tint: "#FF9F0A" },
   { label: "Quiz", type: "quiz", icon: ListChecks, tint: "#007AFF" },
   { label: "Reward", type: "reward", icon: Award, tint: "#30D158" },
-  { label: "Coupon Draw", type: "coupon", icon: Ticket, tint: "#8B5CF6" },
+  { label: "Coupon Reveal", type: "coupon", icon: Ticket, tint: "#218CF4" },
   { label: "Button", type: "cta", icon: MousePointerClick, tint: "#007AFF" },
   { label: "Confetti", type: "confetti", icon: PartyPopper, tint: "#FF375F" },
 ];

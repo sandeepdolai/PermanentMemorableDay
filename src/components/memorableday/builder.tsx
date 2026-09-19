@@ -71,7 +71,7 @@ import {
   type ConfettiStyleName,
 } from "./confetti";
 import { RewardTicket, rewardKindMeta } from "./reward-ticket";
-import { CouponDraw } from "./coupon-draw";
+import { CouponMachine, useCouponPlay } from "./coupon-machine";
 import {
   GiftBox,
   GiftConfetti,
@@ -109,7 +109,7 @@ const BLOCKS: BlockDef[] = [
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
   { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
-  { type: "coupon", label: "Coupon Draw", icon: Ticket, tint: "#8B5CF6" },
+  { type: "coupon", label: "Coupon Reveal", icon: Ticket, tint: "#218CF4" },
   { type: "cta", label: "Button", icon: MousePointerClick, tint: "#007AFF" },
   { type: "confetti", label: "Confetti", icon: PartyPopper, tint: "#FF375F" },
 ];
@@ -532,40 +532,61 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
       );
     }
     case "coupon": {
-      const step = d?.stepLabel?.trim() || "01";
-      const heading = d?.heading?.trim() || "쿠폰 뽑기";
+      const heading = d?.heading?.trim() || "COUPON CODE";
       const ccode = d?.code?.trim();
+      const domain = d?.url?.trim() ? urlDomain(d.url) : null;
       return (
-        <div className="flex items-center gap-3 rounded-[14px] bg-[#1A1A1E] px-3.5 py-3 shadow-[0_10px_24px_-14px_rgba(29,29,31,0.7)]">
-          {/* a miniature of the machine card */}
+        <div className="flex items-center gap-3 rounded-[14px] bg-[#F5F5F7] px-3.5 py-3 shadow-[0_10px_24px_-14px_rgba(23,43,77,0.45)]">
+          {/* a miniature of the blue claw machine */}
           <span
             aria-hidden
-            className="relative flex h-[52px] w-[46px] shrink-0 items-start justify-center overflow-hidden rounded-[10px] pt-[6px]"
-            style={{ background: "linear-gradient(180deg, #F3E8FF 0%, #DCCBFF 100%)" }}
+            className="relative flex h-[56px] w-[46px] shrink-0 flex-col items-center overflow-hidden rounded-[9px] bg-gradient-to-b from-[#45A7FF] to-[#1277DE] pb-[4px] pt-[3px]"
           >
-            <span className="absolute top-0 h-[16px] w-[3px] rounded-full bg-[#6366F1]" />
-            <span className="absolute top-[13px] h-[10px] w-[12px] rounded-b-full border-[3px] border-t-0 border-[#6366F1]" />
-            <span className="absolute top-[20px] block h-[11px] w-[68%] -rotate-6 rounded-[4px] bg-[#1F2937] shadow-[0_3px_8px_rgba(29,29,31,0.35)]" />
-            <span className="absolute bottom-[4px] left-[2px] h-[8px] w-[40%] -rotate-[14deg] rounded-[3px] bg-[#818CF8]" />
-            <span className="absolute bottom-[2px] left-[30%] h-[8px] w-[44%] rotate-[7deg] rounded-[3px] bg-[#C084FC]" />
-            <span className="absolute bottom-[4px] right-[2px] h-[7px] w-[34%] rotate-[16deg] rounded-[3px] bg-[#F472B6]" />
+            {/* marquee */}
+            <span className="flex h-[15px] w-[78%] flex-col items-center justify-center rounded-[4px] bg-gradient-to-b from-[#7C3AED] to-[#5B21B6]">
+              <span className="text-[4.5px] font-black leading-none text-[#FFD84D]">COUPON</span>
+              <span className="text-[3.5px] font-extrabold leading-[1.35] tracking-[0.16em] text-white">REVEAL</span>
+            </span>
+            {/* glass window */}
+            <span className="relative mt-[3px] h-[24px] w-[78%] overflow-hidden rounded-[4px] bg-[#EAF3FD]">
+              <span className="absolute left-1/2 top-0 h-[7px] w-[1.5px] -translate-x-1/2 bg-[#23252E]" />
+              <span className="absolute left-1/2 top-[6px] h-[2.5px] w-[8px] -translate-x-1/2 rounded-[1px] bg-[#C3CBD6]" />
+              <span className="absolute left-1/2 top-[8px] h-[3.5px] w-[2px] -translate-x-1/2 rounded-b-full border-[1.5px] border-t-0 border-[#C3CBD6]" />
+              {/* golden ticket in the claw */}
+              <span className="absolute left-1/2 top-[11px] h-[6px] w-[17px] -translate-x-1/2 -rotate-3 rounded-[1.5px] bg-gradient-to-b from-[#FFEDB0] to-[#F5B93B]" />
+              {/* colorful pile */}
+              <span className="absolute bottom-[1px] left-[2px] h-[4px] w-[10px] -rotate-[12deg] rounded-[1px] bg-[#9B59B6]" />
+              <span className="absolute bottom-[0.5px] left-[8px] h-[4px] w-[11px] rotate-[8deg] rounded-[1px] bg-[#E84393]" />
+              <span className="absolute bottom-[1px] left-[16px] h-[4px] w-[10px] -rotate-[6deg] rounded-[1px] bg-[#2ECC71]" />
+              <span className="absolute bottom-[0.5px] right-[2px] h-[4px] w-[10px] rotate-[10deg] rounded-[1px] bg-[#FF7A3D]" />
+            </span>
+            {/* control panel */}
+            <span className="mt-[3px] flex h-[8px] w-[78%] items-center justify-between rounded-[3px] bg-gradient-to-b from-[#54B2FF] to-[#2E93F7] px-[3px]">
+              <span className="relative h-[5px] w-[5px] rounded-full bg-[#23252B]">
+                <span className="absolute -top-[2.5px] left-1/2 h-[2.5px] w-[1.5px] -translate-x-1/2 rounded-full bg-[#2A2D35]" />
+                <span className="absolute -top-[4px] left-1/2 h-[2.5px] w-[2.5px] -translate-x-1/2 rounded-full bg-[#E02424]" />
+              </span>
+              <span className="h-[4px] w-[18px] rounded-full bg-gradient-to-b from-[#A96BFF] to-[#8B3FE8]" />
+            </span>
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-white">{heading}</p>
+            <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{heading} reveal</p>
             {ccode ? (
-              <p className="mt-0.5 truncate font-mono text-[12px] font-semibold tracking-[0.08em] text-[#C4B5FD]">
+              <p className="mt-0.5 truncate font-mono text-[12px] font-semibold tracking-[0.08em] text-[#8A5A16]">
                 {ccode}
               </p>
             ) : (
-              <p className="mt-0.5 text-[12px] text-white/50">Tap the machine to draw a prize</p>
+              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">Play the claw machine to win a prize</p>
             )}
+            {domain ? (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[#218CF4]/80">
+                <ExternalLink size={10} aria-hidden /> Redeem at {domain}
+              </p>
+            ) : null}
           </div>
           <span className="flex shrink-0 items-center gap-1.5">
-            <span className="text-[11px] font-extrabold tabular-nums tracking-[0.18em] text-[#8B5CF6]">
-              {step}
-            </span>
-            <span className="rounded-full bg-[#8B5CF6]/25 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#C4B5FD]">
-              Draw
+            <span className="rounded-full bg-[#218CF4]/15 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#1277DE]">
+              Play
             </span>
           </span>
         </div>
@@ -2035,8 +2056,8 @@ function ConfettiBlockEditor({ block, onChange }: { block: Block; onChange: (dat
 /* ------------------------------------------------------------------ */
 /* Block Library — a categorized gallery of ready-made blocks.          */
 /* Every entry is a template: block type + curated defaults, dropped    */
-/* into the current scene fully editable. The Coupon Draw (claw         */
-/* machine) is the flagship template.                                   */
+/* into the current scene fully editable. The Coupon Reveal (blue       */
+/* claw machine) is the flagship template.                              */
 /* ------------------------------------------------------------------ */
 
 const LIBRARY_CATEGORIES = [
@@ -2064,19 +2085,19 @@ interface LibraryTemplate {
 
 const LIBRARY_TEMPLATES: LibraryTemplate[] = [
   {
-    id: "coupon-draw",
+    id: "coupon-reveal",
     type: "coupon",
-    name: "Coupon Draw",
-    blurb: "Claw-machine prize screen — they tap to draw a winning code",
+    name: "Coupon Reveal",
+    blurb: "Blue claw machine — they play, grab & reveal a winning code",
     category: "Rewards",
-    accent: "#8B5CF6",
+    accent: "#218CF4",
     isNew: true,
     data: {
-      stepLabel: "01",
-      body: "올려만 하면 100% 당첨",
-      heading: "쿠폰 뽑기",
-      label: "쿠폰 뽑기",
-      code: "MD-COUPON",
+      heading: "COUPON CODE",
+      body: "REVEAL",
+      stepLabel: "YOUR COUPON CODE",
+      label: "PLAY & WIN",
+      code: "SAVE20",
     },
   },
   {
@@ -2183,37 +2204,49 @@ const LIBRARY_TEMPLATES: LibraryTemplate[] = [
 function LibraryThumb({ t }: { t: LibraryTemplate }) {
   switch (t.type) {
     case "coupon":
-      /* The flagship: a miniature of the claw-machine poster. */
+      /* The flagship: a miniature of the blue claw machine. */
       return (
         <span
           aria-hidden
-          className="relative flex h-[68px] w-[60px] flex-col items-center rounded-[10px] px-1.5 pb-1.5 pt-1.5"
-          style={{
-            background: "linear-gradient(180deg, #1E1E23 0%, #17171B 100%)",
-            boxShadow: "0 6px 14px -6px rgba(29,29,31,0.5)",
-          }}
+          className="relative flex h-[72px] w-[56px] flex-col items-center overflow-hidden rounded-[10px] bg-gradient-to-b from-[#45A7FF] to-[#1277DE] pb-[5px] pt-[4px]"
+          style={{ boxShadow: "0 8px 18px -8px rgba(23,43,77,0.65)" }}
         >
-          <span className="text-[6px] font-extrabold tracking-[0.22em] text-[#8B5CF6]">01</span>
-          <span className="text-[6.5px] font-extrabold leading-none text-white">쿠폰 뽑기</span>
-          <span
-            className="relative mt-1 h-[34px] w-full overflow-hidden rounded-[5px]"
-            style={{ background: "linear-gradient(180deg, #F3E8FF 0%, #DCCBFF 100%)" }}
-          >
-            <span
-              className="absolute inset-x-1 mx-auto h-[14px] rounded-[3px] bg-[#F5F5F7]"
-              style={{ top: "6px" }}
-            />
-            {/* claw */}
-            <span className="absolute left-1/2 top-0 h-[8px] w-[2px] -translate-x-1/2 rounded-full bg-[#6366F1]" />
-            <span className="absolute left-1/2 top-[6px] h-[6px] w-[7px] -translate-x-1/2 rounded-b-full border-[2px] border-t-0 border-[#6366F1]" />
-            {/* grabbed winner */}
-            <span className="absolute left-1/2 top-[10px] h-[6px] w-[20px] -translate-x-1/2 -rotate-6 rounded-[2px] bg-[#1F2937]" />
-            {/* pile */}
-            <span className="absolute bottom-[2px] left-[2px] h-[5px] w-[14px] -rotate-[15deg] rounded-[2px] bg-[#818CF8]" />
-            <span className="absolute bottom-[1px] left-[10px] h-[5px] w-[15px] rotate-[8deg] rounded-[2px] bg-[#C084FC]" />
-            <span className="absolute bottom-[2px] right-[2px] h-[5px] w-[12px] rotate-[18deg] rounded-[2px] bg-[#F472B6]" />
+          {/* marquee with golden 3D lettering */}
+          <span className="flex h-[18px] w-[80%] flex-col items-center justify-center rounded-[4px] bg-gradient-to-b from-[#7C3AED] to-[#5B21B6]">
+            <span className="text-[5.5px] font-black leading-none text-[#8A4A0E]">COUPON</span>
+            <span className="-mt-[4px] text-[5.5px] font-black leading-none text-[#FFD84D]">COUPON</span>
+            <span className="mt-[0.5px] text-[4px] font-extrabold leading-[1.3] tracking-[0.18em] text-white">REVEAL</span>
           </span>
-          <span className="mt-[3px] h-[6px] w-full rounded-full bg-[#E9E4F0]" />
+          {/* bulbs */}
+          <span className="absolute left-[2px] top-[4px] h-[3px] w-[3px] rounded-full bg-[#FFD84D]" />
+          <span className="absolute left-[2px] top-[9px] h-[2.5px] w-[2.5px] rounded-full bg-[#FFE9A8]" />
+          <span className="absolute right-[2px] top-[4px] h-[3px] w-[3px] rounded-full bg-[#FFD84D]" />
+          <span className="absolute right-[2px] top-[9px] h-[2.5px] w-[2.5px] rounded-full bg-[#FFE9A8]" />
+          {/* glass window with claw + golden ticket + pile */}
+          <span className="relative mt-[3px] h-[34px] w-[80%] overflow-hidden rounded-[4px] bg-[#EAF3FD]">
+            {/* coiled cable + claw */}
+            <span className="absolute left-1/2 top-0 h-[10px] w-[2px] -translate-x-1/2 rounded-full bg-[#23252E]" />
+            <span className="absolute left-1/2 top-[9px] h-[3px] w-[10px] -translate-x-1/2 rounded-[1.5px] bg-[#C3CBD6]" />
+            <span className="absolute left-[calc(50%-6px)] top-[11px] h-[5px] w-[4px] origin-top-right rotate-[18deg] rounded-b-full border-[1.5px] border-t-0 border-[#C3CBD6]" />
+            <span className="absolute left-[calc(50%+2px)] top-[11px] h-[5px] w-[4px] origin-top-left -rotate-[18deg] rounded-b-full border-[1.5px] border-t-0 border-[#C3CBD6]" />
+            {/* golden ticket held high */}
+            <span className="absolute left-1/2 top-[14px] h-[8px] w-[24px] -translate-x-1/2 -rotate-3 rounded-[2px] border-[0.5px] border-[#B45309] bg-gradient-to-b from-[#FFEDB0] to-[#F5B93B]">
+              <span className="absolute inset-[1px] rounded-[1px] border-[0.5px] border-dashed border-[#B45309]/50" />
+            </span>
+            {/* colorful pile */}
+            <span className="absolute bottom-[1.5px] left-[2px] h-[5px] w-[13px] -rotate-[12deg] rounded-[1.5px] bg-[#9B59B6]" />
+            <span className="absolute bottom-[0.5px] left-[9px] h-[5px] w-[14px] rotate-[7deg] rounded-[1.5px] bg-[#E84393]" />
+            <span className="absolute bottom-[1px] left-[19px] h-[5px] w-[12px] -rotate-[6deg] rounded-[1.5px] bg-[#2ECC71]" />
+            <span className="absolute bottom-[0.5px] right-[2px] h-[5px] w-[12px] rotate-[11deg] rounded-[1.5px] bg-[#FF7A3D]" />
+          </span>
+          {/* control panel: joystick + PLAY & WIN pill */}
+          <span className="mt-[3px] flex h-[10px] w-[80%] items-center justify-between rounded-[3px] bg-gradient-to-b from-[#54B2FF] to-[#2E93F7] px-[3px]">
+            <span className="relative h-[6px] w-[6px] rounded-full bg-[#23252B]">
+              <span className="absolute -top-[3px] left-1/2 h-[3px] w-[2px] -translate-x-1/2 rounded-full bg-[#2A2D35]" />
+              <span className="absolute -top-[5px] left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-[#E02424]" />
+            </span>
+            <span className="h-[5px] w-[22px] rounded-full bg-gradient-to-b from-[#A96BFF] to-[#8B3FE8]" />
+          </span>
         </span>
       );
     case "gift":
@@ -2484,41 +2517,42 @@ function BlockLibraryContent({
 }
 
 /* ------------------------------------------------------------------ */
-/* Coupon Draw editor — live claw-machine stage + copy & code fields    */
+/* Coupon Reveal editor — live claw-machine stage + marquee & code fields */
 /* ------------------------------------------------------------------ */
 
-function CouponDrawEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
   const d = block.data ?? {};
   const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
-  const code = (d.code ?? "").trim() || "MD-COUPON";
+  const code = (d.code ?? "").trim() || "SAVE20";
   const domain = d.url?.trim() ? urlDomain(d.url) : null;
-  const { demoOpen, play } = useRevealDemo(3800);
+  const { played, revealed, play } = useCouponPlay(1750, 4800);
 
   return (
     <div className="space-y-4 pb-2">
-      {/* Live preview stage — the real machine, tap to play the draw */}
+      {/* Live preview stage — the real machine, tap PLAY & WIN to run the claw */}
       <div
         className="relative overflow-hidden rounded-[22px] border border-[#1D1D1F]/[0.06]"
         style={{
           background:
-            "radial-gradient(120% 85% at 50% 0%, rgba(139,92,246,0.13) 0%, transparent 58%), linear-gradient(180deg, #F5F5F7 0%, #FFFFFF 100%)",
+            "radial-gradient(120% 85% at 50% 0%, rgba(0,122,255,0.12) 0%, transparent 58%), linear-gradient(180deg, #F5F5F7 0%, #FFFFFF 100%)",
         }}
       >
         <div className="relative flex flex-col items-center px-5 pt-4">
-          <CouponDraw
-            stepLabel={d.stepLabel?.trim() || "01"}
-            subtitle={d.body?.trim() || "올려만 하면 100% 당첨"}
-            title={d.heading?.trim() || "쿠폰 뽑기"}
-            buttonLabel={d.label?.trim() || "쿠폰 뽑기"}
+          <CouponMachine
+            title={d.heading?.trim() || "COUPON CODE"}
+            subtitle={d.body?.trim() || "REVEAL"}
+            ticketLabel={d.stepLabel?.trim() || "YOUR COUPON CODE"}
+            buttonLabel={d.label?.trim() || "PLAY & WIN"}
             code={code}
-            open={demoOpen}
-            onDraw={play}
+            open={played}
+            celebrate={revealed}
+            onPlay={play}
           />
           <div className="h-2" />
         </div>
         <div className="relative flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3.5 py-2.5">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
-            {demoOpen ? "What they’ll see" : "Live preview — tap the machine"}
+            {played ? "What they’ll see" : "Live preview — tap PLAY & WIN"}
           </p>
           <button
             type="button"
@@ -2532,55 +2566,65 @@ function CouponDrawEditor({ block, onChange }: { block: Block; onChange: (data: 
 
       {/* Copy fields */}
       <div className="flex gap-2.5">
-        <div className="w-[76px] shrink-0">
-          <FieldLabel>Step</FieldLabel>
-          <input
-            value={d.stepLabel ?? ""}
-            onChange={(e) => set({ stepLabel: e.target.value })}
-            maxLength={3}
-            placeholder="01"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            className={cn(fieldInput, "px-3 text-center")}
-            aria-label="Step label"
-          />
-        </div>
         <div className="min-w-0 flex-1">
-          <FieldLabel>Headline</FieldLabel>
+          <FieldLabel>Marquee title</FieldLabel>
           <input
             value={d.heading ?? ""}
             onChange={(e) => set({ heading: e.target.value })}
-            maxLength={22}
-            placeholder="쿠폰 뽑기"
+            maxLength={14}
+            placeholder="COUPON CODE"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             className={fieldInput}
-            aria-label="Headline"
+            aria-label="Marquee title"
+          />
+        </div>
+        <div className="w-[104px] shrink-0">
+          <FieldLabel>Subtitle</FieldLabel>
+          <input
+            value={d.body ?? ""}
+            onChange={(e) => set({ body: e.target.value })}
+            maxLength={10}
+            placeholder="REVEAL"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className={fieldInput}
+            aria-label="Marquee subtitle"
           />
         </div>
       </div>
 
-      <div>
-        <FieldLabel>Subtitle</FieldLabel>
-        <input
-          value={d.body ?? ""}
-          onChange={(e) => set({ body: e.target.value })}
-          maxLength={40}
-          placeholder="올려만 하면 100% 당첨"
-          className={fieldInput}
-          aria-label="Subtitle"
-        />
-      </div>
-
-      <div>
-        <FieldLabel>Draw button</FieldLabel>
-        <input
-          value={d.label ?? ""}
-          onChange={(e) => set({ label: e.target.value })}
-          maxLength={18}
-          placeholder="쿠폰 뽑기"
-          className={fieldInput}
-          aria-label="Draw button label"
-        />
+      <div className="flex gap-2.5">
+        <div className="min-w-0 flex-1">
+          <FieldLabel>Ticket label</FieldLabel>
+          <input
+            value={d.stepLabel ?? ""}
+            onChange={(e) => set({ stepLabel: e.target.value })}
+            maxLength={20}
+            placeholder="YOUR COUPON CODE"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className={fieldInput}
+            aria-label="Ticket label"
+          />
+        </div>
+        <div className="w-[118px] shrink-0">
+          <FieldLabel>Play button</FieldLabel>
+          <input
+            value={d.label ?? ""}
+            onChange={(e) => set({ label: e.target.value })}
+            maxLength={14}
+            placeholder="PLAY & WIN"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className={fieldInput}
+            aria-label="Play button label"
+          />
+        </div>
       </div>
 
       <div>
@@ -2592,7 +2636,7 @@ function CouponDrawEditor({ block, onChange }: { block: Block; onChange: (data: 
           maxLength={24}
           value={d.code ?? ""}
           onChange={(e) => set({ code: e.target.value })}
-          placeholder="Summer-24!"
+          placeholder="SAVE20"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
@@ -2631,7 +2675,7 @@ function CouponDrawEditor({ block, onChange }: { block: Block; onChange: (data: 
           />
         </div>
         {domain ? (
-          <p className="mt-2 flex items-center gap-1.5 rounded-full bg-[#7C3AED]/[0.08] px-3 py-1.5 text-[12px] font-semibold text-[#7C3AED]">
+          <p className="mt-2 flex items-center gap-1.5 rounded-full bg-[#218CF4]/[0.08] px-3 py-1.5 text-[12px] font-semibold text-[#1277DE]">
             <ExternalLink size={12} aria-hidden />
             Redeem at <span className="font-bold">{domain}</span>
           </p>
@@ -3037,7 +3081,7 @@ function BlockEditorContent({
     case "reward":
       return <RewardBlockEditor block={block} onChange={onChange} />;
     case "coupon":
-      return <CouponDrawEditor block={block} onChange={onChange} />;
+      return <CouponRevealEditor block={block} onChange={onChange} />;
     case "cta": {
       const action = d.action ?? "Open link";
       const domain = d.url?.trim() ? urlDomain(d.url) : null;

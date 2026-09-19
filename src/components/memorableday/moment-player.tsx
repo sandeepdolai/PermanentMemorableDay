@@ -29,7 +29,7 @@ import { CoverArt } from "./cover-art";
 import { GiftBox, GiftConfetti, isLightWrap } from "./gift-box";
 import { CONFETTI_PALETTES, ConfettiFX, type ConfettiStyleName } from "./confetti";
 import { RewardTicket } from "./reward-ticket";
-import { CouponDraw } from "./coupon-draw";
+import { CouponMachine, useCouponPlay } from "./coupon-machine";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
 import { cn } from "@/lib/utils";
@@ -902,41 +902,10 @@ function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
 function CouponBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const { notify } = useMD();
   const d = block.data;
-  const [revealed, setRevealed] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const code = d?.code?.trim() || "MD-COUPON";
+  const { played, revealed, play } = useCouponPlay();
+  const code = d?.code?.trim() || "SAVE20";
   const url = d?.url?.trim();
   const domain = url ? urlDomain(url) : null;
-
-  const copyCode = async () => {
-    const flashCopied = () => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    };
-    try {
-      await navigator.clipboard.writeText(code);
-      flashCopied();
-    } catch {
-      // Async clipboard blocked (no gesture/permission) — try the legacy path.
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = code;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-        if (ok) {
-          flashCopied();
-          return;
-        }
-      } catch {
-        // fall through to the toast
-      }
-      notify(`Code: ${code}`); // last resort — surface it for a manual copy
-    }
-  };
 
   return (
     <motion.div
@@ -945,64 +914,41 @@ function CouponBlockView({ block, index }: { block: BlockDoc; index: number }) {
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      <CouponDraw
-        stepLabel={d?.stepLabel?.trim() || "01"}
-        subtitle={d?.body?.trim() || "올려만 하면 100% 당첨"}
-        title={d?.heading?.trim() || "쿠폰 뽑기"}
-        buttonLabel={d?.label?.trim() || "쿠폰 뽑기"}
+      {/* The machine owns the whole flow: PLAY & WIN → claw grabs the golden
+          ticket → code reveals → COPY CODE → COPIED ✓ (clipboard built in). */}
+      <CouponMachine
+        title={d?.heading?.trim() || "COUPON CODE"}
+        subtitle={d?.body?.trim() || "REVEAL"}
+        ticketLabel={d?.stepLabel?.trim() || "YOUR COUPON CODE"}
+        buttonLabel={d?.label?.trim() || "PLAY & WIN"}
         code={code}
-        open={revealed}
-        onDraw={() => setRevealed(true)}
+        open={played}
+        celebrate={revealed}
+        onPlay={play}
       />
 
-      {/* Post-reveal actions — copy the code, open the redeem link */}
+      {/* Post-reveal action — open the redeem link (copy lives on the machine) */}
       <AnimatePresence>
-        {revealed ? (
+        {revealed && url && domain ? (
           <motion.span
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.55 }}
+            transition={{ type: "spring", stiffness: 300, damping: 24, delay: 0.45 }}
             className="mt-4 flex flex-wrap items-center justify-center gap-2"
           >
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                void copyCode();
+                window.open(normalizeUrl(url), "_blank", "noopener,noreferrer");
+                notify(`Opening ${domain}…`);
               }}
-              aria-label="Copy coupon code"
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-[1.1rem] py-2.5 text-[12.5px] font-semibold backdrop-blur-md transition-all active:scale-95",
-                copied
-                  ? "border-[#8B5CF6]/50 bg-[#8B5CF6]/25 text-[#C4B5FD]"
-                  : "border-white/15 bg-white/12 text-white hover:bg-white/20"
-              )}
+              aria-label={`Redeem at ${domain}`}
+              className="flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] px-4 py-2.5 text-[12.5px] font-bold text-white shadow-[0_10px_26px_-8px_rgba(139,92,246,0.75)] transition-transform active:scale-95"
             >
-              {copied ? (
-                <>
-                  <Check size={13} strokeWidth={3} aria-hidden /> Copied
-                </>
-              ) : (
-                <>
-                  <Copy size={13} aria-hidden /> Copy code
-                </>
-              )}
+              <ExternalLink size={13} aria-hidden /> {domain}
             </button>
-            {url && domain ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(normalizeUrl(url), "_blank", "noopener,noreferrer");
-                  notify(`Opening ${domain}…`);
-                }}
-                aria-label={`Redeem at ${domain}`}
-                className="flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] px-4 py-2.5 text-[12.5px] font-bold text-white shadow-[0_10px_26px_-8px_rgba(139,92,246,0.75)] transition-transform active:scale-95"
-              >
-                <ExternalLink size={13} aria-hidden /> {domain}
-              </button>
-            ) : null}
           </motion.span>
         ) : null}
       </AnimatePresence>

@@ -340,6 +340,34 @@
   }
 }
 
+/* Coupon machine — marquee bulb twinkle (staggered per bulb) */
+.md-bulb {
+  animation: md-bulb-pulse 1.5s ease-in-out infinite;
+}
+@keyframes md-bulb-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Coupon machine — the three "working" dots while the claw grabs */
+.md-dot {
+  animation: md-dot-bounce 0.85s ease-in-out infinite;
+}
+@keyframes md-dot-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3.5px);
+  }
+}
+
 /* ================================================================== */
 /* DARK-MODE BRIDGE                                                    */
 /* The app styles with the exact light palette via arbitrary-value     */
