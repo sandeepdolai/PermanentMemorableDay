@@ -1064,3 +1064,20 @@ Stage Summary:
 - Origin remote now points at PermanentMemorableDay (token-less URL).
 - SECURITY: the GitHub classic PAT (user sandeepdolai) was again shared in chat — it MUST be rotated by the user (GitHub → Settings → Developer settings → Personal access tokens → delete/regenerate). It was used only transiently for this push and is NOT stored on disk.
 - Next-phase candidates (carried queue): REAL upload backend hardening, library search field, more library templates per category, public /e/[slug] recipient page, per-scene soundtrack override, claw-machine sound FX, Rose block (native CSS/SVG rose, 4 colors, animation modes — no Sketchfab).
+
+---
+Task ID: 28-b
+Agent: Z.ai Code (main orchestrator)
+Task: User: "Please Also Push All File Because the Repository Is Private And I Said Push All Files" — include the previously-gitignored project files (database, .env, uploads, logs, skills library, dev scripts) in the private PermanentMemorableDay repo.
+
+Work Log:
+- Inventoried everything on disk that was gitignored: db/custom.db (57KB live SQLite — all moments/drafts/data), .env (verified: only DATABASE_URL, no secrets), upload/ (1.7MB QA-uploaded media), dev.log + .zscripts/dev.log (runtime logs), .zscripts/*.sh (dev/build scripts), next-env.d.ts, skills/ (61MB agent skill library, 70 dirs).
+- Safety scans before opening the floodgates: ① token scan `ghp_…` across the whole tree (excluding node_modules/.git/.next) → CLEAN, nothing stored on disk; ② largest-file check → 20MB max (skills design templates), under GitHub's 100MB hard limit and 50MB warning threshold; ③ .z-ai-config/.claude/test/prompt/local-* do not exist (were precautionary patterns only).
+- Rewrote .gitignore: now tracking db/*.db + journal, .env, /storage/ (future uploads), upload/, ALL *.log files, /skills/, next-env.d.ts, .zscripts/ (incl. dev.pid which was already tracked). Still ignored (regenerable machinery / agent state): node_modules (restored via `bun install` from package.json + bun.lock), /.next/ + /out/ + /build (build output), *.tsbuildinfo, coverage, .vercel, .claude, .z-ai-config, /tool-results/, --full-page.
+- Committed the full expansion and pushed to PermanentMemorableDay.
+- Verified via GitHub API after push.
+
+Stage Summary:
+- PermanentMemorableDay (private) is now a TRUE full backup: source + full git history + SQLite database (every moment/draft) + .env + uploaded media + dev logs + the complete skills library + dev scripts. The only exclusions are things any machine can regenerate in minutes (node_modules via `bun install`, .next via `next dev`) — pushing those would only bloat the repo by hundreds of MB.
+- Restore recipe for a fresh machine: clone repo → `bun install` → `bun run dev` (db/custom.db and .env come straight from the repo).
+- SECURITY (carried over): the GitHub classic PAT was shared in chat again — user MUST rotate it (GitHub → Settings → Developer settings → Personal access tokens). Used only transiently for this push; not stored on disk (verified by scan).

@@ -1,6 +1,11 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files/ for more information about ignoring files.
 
-# dependencies
+# NOTE (Task 28-b, 2026-09-20): user directed that ALL files be pushed to the
+# PRIVATE repo PermanentMemorableDay. The database (db/), .env, storage/ +
+# upload/ media, dev logs, skills/, .zscripts/ and next-env.d.ts are TRACKED.
+# Only regenerable machinery and agent session state remain ignored.
+
+# dependencies (regenerable via `bun install` from package.json + bun.lock)
 node_modules
 /.pnp
 .pnp.*
@@ -13,54 +18,33 @@ node_modules
 # testing
 /coverage
 
-# next.js
+# next.js build output (regenerable via next dev / next build)
 /.next/
 /out/
 
-# production
+# production build output (regenerable)
 /build
 
 # misc
 .DS_Store
 *.pem
 
-# debug
+# package-manager debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
 # vercel
 .vercel
 
-
-# typescript
+# typescript incremental cache (regenerable)
 *.tsbuildinfo
-next-env.d.ts
-local-*
+
+# agent session state (not project files)
 .claude
 .z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
 
-server.log
-# Skills directory
-/skills/
-# user uploads (persisted on the server, never in the repo)
-/storage/
-
-# local SQLite database (regenerable via prisma db push + bootstrap seed)
-/db/*.db
-/db/*.db-journal
-
-# agent QA artifacts
+# agent QA screenshot artifacts
 /tool-results/
-upload/
-download/
 --full-page
