@@ -693,6 +693,8 @@ export function AppShell() {
 
   const openMoment = useCallback(
     (m: PlayerPayload) => {
+      // Same stacking guard as openBuilder — the player sits under sheets.
+      setSheet(null);
       setPlayer(m);
       // Real recipient-open tracking: views++, sent → viewed, feed notification.
       setMoments((prev) =>
@@ -719,6 +721,9 @@ export function AppShell() {
   const closeMoment = useCallback(() => setPlayer(null), []);
 
   const openBuilder = useCallback((opts?: BuilderOptions) => {
+    // Guard against sheet stacking: an open bottom sheet (z-80/81) would float
+    // above the builder (z-60) and later the player (z-70), blocking taps.
+    setSheet(null);
     setBuilder(opts ?? {});
   }, []);
 

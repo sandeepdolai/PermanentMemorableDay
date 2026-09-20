@@ -1081,3 +1081,29 @@ Stage Summary:
 - PermanentMemorableDay (private) is now a TRUE full backup: source + full git history + SQLite database (every moment/draft) + .env + uploaded media + dev logs + the complete skills library + dev scripts. The only exclusions are things any machine can regenerate in minutes (node_modules via `bun install`, .next via `next dev`) — pushing those would only bloat the repo by hundreds of MB.
 - Restore recipe for a fresh machine: clone repo → `bun install` → `bun run dev` (db/custom.db and .env come straight from the repo).
 - SECURITY (carried over): the GitHub classic PAT was shared in chat again — user MUST rotate it (GitHub → Settings → Developer settings → Personal access tokens). Used only transiently for this push; not stored on disk (verified by scan).
+
+---
+Task ID: 29
+Agent: Z.ai Code (main orchestrator)
+Task: User: "In Gift Block The Message Is Not Visible Properly, Fix This The Message Should saw Properly" — fix the gift-block note visibility.
+
+Work Log:
+- Reproduced with agent-browser E2E (fresh session → Create → Gift scene-block tile → builder → note typed → Save Draft → Preview → open the gift): in the PLAYER the note card rendered ABOVE the gift box, and when the box opened its lid+bow flew up -82px (rotated -21°) and COVERED the bottom of the message text (VLM-confirmed: "The bottom part of the text is obscured by the lid"). The editor stage (note BELOW the box) was fully readable — the player was the broken half.
+- ROOT CAUSE: moment-player.tsx GiftBlockView placed the open-state note card in the same slot above the box as the sealed headline; the lid's spring flight (-82y, -21°) lands exactly on that slot, and the GiftBox renders later in the DOM (on top).
+- FIX 1 — moment-player.tsx GiftBlockView redesigned open state: the note now springs in BELOW the box (mt-6, delay 0.3 — arrives as the lid departs), card upgraded (relative z-20, border-white/25, bg-white/[0.14] stronger frost, deeper spring y:26); the box glides up to center stage via a motion layout wrapper (spring 210/26) as the sealed headline leaves; "Open the gift" pill only in sealed state. The lid flies up into the vacated headline space — it can no longer touch the note.
+- FIX 2 — builder.tsx GiftBlockEditor stage: pt-4 → pt-12 headroom so the flying lid is no longer hard-clipped by the stage's overflow-hidden top edge (VLM-verified "not hard-clipped"); stage note card bg-white/80 → white/90 + z-10.
+- BONUS BUG FOUND & FIXED DURING QA — orphan sheet stacking: the Create view's "Start Creating" opens the "How would you like to start?" sheet (z-81); opening the builder via a scene-block tile (or any path that doesn't close it) left that sheet mounted ABOVE the builder (z-60) and the player (z-70), visually covering the center of the screen and blocking all taps (reproduced + VLM-confirmed: dialog floating over the player). Fix in app-shell.tsx: openBuilder() and openMoment() now setSheet(null) — a stacking guard so no bottom sheet can ever float above the builder/player layers.
+- E2E RE-VERIFIED (agent-browser desktop 1512×900 + mobile 390×844, VLM-checked):
+  - Player sealed: "A surprise / There's something for you." + sealed box + Open-the-gift pill (unchanged).
+  - Player opened: note card BELOW the box, "fully readable, no part covered, clipped or overlapped" (VLM), lid up and away from all text, box glide smooth — VLM overall 9/10 "polished and professional".
+  - DOM check: note top (403) > box bottom (278) — strictly below; mobile 390px: note fits viewport (bottom 464 < 844), no horizontal overflow, VLM "contained, legible, sufficient padding".
+  - Editor: reveal replays with pt-12 headroom (lid visible, not clipped); 90-char max note wraps cleanly across 3 lines in the stage card, fully readable; counter correct.
+  - Stacking guard: fresh flow → only "Experience builder" + player dialogs mount — the orphan "How would you like to start?" sheet no longer survives into the builder/player.
+  - Hygiene: bun run lint exit 0; console 0 errors (only HMR info); QA draft deleted via API (dmu94mmbp038kfj, 200; DB verified 0 untitled drafts left).
+- Tool gotchas this round: agent-browser's hit-test refuses to click the gift box (its ribbon art is the top element at the click point — pointer-events are fine, bubbles to the button; use the "Open the gift" pill or find-by-role instead); a11y snapshots can be stale after layered-dialog changes (trust eval DOM dumps); the scene-block tiles need the full mousedown/mouseup/click sequence; nav buttons are text-named not aria-label ("Create" via textContent).
+
+Stage Summary:
+- The gift note is now impossible to miss: in the player the box opens, the lid flies up and away, the box glides to center stage and the note rises below it in a stronger frosted card — fully readable at any message length (≤90 chars), desktop + mobile. The editor stage gained lid headroom so the reveal reads cleanly there too, plus a real stacking bug was fixed (orphan "How would you like to start?" sheet could float above the builder/player and block taps — openBuilder/openMoment now close any open sheet).
+- Files modified: src/components/memorableday/moment-player.tsx (GiftBlockView open-state redesign), src/components/memorableday/builder.tsx (editor stage pt-12 + note card polish), src/components/memorableday/app-shell.tsx (openBuilder/openMoment setSheet(null) stacking guard).
+- SECURITY (carried over): the GitHub classic PAT was shared in chat — user must rotate it.
+- Next-phase candidates (queue): Rose block (native CSS/SVG rose, 4 colors, animation modes — no Sketchfab), library search field, public /e/[slug] recipient page, claw-machine sound FX, per-scene soundtrack override.

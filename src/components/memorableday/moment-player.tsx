@@ -672,12 +672,22 @@ function GiftBlockView({
             There&apos;s something for you.
           </p>
         </>
-      ) : (
+      ) : null}
+      {/* The box glides up to center stage as the headline leaves — the note
+          then rises BELOW it, so the flying lid can never cover the message. */}
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 210, damping: 26 }}
+        className="relative z-10"
+      >
+        <GiftBox open={open} wrap={d?.wrap} ribbon={d?.ribbon} onOpen={onOpen} onDark />
+      </motion.div>
+      {open ? (
         <motion.div
-          initial={{ opacity: 0, y: 16, scale: 0.9 }}
+          initial={{ opacity: 0, y: 26, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: "spring", stiffness: 260, damping: 21, delay: 0.16 }}
-          className="mb-5 w-full max-w-[340px] rounded-[22px] border border-white/20 bg-white/10 px-6 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl"
+          transition={{ type: "spring", stiffness: 260, damping: 21, delay: 0.3 }}
+          className="relative z-20 mt-6 w-full max-w-[340px] rounded-[22px] border border-white/25 bg-white/[0.14] px-6 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl"
         >
           <span
             aria-hidden
@@ -690,9 +700,7 @@ function GiftBlockView({
             {d?.message?.trim() || "This is for you."}
           </p>
         </motion.div>
-      )}
-      <GiftBox open={open} wrap={d?.wrap} ribbon={d?.ribbon} onOpen={onOpen} onDark />
-      {!open ? (
+      ) : (
         <button
           type="button"
           onClick={(e) => {
@@ -703,7 +711,7 @@ function GiftBlockView({
         >
           <Gift size={15} style={{ color: iconTint }} aria-hidden /> Open the gift
         </button>
-      ) : null}
+      )}
     </motion.div>
   );
 }

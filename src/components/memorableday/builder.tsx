@@ -1692,7 +1692,7 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
         }}
       >
         {demoOpen ? <GiftConfetti tint={wrap} onDark={false} /> : null}
-        <div className="relative flex flex-col items-center pt-4">
+        <div className="relative flex flex-col items-center pt-12">
           <GiftBox wrap={wrap} ribbon={ribbon} open={demoOpen} onOpen={play} scale={0.9} />
           <div className="flex min-h-[44px] w-full max-w-[300px] items-start justify-center pt-1">
             <AnimatePresence>
@@ -1702,7 +1702,7 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.96 }}
                   transition={{ type: "spring", stiffness: 300, damping: 22, delay: 0.18 }}
-                  className="rounded-[18px] border border-[#1D1D1F]/[0.06] bg-white/80 px-4 py-2.5 text-center text-[13.5px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_24px_-10px_rgba(29,29,31,0.25)] backdrop-blur"
+                  className="relative z-10 rounded-[18px] border border-[#1D1D1F]/[0.06] bg-white/90 px-4 py-2.5 text-center text-[13.5px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_24px_-10px_rgba(29,29,31,0.25)] backdrop-blur"
                 >
                   {d.message?.trim() || "This is for you."}
                 </motion.p>
