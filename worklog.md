@@ -1107,3 +1107,33 @@ Stage Summary:
 - Files modified: src/components/memorableday/moment-player.tsx (GiftBlockView open-state redesign), src/components/memorableday/builder.tsx (editor stage pt-12 + note card polish), src/components/memorableday/app-shell.tsx (openBuilder/openMoment setSheet(null) stacking guard).
 - SECURITY (carried over): the GitHub classic PAT was shared in chat — user must rotate it.
 - Next-phase candidates (queue): Rose block (native CSS/SVG rose, 4 colors, animation modes — no Sketchfab), library search field, public /e/[slug] recipient page, claw-machine sound FX, per-scene soundtrack override.
+
+---
+Task ID: 30
+Agent: Z.ai Code (main orchestrator)
+Task: User: "Add Something User Can Delete any Scene Form Builder, i see theres is no Scene Delete Option, Add" — surface a real scene-delete affordance in the builder's normal editing view (delete previously only existed buried inside the "Order" reorder mode).
+
+Work Log:
+- Audited builder.tsx scene management: removeScene() existed but was reachable ONLY from the "Order" reorder mode's SceneRow trash — zero delete affordance in the normal scene rail, which is why the user saw "no Scene Delete option". Also found the reorder-mode trash deleted INSTANTLY with no confirmation (single accidental tap = scene + all its blocks gone).
+- NEW ConfirmDialog in moment-menu.tsx (exported, reusable): iOS-style centered alert with title / description / Cancel + destructive confirm — same visual shell as RenameDialog (rounded-[28px] frosted card, 2-column footer, spring entrance, z-[120] portal, scrim-press + capture-phase Escape to cancel). destructive=true renders the confirm bold red #FF375F with red hover wash.
+- builder.tsx — three delete entry points, all confirmation-guarded via requestRemoveScene():
+  1. Scenes header: red trash icon button (30px circle, #FF375F/10 tint) right next to the blue "Order" pill — deletes the CURRENT scene, always visible.
+  2. Every scene card in the normal rail now has a trash badge on its cover art (top-right, mirroring the number badge top-left): active card = solid red fill, inactive = dark translucent that turns red on card hover (group/scene). Card restructured from bare <button> to wrapper div + inner button + absolutely-positioned badge (buttons can't nest). 44×44 hit target with a 22px visual circle (touch guideline), badges hidden when only 1 scene remains.
+  3. Reorder-mode SceneRow trash re-routed through the same confirm (was instant-delete).
+- Guard rails: requestRemoveScene() blocks at ≤1 scene with the "Keep at least one scene" toast; removeScene() hardened (early-return on missing id, setEditBlockId(null) so a block-editor sheet open on a deleted scene's block closes); description adapts — "This removes the scene and its N block(s). You can undo right after." vs "This empty scene will be removed…"; localSheet extended with deleteSceneId so Escape/⌘Z defer to the dialog; deletion still pushHistory'd → ⌘Z/undo restores the scene fully.
+- E2E VERIFIED (agent-browser desktop 1512×900 + mobile 390×844, VLM-checked):
+  - Header button present; with 1 scene → tap shows "Keep at least one scene" toast, NO dialog.
+  - Added Scene 2 → both card badges + header button present ("Delete Scene 1/2"); DOM-verified 44×44 hit zones.
+  - Card badge tap → dialog "Delete Scene 2? / This empty scene will be removed. You can undo right after. / Cancel Delete(red)". Cancel → 2 scenes intact. Re-open + Delete → "Scenes · 1", Scene 2 gone, "Scene 2 removed" toast. Undo button → BOTH scenes restored ("Scene 1, 1 blocks" + "Scene 2, 0 blocks").
+  - Header delete (current scene w/ 1 block) → "…and its 1 block…" variant correct. Escape closes the dialog.
+  - Reorder mode: row trash opens the same confirm; confirmed delete of Scene 1 → remaining empty scene renumbers to "Scene 1, 0 blocks", header label follows.
+  - VLM mobile: red trash badge top-right of the Scene 2 card, centered frosted dialog, red Delete, no clipping/overlap. VLM desktop: undo/redo/red-trash/Order row ✓, every card badged, active card's badge red-filled, layout clean.
+  - Hygiene: bun run lint exit 0; browser console 0 errors; agent-browser errors empty; dev.log clean (only normal prisma queries); no Untitled QA drafts left in DB.
+- Tool gotchas this round: agent-browser eval keeps top-level const bindings between calls in the same page (wrap in IIFE or get "already declared" SyntaxError); scene-block tiles + icon buttons still need the full mousedown/mouseup/click dispatch sequence.
+
+Stage Summary:
+- Scene deletion is now a first-class builder action: a red trash button in the Scenes header (current scene), a trash badge on every scene card in the rail, and the reorder-mode trash — all three funnelling into one iOS-style destructive confirm that names the scene, counts the blocks it will take with it, promises undo, and delivers it (⌘Z/undo restores the scene). Single-scene guard keeps ≥1 scene at all times. Mobile-verified with 44px touch targets, lint-clean, zero console errors.
+- Files modified: src/components/memorableday/moment-menu.tsx (+ConfirmDialog export), src/components/memorableday/builder.tsx (import, deleteSceneId state, requestRemoveScene, header trash button, scene-card wrapper + trash badges, SceneRow onRemove re-route, ConfirmDialog JSX, localSheet gate, removeScene hardening).
+- Recurring 15-min webDevReview cron verified in place (job_id 399376; currently system-throttled "Disabled due to exec limits exceeded" — not deleted, will resume when the limit resets).
+- SECURITY (carried over): the GitHub classic PAT was posted in chat in earlier sessions — user must rotate it.
+- Next-phase candidates (queue): Rose block (native CSS/SVG rose), library search field, public /e/[slug] recipient page, claw-machine sound FX, per-scene soundtrack override, more library templates per category.

@@ -82,7 +82,7 @@ import {
 } from "./gift-box";
 import { CoverArt, COVER_NAMES } from "./cover-art";
 import { BottomSheet } from "./bottom-sheet";
-import { RenameDialog } from "./moment-menu";
+import { ConfirmDialog, RenameDialog } from "./moment-menu";
 import { useMD, type BuilderOptions } from "./md-context";
 import { cn } from "@/lib/utils";
 
@@ -3445,6 +3445,8 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const [coverOpen, setCoverOpen] = useState(false);
   /** Send-flow recipient prompt (iOS alert) + in-flight flag */
   const [sendPromptOpen, setSendPromptOpen] = useState(false);
+  /** Scene-delete confirm (iOS alert) — id of the scene awaiting confirmation */
+  const [deleteSceneId, setDeleteSceneId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const blocksEndRef = useRef<HTMLDivElement>(null);
   const blockDragStarted = useRef(false);
@@ -3462,8 +3464,12 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const scene = scenes[Math.min(sceneIdx, scenes.length - 1)];
   const scenePos = sceneIdx + 1;
   const editBlock = editBlockId ? (scenes.flatMap((s) => s.blocks).find((b) => b.id === editBlockId) ?? null) : null;
+  /** Scene awaiting delete confirmation (iOS alert) */
+  const pendingDelete = deleteSceneId !== null ? scenes.find((s) => s.id === deleteSceneId) ?? null : null;
+  const pendingDeleteIdx = pendingDelete ? scenes.indexOf(pendingDelete) : -1;
   /** Any builder-local sheet open? (Escape / ⌘Z defer to it) */
-  const localSheet = editBlock !== null || musicOpen || scheduleOpen || coverOpen || sendPromptOpen || libraryOpen;
+  const localSheet =
+    editBlock !== null || musicOpen || scheduleOpen || coverOpen || sendPromptOpen || libraryOpen || deleteSceneId !== null;
 
   /* ---------- Undo / redo ---------- */
 
@@ -3563,12 +3569,23 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
       return;
     }
     const idx = scenes.findIndex((s) => s.id === id);
+    if (idx === -1) return;
     pushHistory(`Scene ${idx + 1} removed`);
     setScenes((prev) => prev.filter((s) => s.id !== id));
     if (idx === sceneIdx) setSceneIdx(Math.max(0, idx - 1));
     else if (idx < sceneIdx) setSceneIdx((i) => Math.max(0, i - 1));
     setSelectedBlock(null);
+    setEditBlockId(null);
     notify(`Scene ${idx + 1} removed`);
+  };
+
+  /** Opens the destructive-confirm alert for a scene (guard: keep ≥ 1) */
+  const requestRemoveScene = (id: string) => {
+    if (scenes.length <= 1) {
+      notify("Keep at least one scene");
+      return;
+    }
+    setDeleteSceneId(id);
   };
 
   const commitTitle = () => {
@@ -3836,6 +3853,15 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                   </button>
                   <button
                     type="button"
+                    onClick={() => requestRemoveScene(scene.id)}
+                    aria-label={`Delete Scene ${scenePos}`}
+                    title={`Delete Scene ${scenePos}`}
+                    className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-[#FF375F]/[0.1] text-[#FF375F] transition-all active:scale-90"
+                  >
+                    <Trash2 size={14} strokeWidth={2.4} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       setReorderMode(true);
                       setSelectedBlock(null);
@@ -3866,7 +3892,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                         setSceneIdx(i);
                         setSelectedBlock(null);
                       }}
-                      onRemove={() => removeScene(s.id)}
+                      onRemove={() => requestRemoveScene(s.id)}
                       onGripDown={() => {
                         sceneDragStarted.current = true;
                       }}
@@ -3879,57 +3905,76 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 {scenes.map((s, i) => {
                   const active = i === sceneIdx;
                   return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        setSceneIdx(i);
-                        setSelectedBlock(null);
-                      }}
-                      aria-pressed={active}
-                      aria-label={`Scene ${i + 1}, ${s.blocks.length} blocks`}
-                      className={cn(
-                        "relative w-[104px] shrink-0 overflow-hidden rounded-[18px] bg-white text-left transition-all active:scale-[0.96]",
-                        active
-                          ? "card-shadow ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
-                          : "card-shadow hairline"
-                      )}
-                    >
-                      <CoverArt variant={(cover + i) % 10} className="h-[64px] w-full">
-                        <span
-                          className={cn(
-                            "absolute left-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[11px] font-bold backdrop-blur-md",
-                            active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/35 text-white"
-                          )}
-                        >
-                          {i + 1}
-                        </span>
-                      </CoverArt>
-                      <div className="px-2.5 py-2">
-                        <p className="text-[12px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
-                          Scene {i + 1}
-                        </p>
-                        <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-medium text-[#AAAAAA]">
-                          {s.blocks.length} {s.blocks.length === 1 ? "block" : "blocks"}
-                        </p>
-                        {s.blocks.length > 0 ? (
-                          <span className="mt-1.5 flex items-center gap-[3px]" aria-hidden>
-                            {s.blocks.slice(0, 5).map((b) => (
-                              <span
-                                key={b.id}
-                                className="h-[5px] w-[5px] rounded-full"
-                                style={{ backgroundColor: BLOCK_BY_TYPE[b.type]?.tint ?? "#C7C7CC" }}
-                              />
-                            ))}
-                            {s.blocks.length > 5 ? (
-                              <span className="text-[8px] font-bold leading-none text-[#AAAAAA]">
-                                +{s.blocks.length - 5}
-                              </span>
-                            ) : null}
+                    <div key={s.id} className="group/scene relative w-[104px] shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSceneIdx(i);
+                          setSelectedBlock(null);
+                        }}
+                        aria-pressed={active}
+                        aria-label={`Scene ${i + 1}, ${s.blocks.length} blocks`}
+                        className={cn(
+                          "relative w-full overflow-hidden rounded-[18px] bg-white text-left transition-all active:scale-[0.96]",
+                          active
+                            ? "card-shadow ring-2 ring-[#007AFF] ring-offset-2 ring-offset-[#F5F5F7]"
+                            : "card-shadow hairline"
+                        )}
+                      >
+                        <CoverArt variant={(cover + i) % 10} className="h-[64px] w-full">
+                          <span
+                            className={cn(
+                              "absolute left-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[11px] font-bold backdrop-blur-md",
+                              active ? "bg-[#007AFF] text-white" : "bg-[#1D1D1F]/35 text-white"
+                            )}
+                          >
+                            {i + 1}
                           </span>
-                        ) : null}
-                      </div>
-                    </button>
+                        </CoverArt>
+                        <div className="px-2.5 py-2">
+                          <p className="text-[12px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+                            Scene {i + 1}
+                          </p>
+                          <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-medium text-[#AAAAAA]">
+                            {s.blocks.length} {s.blocks.length === 1 ? "block" : "blocks"}
+                          </p>
+                          {s.blocks.length > 0 ? (
+                            <span className="mt-1.5 flex items-center gap-[3px]" aria-hidden>
+                              {s.blocks.slice(0, 5).map((b) => (
+                                <span
+                                  key={b.id}
+                                  className="h-[5px] w-[5px] rounded-full"
+                                  style={{ backgroundColor: BLOCK_BY_TYPE[b.type]?.tint ?? "#C7C7CC" }}
+                                />
+                              ))}
+                              {s.blocks.length > 5 ? (
+                                <span className="text-[8px] font-bold leading-none text-[#AAAAAA]">
+                                  +{s.blocks.length - 5}
+                                </span>
+                              ) : null}
+                            </span>
+                          ) : null}
+                        </div>
+                      </button>
+                      {scenes.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => requestRemoveScene(s.id)}
+                          aria-label={`Delete Scene ${i + 1}`}
+                          title={`Delete Scene ${i + 1}`}
+                          className="absolute right-0.5 top-0.5 flex h-[44px] w-[44px] items-center justify-center transition-transform active:scale-90"
+                        >
+                          <span
+                            className={cn(
+                              "flex h-[22px] w-[22px] items-center justify-center rounded-full backdrop-blur-md transition-colors",
+                              active ? "bg-[#FF375F] text-white" : "bg-[#1D1D1F]/45 text-white group-hover/scene:bg-[#FF375F]/85"
+                            )}
+                          >
+                            <Trash2 size={10.5} strokeWidth={2.6} aria-hidden />
+                          </span>
+                        </button>
+                      ) : null}
+                    </div>
                   );
                 })}
                 <button
@@ -4312,6 +4357,24 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
               });
             }
           });
+        }}
+      />
+
+      {/* Scene delete — iOS destructive confirm */}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={pendingDelete ? `Delete Scene ${pendingDeleteIdx + 1}?` : "Delete scene?"}
+        description={
+          pendingDelete
+            ? pendingDelete.blocks.length > 0
+              ? `This removes the scene and its ${pendingDelete.blocks.length} ${pendingDelete.blocks.length === 1 ? "block" : "blocks"}. You can undo right after.`
+              : "This empty scene will be removed. You can undo right after."
+            : undefined
+        }
+        onCancel={() => setDeleteSceneId(null)}
+        onConfirm={() => {
+          if (deleteSceneId) removeScene(deleteSceneId);
+          setDeleteSceneId(null);
         }}
       />
     </motion.div>

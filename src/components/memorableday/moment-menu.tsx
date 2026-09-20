@@ -159,6 +159,114 @@ export function MomentMenu({
 }
 
 /* ------------------------------------------------------------------ */
+/* iOS-style confirm alert (no text field)                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Centered system alert with Cancel / Confirm buttons — the iOS "destructive
+ * confirm" pattern (delete scene, remove draft, …). Optional red styling for
+ * the confirm action; Escape and scrim-press cancel.
+ */
+export function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel = "Delete",
+  cancelLabel = "Cancel",
+  destructive = true,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  /** Alert heading (usually a question — "Delete Scene 2?") */
+  title: string;
+  /** Optional sub-copy under the heading */
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  /** Destructive confirms render bold red */
+  destructive?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const mounted = useMounted();
+
+  // Escape cancels before other layers react
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [open, onCancel]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          key="confirm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-label={title}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: 0.14 } }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) onCancel();
+          }}
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-[#1D1D1F]/35 px-6 backdrop-blur-[2px]"
+        >
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.96, opacity: 0, transition: { duration: 0.12 } }}
+            transition={{ type: "spring", stiffness: 560, damping: 30 }}
+            className="w-full max-w-[300px] overflow-hidden rounded-[28px] bg-[#FFFFFF]/[0.96] shadow-[0_32px_80px_-20px_rgba(29,29,31,0.5)] backdrop-blur-2xl dark:bg-[#2C2C2E]/[0.96]"
+          >
+            <div className="px-5 pb-4 pt-5 text-center">
+              <p className="text-[15.5px] font-bold tracking-[-0.01em] text-[#1D1D1F] dark:text-white">{title}</p>
+              {description ? (
+                <p className="mx-auto mt-1 max-w-[240px] text-[12px] font-medium leading-snug text-[#AAAAAA]">
+                  {description}
+                </p>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 border-t border-[#1D1D1F]/[0.08] dark:border-white/10">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="h-[46px] text-[15.5px] font-medium text-[#007AFF] transition-colors hover:bg-[#1D1D1F]/[0.03] active:bg-[#1D1D1F]/[0.06] dark:hover:bg-white/5"
+              >
+                {cancelLabel}
+              </button>
+              <button
+                type="button"
+                onClick={onConfirm}
+                className={cn(
+                  "h-[46px] border-l border-[#1D1D1F]/[0.08] text-[15.5px] font-bold transition-colors dark:border-white/10",
+                  destructive
+                    ? "text-[#FF375F] hover:bg-[#FF375F]/[0.06] active:bg-[#FF375F]/[0.1]"
+                    : "text-[#007AFF] hover:bg-[#1D1D1F]/[0.03] active:bg-[#1D1D1F]/[0.06] dark:hover:bg-white/5"
+                )}
+              >
+                {confirmLabel}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
+    document.body
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* iOS-style rename alert                                              */
 /* ------------------------------------------------------------------ */
 
