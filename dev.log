@@ -1467,3 +1467,4 @@ prisma:query SELECT `main`.`Moment`.`id`, `main`.`Moment`.`title` FROM `main`.`M
 prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`Notification`.`id` FROM `main`.`Notification` WHERE `main`.`Notification`.`userId` = ? LIMIT ? OFFSET ?) AS `sub`
 prisma:query SELECT `main`.`CouponAssignment`.`id`, `main`.`CouponAssignment`.`momentId`, `main`.`CouponAssignment`.`blockId`, `main`.`CouponAssignment`.`playerId`, `main`.`CouponAssignment`.`couponId`, `main`.`CouponAssignment`.`code`, `main`.`CouponAssignment`.`title`, `main`.`CouponAssignment`.`color`, `main`.`CouponAssignment`.`claimedAt` FROM `main`.`CouponAssignment` WHERE ((`main`.`CouponAssignment`.`momentId` = ? AND `main`.`CouponAssignment`.`blockId` = ? AND `main`.`CouponAssignment`.`playerId` = ?) AND 1=1) LIMIT ? OFFSET ?
  POST /api/md/coupons/draw 200 in 48ms (compile: 2ms, render: 46ms)
+ GET / 200 in 47ms (compile: 5ms, render: 42ms)
