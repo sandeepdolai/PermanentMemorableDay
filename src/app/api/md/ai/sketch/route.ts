@@ -8,7 +8,8 @@
  * validated against the app's block catalogue so the builder can open it
  * directly. Only blocks that render meaningfully without user-uploaded media
  * are allowed (text / gift / countdown / quiz / reward / cta / confetti /
- * coupon / audio), and the JSON is repaired/sanitized before it ships.
+ * audio — coupon stays hidden until its later-phase relaunch), and the
+ * JSON is repaired/sanitized before it ships.
  */
 import ZAI from "z-ai-web-dev-sdk";
 import type { BlockData, BlockDoc, SceneDoc } from "@/lib/md-blocks";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
 /** Block types the sketch may emit (no media-dependent ones — no photo/video/background). */
-const ALLOWED_TYPES = ["text", "gift", "countdown", "quiz", "reward", "cta", "confetti", "coupon", "audio"] as const;
+const ALLOWED_TYPES = ["text", "gift", "countdown", "quiz", "reward", "cta", "confetti", "audio"] as const;
 type AllowedType = (typeof ALLOWED_TYPES)[number];
 
 interface SketchBlock {
@@ -175,14 +176,6 @@ function sanitizeBlock(raw: SketchBlock, idx: number, sceneNo: number): BlockDoc
       data.code = str(raw.code, 24) ?? "GIFT-20";
       break;
     }
-    case "coupon": {
-      data.heading = str(raw.heading, 30) ?? "COUPON CODE";
-      data.body = str(raw.body, 40) ?? "REVEAL";
-      data.stepLabel = str(raw.stepLabel, 24) ?? "YOUR COUPON CODE";
-      data.label = str(raw.label, 24) ?? "PLAY & WIN";
-      data.code = str(raw.code, 24) ?? "SAVE20";
-      break;
-    }
     case "cta": {
       data.label = str(raw.label, 40) ?? "See more";
       const url = str(raw.url, 200);
@@ -243,7 +236,6 @@ export async function POST(req: Request) {
             '  · {"type":"countdown","minutes": number 1–30} — a timed lock building anticipation (at most once).\n' +
             '  · {"type":"quiz","question": string, "options": [string ×2–4], "answer": 0-based index} — a fun question about the sender/recipient or the occasion.\n' +
             '  · {"type":"reward","rewardKind": string like \"Coffee on me\", "code": string like \"NIGHT-OUT\"} — a redeemable treat in a golden ticket.\n' +
-            '  · {"type":"coupon","heading": "COUPON CODE", "body": "REVEAL", "stepLabel": "YOUR COUPON CODE", "label": "PLAY & WIN", "code": string like "SAVE20"} — arcade claw-machine coupon reveal (at most once, only when a promo code fits).\n' +
             '  · {"type":"cta","label": string like \"See the full album\", "url": "https://…"} — an action button (omit url if there is no real link).\n' +
             '  · {"type":"confetti"} — a celebration burst; use exactly once, as the FINAL block of the FINAL scene.\n' +
             '  · {"type":"audio"} — a song placeholder the sender picks later (at most once).\n' +

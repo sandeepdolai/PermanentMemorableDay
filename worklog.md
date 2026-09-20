@@ -1333,3 +1333,25 @@ Stage Summary:
 - All three reported bugs root-caused and fixed; the machine now works end-to-end in new moments, the joystick gives proportional multi-stroke control with a real DROP button, and the pile + grab choreography read as a physical machine.
 - Key artifacts: MACHINE_BEAT shared timing map + starterBlockData() in builder.tsx; deflection joystick + pendulum sway + scatter pile in coupon-machine.tsx.
 - Suggested next phase: (1) optional haptics (navigator.vibrate) on grab for mobile, (2) a "miss" variant where the claw visibly nudges neighboring tickets, (3) replay micro-skip button during the 2.6s choreography, (4) consider the welcome-tour overlay z-index vs. builder (it blocked a synthetic click during testing).
+
+---
+Task ID: 38
+Agent: Z.ai Code (main orchestrator)
+Task: Hide the Coupon Reveal (claw machine) block from all creation surfaces (ships later), replace the website logo everywhere with the user's uploaded PNG, and push everything to GitHub.
+
+Work Log:
+- Analyzed the uploaded brand PNG (1254x1254 RGBA): a white bunny emblem with pink accents on a light-blue rounded square, transparent corners. Cropped tight to content, square-padded, and generated optimized assets: public/logo.png (512px, 25KB), src/app/icon.png (256px favicon, 10KB), src/app/apple-icon.png (180px on white plate). Removed the unreferenced public/logo.svg.
+- Rewrote LogoMark in src/components/memorableday/bits.tsx to render the new emblem via next/image (object-contain, sizes-aware). LogoMark is the single logo component — this covers side-nav (34/38px), welcome tour (34px), sheets (24/52px), and the moment-player end screen (56px) at once. Next.js auto-wired the favicon + apple-touch-icon from src/app/icon.png / apple-icon.png (verified <link rel=icon> in HTML head).
+- Hid the Coupon Reveal machine block behind a COUPON_REVEAL_ENABLED=false flag in builder.tsx: ADDABLE_BLOCKS filters "coupon" out of the block tray (now "11 block kinds") while BLOCK_BY_TYPE stays complete so already-authored coupon blocks keep their icon/label in the editor; LIBRARY_TEMPLATES derived from LIBRARY_TEMPLATES_ALL filters the "coupon-reveal" template (Library now "All 12", Rewards 2).
+- Removed the Coupon Reveal entry from SCENE_BLOCKS in views/create-view.tsx (11 blocks; also dropped the now-unused Ticket import).
+- AI sketch route (api/md/ai/sketch): removed "coupon" from ALLOWED_TYPES, deleted the coupon bullet from the LLM prompt, and removed the case "coupon" sanitizer (header comment updated). SKETCH_BLOCK_META in sheet-contents kept as a dormant display fallback.
+- Player backward compatibility verified: the seeded "Coupon Arcade" moment still runs the full machine end-to-end in the browser — PLAY & WIN -> control phase (button morphs to "Drop the claw") -> aim -> DROP -> choreography -> "you won FREESHIP" reveal + "Copy code FREESHIP" + "Play again".
+- Incident found + fixed: POST /api/md/coupons/draw returned 500 ("machine jammed" toast) — root cause was a wedged dev server (dev.log stdout pipe stalled at 08:13 after repeated Fast Refresh full reloads), not a code bug. Killed the stale process tree, restarted `bun run dev`; draw returns 200 with a fresh assignment and logging works again.
+- Verified via agent-browser: home/Create/Builder/Library surfaces show no coupon block; logo img loads (displayed 38x38, complete, naturalWidth>0); /logo.png /icon.png /apple-icon.png all 200; VLM visual check of the screenshot confirms the bunny emblem renders correctly with no broken images. bun run lint clean; tsc clean for all edited files (pre-existing unrelated errors in app-shell/music-route/examples unchanged).
+
+Stage Summary:
+- Coupon Reveal is now fully hidden from every creation surface (tray, library, scene blocks, AI sketch) via a single COUPON_REVEAL_ENABLED flag — flip it to true to relaunch. Existing coupon moments keep playing untouched.
+- The official bunny logo now appears everywhere: app chrome (LogoMark), browser tab (favicon), and iOS home screen (apple-icon).
+- Repo state committed and pushed to sandeepdolai/PermanentMemorableDay.
+- SECURITY (carried): the GitHub classic PAT was posted in chat again this round — user should rotate it at github.com/settings/tokens after sandbox work.
+- Next-phase queue: Rose block, library search field, public /e/[slug] recipient page, per-scene soundtrack override, AI sketch->soundtrack, creator claims analytics dashboard; when coupon relaunches: haptics on grab, miss-variant choreography, replay micro-skip.

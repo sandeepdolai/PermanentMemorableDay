@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import type { MomentStatus } from "@/lib/mock-data";
 
@@ -70,31 +71,23 @@ export function StatusBadge({ status, className }: { status: MomentStatus; class
   );
 }
 
-/** MemorableDay logo mark — gradient squircle */
+/** MemorableDay logo mark — the official brand emblem (public/logo.png) */
 export function LogoMark({ size = 36 }: { size?: number }) {
   return (
     <span
       aria-hidden
-      className="relative flex shrink-0 items-center justify-center rounded-[30%] shadow-[0_6px_16px_-6px_rgba(0,122,255,0.6)]"
-      style={{
-        width: size,
-        height: size,
-        background: "linear-gradient(135deg, #007AFF 0%, #40B4FF 55%, #64D2FF 100%)",
-      }}
+      className="relative flex shrink-0 items-center justify-center"
+      style={{ width: size, height: size }}
     >
-      <svg
-        width={size * 0.56}
-        height={size * 0.56}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="white"
-        strokeWidth={2.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-      </svg>
-      <span className="absolute inset-0 rounded-[30%] bg-[linear-gradient(180deg,rgba(255,255,255,0.35),transparent_50%)]" />
+      <Image
+        src="/logo.png"
+        alt=""
+        width={size}
+        height={size}
+        sizes={`${size}px`}
+        className="h-full w-full select-none object-contain"
+        draggable={false}
+      />
     </span>
   );
 }

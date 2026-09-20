@@ -10,7 +10,6 @@ import {
   Music,
   PartyPopper,
   Sparkles,
-  Ticket,
   Type,
   Video,
   Wallpaper,
@@ -20,6 +19,7 @@ import { LargeTitle, SectionHeader } from "../bits";
 import { useMD } from "../md-context";
 
 /** Scene block types from the PRD Experience Builder — ids + tints match the builder palette 1:1 */
+/* Coupon Reveal ships in a later phase — hidden from scene blocks for now. */
 const SCENE_BLOCKS = [
   { label: "Text", type: "text", icon: Type, tint: "#007AFF" },
   { label: "Photo", type: "photo", icon: ImagesIcon, tint: "#30D158" },
@@ -30,7 +30,6 @@ const SCENE_BLOCKS = [
   { label: "Countdown", type: "countdown", icon: Clock, tint: "#FF9F0A" },
   { label: "Quiz", type: "quiz", icon: ListChecks, tint: "#007AFF" },
   { label: "Reward", type: "reward", icon: Award, tint: "#30D158" },
-  { label: "Coupon Reveal", type: "coupon", icon: Ticket, tint: "#218CF4" },
   { label: "Button", type: "cta", icon: MousePointerClick, tint: "#007AFF" },
   { label: "Confetti", type: "confetti", icon: PartyPopper, tint: "#FF375F" },
 ];

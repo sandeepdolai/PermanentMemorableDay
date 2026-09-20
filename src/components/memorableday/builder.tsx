@@ -119,6 +119,17 @@ const BLOCKS: BlockDef[] = [
   { type: "confetti", label: "Confetti", icon: PartyPopper, tint: "#FF375F" },
 ];
 
+/* Coupon Reveal (the claw machine) ships in a later phase — hidden from
+   every creation surface (tray, library, scene blocks, AI sketch) for now.
+   Existing moments that already contain coupon blocks keep playing fine. */
+const COUPON_REVEAL_ENABLED = false;
+
+/** Block kinds creators can currently add (BLOCK_BY_TYPE stays complete so
+ *  already-authored coupon blocks still get their icon/label in the editor). */
+const ADDABLE_BLOCKS = COUPON_REVEAL_ENABLED
+  ? BLOCKS
+  : BLOCKS.filter((b) => b.type !== "coupon");
+
 const BLOCK_BY_TYPE = Object.fromEntries(BLOCKS.map((b) => [b.type, b]));
 
 type Block = BlockDoc;
@@ -2094,7 +2105,7 @@ interface LibraryTemplate {
   isNew?: boolean;
 }
 
-const LIBRARY_TEMPLATES: LibraryTemplate[] = [
+const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
   {
     id: "coupon-reveal",
     type: "coupon",
@@ -2214,6 +2225,11 @@ const LIBRARY_TEMPLATES: LibraryTemplate[] = [
     data: { style: "Gold" },
   },
 ];
+
+/** Templates currently offered in the library (coupon hidden until relaunch). */
+const LIBRARY_TEMPLATES: LibraryTemplate[] = COUPON_REVEAL_ENABLED
+  ? LIBRARY_TEMPLATES_ALL
+  : LIBRARY_TEMPLATES_ALL.filter((t) => t.type !== "coupon");
 
 /** Miniature art for one library card — a hand-tuned vignette per type. */
 function LibraryThumb({ t }: { t: LibraryTemplate }) {
@@ -4511,7 +4527,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 Add to Scene {scenePos}
               </h2>
               <p className="text-[11.5px] font-medium text-[#AAAAAA]">
-                {BLOCKS.length} block kinds · tap to drop
+                {ADDABLE_BLOCKS.length} block kinds · tap to drop
               </p>
             </div>
             <div className="relative">
@@ -4550,7 +4566,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 </span>
                 <span className="text-[13px] font-semibold tracking-[-0.01em]">Ask AI</span>
               </button>
-              {BLOCKS.map((b) => {
+              {ADDABLE_BLOCKS.map((b) => {
                 const Icon = b.icon;
                 return (
                   <button
