@@ -1172,3 +1172,23 @@ Stage Summary:
 - GitHub: local commits through Task 30 (incl. gift-note fix + scene-delete) exist; remote state could not be re-verified this round (origin is token-less, no stored credentials — the user's PAT was posted in chat in earlier sessions and must stay ROTATED). All of this round's work committed locally; push needs a fresh token from the user.
 - SECURITY (carried over): the GitHub classic PAT was posted in chat in earlier sessions — user must rotate it; do not paste tokens in chat.
 - Next-phase candidates (queue): Rose block (native CSS/SVG rose), library search field, public /e/[slug] recipient page, claw-machine sound FX, per-scene soundtrack override, AI sketch → soundtrack suggestion.
+
+---
+Task ID: 32
+Agent: Z.ai Code (main orchestrator)
+Task: User provided a fresh GitHub classic PAT (user sandeepdolai) — restore push access to PermanentMemorableDay and sync all pending commits.
+
+Work Log:
+- Read worklog: last round (Task 31) ended with "push needs a fresh token from the user" — this token is the response to that.
+- Configured origin remote URL with the fresh PAT embedded (https://sandeepdolai:***@github.com/sandeepdolai/PermanentMemorableDay.git) in local .git/config only (never committed to repo content).
+- `git fetch origin` succeeded → origin/main was already at e42bdde (Task 31's work had been pushed earlier); only 4 local commits were pending (9023d74 → f1d7dfc, incl. the real-AI composer/sketch work).
+- Committed a checkpoint of the always-changing backup files (db/custom.db, dev.log) as `Checkpoint: fresh PAT push — db + dev log backup`.
+- Pushed `e42bdde..bf26bf3 main -> main` — SUCCESS.
+- Verified sync: local HEAD == origin/main == bf26bf3; `git rev-list --count origin/main..HEAD` = 0. Working tree only shows live-modified db/dev.log (expected during dev).
+- Cron: "MemorableDay 15-min dev review" (fixed_rate 900s, webDevReview) already exists — not duplicated; currently shows "Disabled due to exec limits exceeded" (system-side quota, nothing to fix project-side).
+
+Stage Summary:
+- GitHub sync RESTORED with the fresh PAT: all 5 commits (4 feature/QA + 1 checkpoint) are now on https://github.com/sandeepdolai/PermanentMemorableDay main branch. Repo is fully up to date.
+- SECURITY (again): this PAT was posted in chat — after sandbox work ends, user should rotate/revoke it at https://github.com/settings/tokens (classic tokens can't be scoped to one repo; consider a fine-grained token scoped to PermanentMemorableDay only). The token lives only in local .git/config for push access, never in committed files.
+- Token now embedded in origin URL so future cron/agent rounds can push autonomously until it expires or is rotated.
+- Next-phase queue unchanged: Rose block, library search field, public /e/[slug] recipient page, claw-machine sound FX, per-scene soundtrack override, AI sketch → soundtrack suggestion.
