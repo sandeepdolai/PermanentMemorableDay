@@ -144,8 +144,31 @@ export interface MachinePrize {
  *  joystick) → grabbing (drop → snap → lift → center) → revealed. */
 export type MachinePhase = "idle" | "starting" | "control" | "grabbing" | "revealed";
 
-/** Duration of the release choreography: drop → snap → lift → center. */
-export const MACHINE_SEQ_MS = 1700;
+/** Duration of the release choreography: flare → drop → bounce → snap →
+ *  pluck → lift → glide → settle → reveal. */
+export const MACHINE_SEQ_MS = 2600;
+
+/** Shared beat map — fractions of the grab sequence. The hook's timers and
+ *  the SVG keyframes both read these, so sound + motion stay in lockstep. */
+export const MACHINE_BEAT = {
+  /** pincers flare open just before the dive */
+  open: 0.07,
+  /** claw lands on the ticket (gravity easeIn) */
+  drop: 0.4,
+  /** contact rebound */
+  bounce: 0.47,
+  /** pincers snap shut on the ticket */
+  snap: 0.52,
+  /** ticket plucked clear of the pile */
+  pluck: 0.62,
+  /** claw rises to travel height */
+  lift: 0.7,
+  /** trolley glides to the center stage */
+  glide: 0.84,
+  /** pincers loosen over the stage */
+  settle: 0.92,
+  done: 1,
+} as const;
 
 /** Ticket-count bounds the creator can dial the pile to. */
 export const TICKETS_MIN = 6;
@@ -156,7 +179,7 @@ export const TICKETS_DEFAULT = 12;
 const CLAW_RANGE = 112;
 
 /* ------------------------------------------------------------------ */
-/* Pile layout — a procedural, deterministic ticket mountain           */
+/* Pile layout — a dumped, jumbled heap of tickets behind the glass    */
 /* ------------------------------------------------------------------ */
 
 interface PileSlot {
@@ -165,9 +188,22 @@ interface PileSlot {
   w: number;
   h: number;
   rot: number;
+  /** 0 = deepest row … 1 = front row (drives contact-shadow depth). */
+  depth: number;
 }
 
-/** Stable pseudo-random from a string (same pile every play/refresh). */
+/** Deterministic PRNG — the same pile every play/refresh. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Stable pseudo-random from a string (legacy helper — still used by art). */
 function hashStr(s: string): number {
   return [...s].reduce((a, ch) => (a * 33 + ch.charCodeAt(0)) % 100003, 11);
 }
@@ -177,32 +213,37 @@ function jitter(key: string, spread: number): number {
   return ((hashStr(key) % 1000) / 1000 - 0.5) * 2 * spread;
 }
 
-/** Front-heavy row weights — the pile reads deeper with more cards up front. */
+/** Front row baseline — bottoms tuck just behind the chamber lip (y 336). */
+const FRONT_ROW_Y = 316;
+/** Vertical gap between depth bands (jittered per ticket). */
+const ROW_GAP = 21;
+
+/** Back-to-front row weights — the heap reads deeper with more cards up front. */
 const ROW_WEIGHTS: Record<number, number[]> = {
   3: [0.85, 1, 1.3],
   4: [0.75, 0.95, 1.15, 1.35],
   5: [0.7, 0.9, 1.05, 1.2, 1.35],
 };
 
-/** Front row baseline — bottoms tuck just behind the chamber lip (y 336). */
-const FRONT_ROW_Y = 314;
-/** Vertical gap between depth rows. */
-const ROW_GAP = 22;
+/** Chamber x-window the heap may occupy (matches the glass, minus margin). */
+const PILE_LEFT = 36;
+const PILE_RIGHT = 284;
 
 /**
- * Deals `count` tickets into a heaped mound at the bottom of the glass
- * (window x 30–290, floor ≈ 336). 3 rows for small piles, up to 5 for the
- * stuffed look; back rows are smaller/higher (perspective), front rows
- * bigger and spread wider — dense piles fill the full width, sparse ones
- * cluster in the middle like a real prize pile. Deterministic — the same
- * count always builds the same mound.
+ * Deals `count` tickets into a heaped mound at the bottom of the glass —
+ * the look of a pile someone just dumped in: rows of depth for perspective
+ * (back = smaller + higher, front = bigger + lower), but within each row
+ * the tickets scatter around a random cluster center with uneven gaps,
+ * random tilt (a couple tossed nearly sideways) and per-ticket vertical
+ * jitter so no two ever line up. Deterministic — the same count always
+ * builds the same mound.
  */
 function generateSlots(count: number): PileSlot[] {
   const R = count <= 10 ? 3 : count <= 16 ? 4 : 5;
   const weights = ROW_WEIGHTS[R];
   const totalW = weights.reduce((a, b) => a + b, 0);
 
-  // Distribute tickets across rows (front-heavy), each row ≥ 1.
+  // Distribute tickets across depth bands (front-heavy), each row ≥ 1.
   const rowCounts = weights.map((w) => Math.max(1, Math.round((count * w) / totalW)));
   let diff = rowCounts.reduce((a, b) => a + b, 0) - count;
   let guard = 0;
@@ -217,27 +258,52 @@ function generateSlots(count: number): PileSlot[] {
     }
   }
 
+  const rand = mulberry32(count * 2654435761);
   const slots: PileSlot[] = [];
-  let g = 0; // global ticket index → stable jitter
+  let g = 0; // global ticket index → stable art jitter
   for (let r = 0; r < R; r++) {
-    const t = R === 1 ? 1 : r / (R - 1);
+    const depth = r / (R - 1); // 0 back … 1 front
     const y = FRONT_ROW_Y - (R - 1 - r) * ROW_GAP;
-    const h = 16.5 + (20.5 - 16.5) * t;
-    const w = 44 + (57 - 44) * t;
+    const h = 16 + (21 - 16) * depth;
+    const w = 43 + (58 - 43) * depth;
     const n = rowCounts[r];
-    // Dense rows spread across the glass; sparse rows cluster centrally —
-    // no floating lonely tickets at the edges.
-    const spanW = Math.min(286 - w - 34, n * w * 0.96 + (n - 1) * 3);
-    const startX = 160 - spanW / 2;
+
+    // This row's heap center wanders — rows don't share an axis, so the
+    // mound never reads as aligned stacks.
+    const rowSpan = PILE_RIGHT - PILE_LEFT - w;
+    const density = (n * w) / rowSpan; // how packed this row is
+    const wander = (rand() - 0.5) * rowSpan * (1 - Math.min(0.85, density)) * 0.8;
+    const center = (PILE_LEFT + PILE_RIGHT) / 2 + wander;
+
+    // Scatter positions: uneven steps around the cluster center.
+    const xs: number[] = [];
+    if (n === 1) {
+      xs.push(center + (rand() - 0.5) * w * 0.5);
+    } else {
+      // total width the row occupies — packed rows spread wide, sparse
+      // rows cluster tightly (like the middle of a real dump).
+      const spread = Math.min(rowSpan, n * w * (0.62 + density * 0.34));
+      let cursor = center - spread / 2;
+      for (let i = 0; i < n; i++) {
+        xs.push(cursor + w / 2);
+        // uneven step: 0.55–0.95 of a ticket width → visible overlap variety
+        cursor += w * (0.55 + rand() * 0.4);
+      }
+    }
+
     for (let i = 0; i < n; i++) {
       const key = `slot-${g}-${i}`;
-      let x: number;
-      if (n === 1) x = 160 - w / 2 + jitter(`${key}-x`, 8);
-      else {
-        const step = spanW / (n - 1);
-        x = startX + i * step + jitter(`${key}-x`, Math.min(4, step * 0.2));
-      }
-      slots.push({ x, y, w, h, rot: jitter(`${key}-r`, 8) });
+      // tilt: mostly gentle, a couple tossed hard per pile
+      const tossed = rand() < 0.14;
+      const rot = tossed ? (rand() - 0.5) * 56 : (rand() - 0.5) * 26;
+      slots.push({
+        x: xs[i] + jitter(`${key}-x`, 2.5),
+        y: y + (rand() - 0.5) * 9,
+        w,
+        h,
+        rot,
+        depth,
+      });
       g += 1;
     }
   }
@@ -295,15 +361,16 @@ function layoutPile(coupons: MachineCoupon[], ticketCount: number): PileEntry[] 
 
 /** One face-down pile ticket — a scalloped stub that reads "COUPON" with
  *  a blurred mystery-code strip. Pool tickets carry their real code under
- *  the blur; fillers carry dot leaders. Visually identical either way. */
-function PileCardArt({ w, h, fill, code }: { w: number; h: number; fill: string; code?: string }) {
+ *  the blur; fillers carry dot leaders. Visually identical either way.
+ *  `dim` darkens the deep rows slightly for pile depth. */
+function PileCardArt({ w, h, fill, code, dim = 1 }: { w: number; h: number; fill: string; code?: string; dim?: number }) {
   const cr = Math.max(1.5, Math.min(4.5, h * 0.12));
   const br = (h - 2 * cr) / 6;
   const dots = "•".repeat(4 + (hashStr(fill + w) % 3));
   const hidden = code?.trim() ? code.trim().slice(0, 12) : dots;
   const showStrip = h >= 16.5;
   return (
-    <g>
+    <g opacity={dim}>
       {/* soft contact shadow — the ticket rests on the pile */}
       <path d={ticketPath(w, h)} transform="translate(1.4 2.4)" fill="#17316B" opacity={0.2} />
       {/* scalloped ticket-stub body */}
@@ -532,14 +599,13 @@ export function useCouponMachine({
     });
   };
 
-  /** Joystick released → resolve the grab and run the choreography. */
+  /** DROP pressed → resolve the grab and run the choreography. */
   const beginGrab = (plan: GrabPlan) => {
     if (phase !== "control") return;
     setGrabPlan(plan);
     setPhase("grabbing");
-    const g = seq / 1000;
     sfx?.play("whirr"); // descent motor
-    timers.current.push(window.setTimeout(() => sfx?.play("grab"), g * 420));
+    timers.current.push(window.setTimeout(() => sfx?.play("grab"), seq * MACHINE_BEAT.snap));
     timers.current.push(
       window.setTimeout(() => {
         setPhase("revealed");
@@ -629,8 +695,7 @@ export function CouponMachine({
   const [stickFocus, setStickFocus] = useState(false);
 
   /* Manual-aim state (pointer drag on the red knob). */
-  const stickDrag = useRef<{ startX: number; startClaw: number; scale: number } | null>(null);
-  const [tilt, setTilt] = useState(0);
+  const stickDrag = useRef<{ startX: number; startY: number; startClaw: number; scale: number } | null>(null);
 
   const revealed = phase === "revealed";
   const grabbing = phase === "grabbing";
@@ -659,7 +724,8 @@ export function CouponMachine({
     return { key: best.card.key, dropY: clawDropFor(best.slot), color: best.card.fill, x };
   };
 
-  const releaseStick = () => {
+  /* DROP — sends the claw down wherever it currently hangs. */
+  const dropClaw = () => {
     if (phase !== "control") return;
     onGrab?.(computeGrab(clawX));
   };
@@ -726,18 +792,26 @@ export function CouponMachine({
 
   /* Panel button */
   const canPlay = Boolean(onPlay) && !busy && !soldOut && !emptyPool;
+  /* During the aiming phase the pill becomes the machine's DROP button —
+   * exactly like a real cabinet: stick to aim, big button to send it down. */
+  const canDrop = controlling;
+  const canPress = canPlay || canDrop;
   const btnLabel = soldOut
     ? "SOLD OUT"
     : emptyPool
       ? "NO PRIZES"
       : controlling
-        ? "AIM & DROP"
+        ? "DROP"
         : phase === "starting" || grabbing
           ? "···"
           : revealed || (hasAssignment && phase === "idle")
             ? "PLAY AGAIN"
             : buttonLabel;
   const buttonAction = () => {
+    if (canDrop) {
+      dropClaw();
+      return;
+    }
     if (canPlay && onPlay) onPlay();
   };
   const btnAria = soldOut
@@ -745,7 +819,7 @@ export function CouponMachine({
     : emptyPool
       ? "No coupons in this machine yet"
       : controlling
-        ? "Aim with the joystick, then release it to drop the claw"
+        ? "Drop the claw and grab a coupon"
         : busy
           ? "Drawing your coupon"
           : hasAssignment || revealed
@@ -759,9 +833,56 @@ export function CouponMachine({
   };
   const btnTextSize = btnLabel.length > 12 ? 11 : 12.5;
 
-  /* ---------- joystick (manual claw control) ---------- */
+  /* ---------- joystick (manual claw control) ----------
+   *
+   * Real-cabinet feel: the knob is a spring-return stick. Grab it and drag —
+   * the DEFLECTION (not raw distance) sweeps the claw from wherever it hung
+   * when you grabbed, so aim is proportional and forgiving. Let go and the
+   * stick springs home but the claw HOLDS — you can re-grab and fine-tune as
+   * many times as you like. The big green DROP button sends it down. */
 
   const stickActive = controlling;
+  /** Finger travel (viewBox units) for full deflection. */
+  const STICK_TRAVEL = 26;
+  /** Claw units swept at full deflection (half the rail per stroke). */
+  const STICK_SWEEP = 64;
+  /** Knob visual deflection (viewBox units) at full stick. */
+  const KNOB_X = 9.5;
+  const KNOB_Y = 4.5;
+
+  /* Knob deflection −1…1 (drives the stick art + spring-back). */
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  /* Cable pendulum lean from stick motion (viewBox degrees). */
+  const [sway, setSway] = useState(0);
+  const swayBack = useRef<number | null>(null);
+  const lastAim = useRef(0);
+  const lastWhirr = useRef(0);
+  const whirrTravel = useRef(0);
+
+  /* The claw lags the stick like a motor-driven trolley — velocity feeds a
+   * pendulum lean on the cable and a throttled motor whirr. */
+  const aimWithPhysics = (next: number) => {
+    const delta = next - lastAim.current;
+    lastAim.current = next;
+    onAim?.(next);
+    setSway(Math.max(-6.5, Math.min(6.5, -delta * 0.55)));
+    if (swayBack.current) window.clearTimeout(swayBack.current);
+    swayBack.current = window.setTimeout(() => setSway(0), 150);
+    whirrTravel.current += Math.abs(delta);
+    const now = Date.now();
+    if (whirrTravel.current > 20 && now - lastWhirr.current > 170) {
+      whirrTravel.current = 0;
+      lastWhirr.current = now;
+      sfx?.play("whirr");
+    }
+  };
+
+  useEffect(
+    () => () => {
+      if (swayBack.current) window.clearTimeout(swayBack.current);
+    },
+    []
+  );
 
   const onStickDown = (e: React.PointerEvent<SVGCircleElement>) => {
     if (!controlling) return;
@@ -774,25 +895,35 @@ export function CouponMachine({
     const rect = svgRef.current?.getBoundingClientRect();
     stickDrag.current = {
       startX: e.clientX,
+      startY: e.clientY,
       startClaw: clawX,
       scale: rect ? rect.width / 320 : 1,
     };
-    sfx?.play("whirr");
+    lastAim.current = clawX;
+    sfx?.play("press");
   };
 
   const onStickMove = (e: React.PointerEvent<SVGCircleElement>) => {
     const drag = stickDrag.current;
     if (!drag || !controlling) return;
     const dx = (e.clientX - drag.startX) / Math.max(0.5, drag.scale);
-    onAim?.(drag.startClaw + dx * 4);
-    setTilt(Math.max(-9, Math.min(9, dx * 0.65)));
+    const dy = (e.clientY - drag.startY) / Math.max(0.5, drag.scale);
+    // deflection −1…1 with a small dead zone at center
+    let deflX = Math.max(-1, Math.min(1, dx / STICK_TRAVEL));
+    if (Math.abs(deflX) < 0.06) deflX = 0;
+    const deflY = Math.max(-1, Math.min(1, dy / (STICK_TRAVEL * 0.7)));
+    setKnob({ x: deflX, y: deflY });
+    aimWithPhysics(Math.max(-CLAW_RANGE, Math.min(CLAW_RANGE, drag.startClaw + deflX * STICK_SWEEP)));
   };
 
   const endStickDrag = () => {
     const wasDragging = stickDrag.current !== null;
     stickDrag.current = null;
-    setTilt(0);
-    if (wasDragging) releaseStick();
+    if (wasDragging) {
+      // stick springs home — the claw STAYS. Short motor blip as it settles.
+      setKnob({ x: 0, y: 0 });
+      sfx?.play("whirr");
+    }
   };
 
   const onStickKey = (e: React.KeyboardEvent<SVGCircleElement>) => {
@@ -801,29 +932,33 @@ export function CouponMachine({
     switch (e.key) {
       case "ArrowLeft":
         e.preventDefault();
-        onAim?.(clawX - step);
-        setTilt(-6);
-        window.setTimeout(() => setTilt(0), 140);
+        setKnob({ x: -0.7, y: 0 });
+        aimWithPhysics(clawX - step);
+        window.setTimeout(() => setKnob({ x: 0, y: 0 }), 160);
         break;
       case "ArrowRight":
         e.preventDefault();
-        onAim?.(clawX + step);
-        setTilt(6);
-        window.setTimeout(() => setTilt(0), 140);
+        setKnob({ x: 0.7, y: 0 });
+        aimWithPhysics(clawX + step);
+        window.setTimeout(() => setKnob({ x: 0, y: 0 }), 160);
         break;
       case "Home":
         e.preventDefault();
-        onAim?.(-CLAW_RANGE);
+        setKnob({ x: -1, y: 0 });
+        aimWithPhysics(-CLAW_RANGE);
+        window.setTimeout(() => setKnob({ x: 0, y: 0 }), 220);
         break;
       case "End":
         e.preventDefault();
-        onAim?.(CLAW_RANGE);
+        setKnob({ x: 1, y: 0 });
+        aimWithPhysics(CLAW_RANGE);
+        window.setTimeout(() => setKnob({ x: 0, y: 0 }), 220);
         break;
       case "Enter":
       case " ":
       case "Spacebar":
         e.preventDefault();
-        releaseStick();
+        dropClaw();
         break;
     }
   };
@@ -1059,9 +1194,9 @@ export function CouponMachine({
             animate={
               grabbing
                 ? {
-                    y: [0, 0, 3, 0, 0],
-                    scaleX: [1, 1, 1.05, 1, 1],
-                    transition: { duration: g, times: [0, 0.4, 0.48, 0.62, 1], ease: "easeOut" },
+                    y: [0, 0, 3.5, 0, 0],
+                    scaleX: [1, 1, 1.06, 1, 1],
+                    transition: { duration: g, times: [0, MACHINE_BEAT.drop, MACHINE_BEAT.bounce, MACHINE_BEAT.pluck, 1], ease: "easeOut" },
                   }
                 : { y: 0, scaleX: 1, transition: { duration: 0.3 } }
             }
@@ -1069,20 +1204,27 @@ export function CouponMachine({
             <g style={{ filter: "drop-shadow(0 3px 3px rgba(23,43,77,0.22))" }}>
               {pile.map(({ card, slot }) => {
                 const isGrabbed = Boolean(grabPlan && card.key === grabPlan.key);
-                const art = <PileCardArt w={slot.w} h={slot.h} fill={card.fill} code={card.code} />;
+                const art = <PileCardArt w={slot.w} h={slot.h} fill={card.fill} code={card.code} dim={1 - slot.depth * 0.06} />;
                 return (
                   <g key={card.key} transform={`translate(${slot.x} ${slot.y}) rotate(${slot.rot} ${slot.w / 2} ${slot.h / 2})`}>
                     {isGrabbed ? (
-                      /* the grabbed ticket — lifts out with the claw */
+                      /* the grabbed ticket — tugged loose and plucked out with the claw */
                       <motion.g
                         initial={false}
+                        style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5 }}
                         animate={
                           grabbing
                             ? {
-                                opacity: [1, 1, 0, 0],
-                                transition: { duration: g, times: [0, 0.42, 0.47, 1], ease: "linear" },
+                                opacity: [1, 1, 1, 0, 0],
+                                y: [0, 0, -3, -16, -16],
+                                rotate: [0, 0, -7, 6, 6],
+                                transition: {
+                                  duration: g,
+                                  times: [0, MACHINE_BEAT.snap, MACHINE_BEAT.pluck, MACHINE_BEAT.lift, 1],
+                                  ease: "easeOut",
+                                },
                               }
-                            : { opacity: 1, transition: { duration: 0.2 } }
+                            : { opacity: 1, y: 0, rotate: 0, transition: { duration: 0.2 } }
                         }
                       >
                         {art}
@@ -1110,8 +1252,9 @@ export function CouponMachine({
           />
 
           {/* ============ claw assembly ============ */}
-          {/* horizontal travel: follows the joystick while aiming; after the
-              grab, glides the prize to the center stage */}
+          {/* horizontal travel: follows the joystick while aiming (with a
+              motor-like spring lag); after the snap, glides the prize to
+              the center stage */}
           <motion.g
             initial={false}
             animate={
@@ -1125,9 +1268,13 @@ export function CouponMachine({
             }
             transition={
               controlling
-                ? { type: "spring", stiffness: 340, damping: 28 }
+                ? { type: "spring", stiffness: 260, damping: 26 }
                 : grabbing
-                  ? { duration: g, times: [0, 0.34, 0.46, 0.8, 1], ease: ["linear", "linear", "easeInOut", "linear"] }
+                  ? {
+                      duration: g,
+                      times: [0, MACHINE_BEAT.snap, MACHINE_BEAT.lift, MACHINE_BEAT.glide, 1],
+                      ease: ["linear", "linear", "easeInOut", "linear"],
+                    }
                   : phase === "starting"
                     ? { duration: 0.5, repeat: Infinity }
                     : { duration: 0.3 }
@@ -1143,12 +1290,16 @@ export function CouponMachine({
               initial={false}
               animate={
                 grabbing
-                  ? { opacity: [0.16, 0.16, 0.3, 0.3, 0.16] }
+                  ? { opacity: [0.16, 0.16, 0.32, 0.32, 0.16] }
                   : controlling
                     ? { opacity: 0.16 }
                     : { opacity: 0.1 }
               }
-              transition={grabbing ? { duration: g, times: [0, 0.3, 0.36, 0.52, 0.8] } : { duration: 0.25 }}
+              transition={
+                grabbing
+                  ? { duration: g, times: [0, MACHINE_BEAT.drop, MACHINE_BEAT.bounce, MACHINE_BEAT.lift, 1] }
+                  : { duration: 0.25 }
+              }
             />
             {/* motor trolley — rides the rail with the cable */}
             <rect x={149} y={108} width={22} height={17} rx={4} fill="#1F7AE8" stroke="#0A5BB8" strokeWidth={1.5} />
@@ -1157,6 +1308,27 @@ export function CouponMachine({
             <circle cx={165.5} cy={114} r={1.5} fill="#9DC7FF" />
             <circle cx={160} cy={124.5} r={2.6} fill="none" stroke="#23252E" strokeWidth={2} />
 
+            {/* pendulum sway — the cable + claw lean against stick motion
+                while aiming (velocity-driven), then swing gently through the
+                grab choreography */}
+            <motion.g
+              initial={false}
+              style={{ transformBox: "fill-box", originX: 0.5, originY: 0 }}
+              animate={
+                grabbing
+                  ? { rotate: [0, 0, 1.5, -3.5, 1.8, -0.8, 0] }
+                  : { rotate: controlling ? sway : 0 }
+              }
+              transition={
+                grabbing
+                  ? {
+                      duration: g,
+                      times: [0, MACHINE_BEAT.snap, MACHINE_BEAT.lift, MACHINE_BEAT.glide, MACHINE_BEAT.settle, 0.97, 1],
+                      ease: "easeInOut",
+                    }
+                  : { type: "spring", stiffness: 90, damping: 11 }
+              }
+            >
             {/* coiled cable — stretches as the claw descends */}
             <motion.g
               initial={false}
@@ -1174,7 +1346,7 @@ export function CouponMachine({
                 grabbing
                   ? {
                       duration: g,
-                      times: [0, 0.02, 0.34, 0.46, 0.8, 1],
+                      times: [0, MACHINE_BEAT.open, MACHINE_BEAT.drop, MACHINE_BEAT.snap, MACHINE_BEAT.lift, 1],
                       ease: ["linear", "easeIn", "linear", "easeOut", "linear"],
                     }
                   : { duration: 0.3 }
@@ -1188,12 +1360,23 @@ export function CouponMachine({
               ))}
             </motion.g>
 
-            {/* vertical travel: drop to the ticket, hold for the grab, lift */}
+            {/* vertical travel: gravity drop → contact bounce → snap → lift */}
             <motion.g
               initial={false}
               animate={
                 grabbing
-                  ? { y: [0, 0, dropY, dropY, -8, -8] }
+                  ? {
+                      y: [
+                        0,
+                        0,
+                        dropY + 1.6, // lands — slight overshoot into the pile
+                        dropY - 2.6, // rebound
+                        dropY, // settle on the ticket
+                        dropY,
+                        -8,
+                        -8,
+                      ],
+                    }
                   : revealed
                     ? { y: -8 }
                     : { y: 0 }
@@ -1202,8 +1385,17 @@ export function CouponMachine({
                 grabbing
                   ? {
                       duration: g,
-                      times: [0, 0.02, 0.34, 0.46, 0.8, 1],
-                      ease: ["linear", "easeIn", "linear", "easeOut", "linear"],
+                      times: [
+                        0,
+                        MACHINE_BEAT.open,
+                        MACHINE_BEAT.drop,
+                        MACHINE_BEAT.bounce,
+                        MACHINE_BEAT.snap,
+                        MACHINE_BEAT.lift,
+                        MACHINE_BEAT.glide,
+                        1,
+                      ],
+                      ease: ["linear", "easeIn", "easeOut", "easeInOut", "linear", "easeOut", "linear"],
                     }
                   : { duration: 0.35 }
               }
@@ -1225,22 +1417,36 @@ export function CouponMachine({
                 <rect x={147.6} y={178.6} width={24.8} height={4.6} rx={2.3} fill="url(#cmMetal)" stroke="#39414F" strokeWidth={0.9} />
                 <rect x={149.2} y={179.4} width={21.6} height={1.3} rx={0.65} fill="#FFFFFF" opacity={0.55} />
 
-                {/* left pincer — armed open while aiming, snaps shut on the ticket */}
+                {/* left pincer — armed open while aiming, flares wide for the
+                    dive, snaps shut on the ticket, loosens over the stage */}
                 <motion.g
                   initial={false}
                   style={{ transformBox: "fill-box", originX: 0.65, originY: 0 }}
                   animate={
                     grabbing
-                      ? { rotate: [-33, -33, -3, -3] }
+                      ? { rotate: [-33, -33, -40, -40, -3, -3, -9, -9] }
                       : controlling
                         ? { rotate: -33 }
                         : revealed
-                          ? { rotate: -3 }
+                          ? { rotate: -9 }
                           : { rotate: -24 }
                   }
                   transition={
                     grabbing
-                      ? { duration: g, times: [0, 0.34, 0.47, 1], ease: ["linear", "easeOut", "linear"] }
+                      ? {
+                          duration: g,
+                          times: [
+                            0,
+                            MACHINE_BEAT.open,
+                            MACHINE_BEAT.drop,
+                            MACHINE_BEAT.snap - 0.03,
+                            MACHINE_BEAT.snap + 0.02,
+                            MACHINE_BEAT.settle,
+                            MACHINE_BEAT.settle + 0.04,
+                            1,
+                          ],
+                          ease: ["linear", "easeOut", "linear", "easeOut", "linear", "easeOut", "linear"],
+                        }
                       : { duration: 0.25 }
                   }
                 >
@@ -1257,16 +1463,29 @@ export function CouponMachine({
                   style={{ transformBox: "fill-box", originX: 0.35, originY: 0 }}
                   animate={
                     grabbing
-                      ? { rotate: [33, 33, 3, 3] }
+                      ? { rotate: [33, 33, 40, 40, 3, 3, 9, 9] }
                       : controlling
                         ? { rotate: 33 }
                         : revealed
-                          ? { rotate: 3 }
+                          ? { rotate: 9 }
                           : { rotate: 24 }
                   }
                   transition={
                     grabbing
-                      ? { duration: g, times: [0, 0.34, 0.47, 1], ease: ["linear", "easeOut", "linear"] }
+                      ? {
+                          duration: g,
+                          times: [
+                            0,
+                            MACHINE_BEAT.open,
+                            MACHINE_BEAT.drop,
+                            MACHINE_BEAT.snap - 0.03,
+                            MACHINE_BEAT.snap + 0.02,
+                            MACHINE_BEAT.settle,
+                            MACHINE_BEAT.settle + 0.04,
+                            1,
+                          ],
+                          ease: ["linear", "easeOut", "linear", "easeOut", "linear", "easeOut", "linear"],
+                        }
                       : { duration: 0.25 }
                   }
                 >
@@ -1294,7 +1513,11 @@ export function CouponMachine({
                     grabbing
                       ? {
                           opacity: [0, 0, 1, 0, 0],
-                          transition: { duration: g, times: [0, 0.38, 0.44, 0.6, 1], ease: "linear" },
+                          transition: {
+                            duration: g,
+                            times: [0, MACHINE_BEAT.snap - 0.05, MACHINE_BEAT.snap, MACHINE_BEAT.lift, 1],
+                            ease: "linear",
+                          },
                         }
                       : { opacity: 0, transition: { duration: 0.2 } }
                   }
@@ -1316,7 +1539,11 @@ export function CouponMachine({
                     grabbing
                       ? {
                           opacity: [0, 0, 1, 1],
-                          transition: { duration: g, times: [0, 0.43, 0.48, 1], ease: "linear" },
+                          transition: {
+                            duration: g,
+                            times: [0, MACHINE_BEAT.snap - 0.02, MACHINE_BEAT.snap + 0.03, 1],
+                            ease: "linear",
+                          },
                         }
                       : revealed
                         ? { opacity: 1, transition: { duration: 0.2 } }
@@ -1334,10 +1561,18 @@ export function CouponMachine({
                           }
                         : grabbing
                           ? {
-                              rotate: [0, 0, 0, 5, -4, 2, 0],
+                              rotate: [0, 0, 3, -2.5, 1.5, -0.5, 0],
                               transition: {
                                 duration: g,
-                                times: [0, 0.5, 0.56, 0.64, 0.74, 0.86, 1],
+                                times: [
+                                  0,
+                                  MACHINE_BEAT.snap,
+                                  MACHINE_BEAT.lift,
+                                  MACHINE_BEAT.glide,
+                                  MACHINE_BEAT.settle,
+                                  0.97,
+                                  1,
+                                ],
                                 ease: "easeInOut",
                               },
                             }
@@ -1414,6 +1649,8 @@ export function CouponMachine({
                 </motion.g>
               </motion.g>
             </motion.g>
+            {/* end pendulum sway */}
+            </motion.g>
           </motion.g>
 
           {/* reveal sparkles at the presented ticket's corners */}
@@ -1478,18 +1715,40 @@ export function CouponMachine({
         />
         <circle cx={88} cy={399} r={15} fill="#23252B" stroke="#AEB8C4" strokeWidth={3.2} />
         <circle cx={88} cy={399} r={12.6} fill="none" stroke="#FFFFFF" strokeOpacity={0.26} strokeWidth={1.4} />
-        {/* the stick leans with the drag — pivot at the collar */}
+        {/* gimbal guide — the ring the knob sweeps inside */}
+        <ellipse
+          cx={88}
+          cy={382}
+          rx={17}
+          ry={12.5}
+          fill="none"
+          stroke="#FFFFFF"
+          strokeOpacity={stickActive ? 0.22 : 0.1}
+          strokeWidth={1.2}
+          strokeDasharray="2.5 3"
+          pointerEvents="none"
+        />
+        {/* the stick — pivots at the collar and deflects with the drag,
+            springs home on release (the claw keeps its position) */}
         <motion.g
           initial={false}
           style={{ transformBox: "fill-box", originX: 0.5, originY: 1 }}
-          animate={{ rotate: tilt }}
-          transition={{ type: "spring", stiffness: 350, damping: 22 }}
+          animate={{ rotate: knob.x * 14 }}
+          transition={{ type: "spring", stiffness: 380, damping: 17 }}
         >
           <rect x={85} y={368} width={6} height={24} rx={3} fill="#2A2D35" stroke="#101216" strokeWidth={1} />
           <rect x={86} y={369.5} width={1.7} height={20} rx={0.85} fill="#8D99AB" opacity={0.75} />
           <rect x={83} y={388} width={10} height={5} rx={2.5} fill="#3A3F49" />
-          <circle cx={88} cy={363.5} r={11} fill="url(#cmBall)" />
-          <ellipse cx={84.6} cy={359.8} rx={3.2} ry={2.4} fill="#FFFFFF" opacity={0.8} />
+          {/* the ball rides the stick top — extra travel sells the gimbal */}
+          <motion.g
+            initial={false}
+            animate={{ x: knob.x * KNOB_X, y: Math.max(0, knob.y) * KNOB_Y + Math.abs(knob.x) * 1.2 }}
+            transition={{ type: "spring", stiffness: 380, damping: 17 }}
+          >
+            <circle cx={88} cy={363.5} r={11} fill="url(#cmBall)" />
+            <ellipse cx={84.6} cy={359.8} rx={3.2} ry={2.4} fill="#FFFFFF" opacity={0.8} />
+            <ellipse cx={90.8} cy={367.4} rx={2.6} ry={1.7} fill="#7E1010" opacity={0.5} />
+          </motion.g>
         </motion.g>
         {/* keyboard focus ring */}
         {stickFocus ? (
@@ -1509,7 +1768,7 @@ export function CouponMachine({
           }}
           tabIndex={stickActive ? 0 : -1}
           role="slider"
-          aria-label="Claw aim — drag the knob or use arrow keys to move, press Enter to drop the claw"
+          aria-label="Claw aim — drag the knob left or right, then press the DROP button"
           aria-orientation="horizontal"
           aria-valuemin={0}
           aria-valuemax={100}
@@ -1524,54 +1783,55 @@ export function CouponMachine({
           onBlur={() => setStickFocus(false)}
         />
 
-        {/* soft glow behind the PLAY button while it's tappable */}
+        {/* soft glow behind the button while it's tappable — green when the
+            claw is armed (DROP), violet while it invites a play */}
         <motion.ellipse
           cx={193}
           cy={386}
           rx={84}
           ry={26}
-          fill="#CE93D8"
+          fill={canDrop ? "#4ADE80" : "#CE93D8"}
           initial={false}
-          animate={{ opacity: canPlay ? [0.12, 0.3, 0.12] : 0 }}
-          transition={{ duration: 1.7, repeat: Infinity, ease: "easeInOut" }}
+          animate={{ opacity: canPress ? [0.14, 0.34, 0.14] : 0 }}
+          transition={{ duration: canDrop ? 1 : 1.7, repeat: Infinity, ease: "easeInOut" }}
           style={{ pointerEvents: "none" }}
         />
 
-        {/* PLAY & WIN → AIM & DROP → ··· → PLAY AGAIN */}
+        {/* PLAY & WIN → DROP → ··· → PLAY AGAIN */}
         <motion.g
           ref={playBtnRef}
           initial={false}
-          whileTap={canPlay ? { scale: 0.97 } : undefined}
-          style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5, cursor: canPlay ? "pointer" : "default" }}
+          whileTap={canPress ? { scale: 0.97 } : undefined}
+          style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5, cursor: canPress ? "pointer" : "default" }}
           onClick={(e) => {
             e.stopPropagation();
             buttonAction();
           }}
           onKeyDown={onButtonKey}
           role="button"
-          tabIndex={canPlay ? 0 : -1}
-          aria-disabled={!canPlay}
+          tabIndex={canPress ? 0 : -1}
+          aria-disabled={!canPress}
           aria-label={btnAria}
         >
           {/* button shadow + stadium */}
-          <rect x={124} y={377} width={138} height={28} rx={14} fill="#6A1B9A" opacity={soldOut || emptyPool ? 0.35 : 0.5} />
+          <rect x={124} y={377} width={138} height={28} rx={14} fill={canDrop ? "#14532D" : "#6A1B9A"} opacity={soldOut || emptyPool ? 0.35 : 0.5} />
           <motion.rect
             x={124}
             y={372}
             width={138}
             height={28}
             rx={14}
-            fill={soldOut || emptyPool ? "#8B8FA3" : "url(#cmButton)"}
-            stroke={soldOut || emptyPool ? "#B9BFCC" : "#E1BEE7"}
+            fill={soldOut || emptyPool ? "#8B8FA3" : canDrop ? "url(#cmButtonGreen)" : "url(#cmButton)"}
+            stroke={soldOut || emptyPool ? "#B9BFCC" : canDrop ? "#BBF7D0" : "#E1BEE7"}
             strokeWidth={1.6}
             initial={false}
-            animate={{ opacity: busy ? 0.75 : 1 }}
+            animate={{ opacity: grabbing ? 0.75 : 1 }}
             transition={{ duration: 0.25 }}
           />
           <rect x={129} y={374.5} width={128} height={11} rx={5.5} fill="#FFFFFF" opacity={0.16} />
           {/* dome shading — specular top, pressed-in bottom */}
           <ellipse cx={177} cy={379.2} rx={52} ry={4.4} fill="#FFFFFF" opacity={0.34} />
-          <rect x={129} y={391.8} width={128} height={5.4} rx={2.7} fill="#6A1B9A" opacity={0.45} />
+          <rect x={129} y={391.8} width={128} height={5.4} rx={2.7} fill={canDrop ? "#14532D" : "#6A1B9A"} opacity={0.45} />
 
           <AnimatePresence mode="wait" initial={false}>
             {phase === "starting" || grabbing ? (
@@ -1601,14 +1861,22 @@ export function CouponMachine({
                   fontSize={btnTextSize}
                   fontWeight={800}
                   letterSpacing={0.8}
-                  fill={soldOut || emptyPool || controlling ? "#FFC53D" : "#FFFFFF"}
-                  style={soldOut || emptyPool || controlling ? { filter: "drop-shadow(0 0 3px rgba(255,197,61,0.95))" } : undefined}
+                  fill={soldOut || emptyPool ? "#FFFFFF" : canDrop ? "#FFFFFF" : "#FFFFFF"}
+                  style={canDrop ? { filter: "drop-shadow(0 0 3px rgba(255,255,255,0.9))" } : undefined}
                   fontFamily={ARCADE}
                 >
                   {btnLabel}
                 </text>
-                {/* three radiating action lines flanking the label */}
-                {soldOut || emptyPool || controlling ? null : (
+                {/* DROP: a bold down-arrow on each side of the label */}
+                {canDrop ? (
+                  <g stroke="#FFFFFF" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none">
+                    <path d="M139 382.5 L139 389" />
+                    <path d="M135.5 386 L139 389.5 L142.5 386" />
+                    <path d="M247 382.5 L247 389" />
+                    <path d="M243.5 386 L247 389.5 L250.5 386" />
+                  </g>
+                ) : soldOut || emptyPool ? null : (
+                  /* three radiating action lines flanking the label */
                   <g stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" fill="none">
                     <path d="M132 380.5 L138.5 384" />
                     <path d="M130 387 L137.5 387" />
@@ -1672,7 +1940,7 @@ export function CouponMachine({
           >
             <Hand size={14} className="shrink-0 text-[#B45309]" aria-hidden />
             <span className="min-w-0 text-center text-[12.5px] font-extrabold tracking-[0.01em] text-[#92400E]">
-              Your turn! Drag the red knob to aim — let go to drop the claw
+              Drag the red knob to aim — press DROP when the claw is over a coupon
             </span>
           </motion.div>
         ) : null}

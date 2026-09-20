@@ -202,7 +202,7 @@ function seedScenes(opts: BuilderOptions): Scene[] {
   // - "Blank canvas" → a truly empty scene stack (no hidden pattern blocks)
   // - "Start with a X block" → just that block, nothing else
   if (count <= 1) {
-    const blocks: Block[] = wantsSeedBlock ? [{ id: "bSeed", type: opts.initialBlock! }] : [];
+    const blocks: Block[] = wantsSeedBlock ? [{ id: "bSeed", type: opts.initialBlock!, data: starterBlockData(opts.initialBlock!) }] : [];
     if (opts.seedText) {
       return [{ id: "s1", blocks: [{ id: "bAi0", type: "text", text: opts.seedText }, ...blocks] }];
     }
@@ -219,7 +219,7 @@ function seedScenes(opts: BuilderOptions): Scene[] {
     });
   }
   if (wantsSeedBlock) {
-    scenes[0].blocks.push({ id: "bSeed", type: opts.initialBlock! });
+    scenes[0].blocks.push({ id: "bSeed", type: opts.initialBlock!, data: starterBlockData(opts.initialBlock!) });
   }
   if (opts.seedText) {
     scenes[0].blocks = [{ id: "bAi0", type: "text", text: opts.seedText }, ...scenes[0].blocks];
@@ -2535,6 +2535,22 @@ function BlockLibraryContent({
 /* Coupon Reveal editor — machine copy + the creator's coupon pool     */
 /* ------------------------------------------------------------------ */
 
+/** Curated starting data for freshly-added blocks so every block is
+ * playable the moment it lands (coupon machines come pre-filled — an
+ * empty machine reads as broken to creators who just want to try it). */
+function starterBlockData(type: string): BlockData | undefined {
+  if (type === "coupon") {
+    return {
+      heading: "COUPON CODE",
+      body: "REVEAL",
+      stepLabel: "YOUR COUPON CODE",
+      label: "PLAY & WIN",
+      coupons: samplePool(),
+    };
+  }
+  return undefined;
+}
+
 /** Quick-start pool for empty machines (fresh ids every time). */
 function samplePool(): CouponDef[] {
   return [
@@ -4540,7 +4556,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                   <button
                     key={b.type}
                     type="button"
-                    onClick={() => addBlock(b.type)}
+                    onClick={() => addBlock(b.type, undefined, starterBlockData(b.type))}
                     aria-label={`Add ${b.label} block`}
                     className="card-shadow hairline flex shrink-0 items-center gap-2 rounded-full bg-white py-2.5 pl-3 pr-4 transition-transform active:scale-[0.94]"
                   >

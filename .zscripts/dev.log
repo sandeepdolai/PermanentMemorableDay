@@ -85,3 +85,90 @@ Mini-services startup completed. Started 0 service(s).
 
 Next.js dev server is running in background (PID: 1193).
 Use 'kill 1193' to stop it.
+==========================================
+[2026-09-20 07:38:57] Starting: bun install
+==========================================
+[BUN] Installing dependencies...
+[0.02ms] ".env"
+bun install v1.3.14 (0d9b296a)
+
+Checked 847 installs across 916 packages (no changes) [39.00ms]
+==========================================
+[2026-09-20 07:38:57] Completed: bun install
+[LOG] Step: bun install | Duration: 0s
+==========================================
+
+==========================================
+[2026-09-20 07:38:57] Starting: bun run db:push
+==========================================
+[BUN] Setting up database...
+$ prisma db push --accept-data-loss
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": SQLite database "custom.db" at "file:/home/z/my-project/db/custom.db"
+
+The database is already in sync with the Prisma schema.
+
+Running generate... (Use --skip-generate to skip the generators)
+[2K[1A[2K[GRunning generate... - Prisma Client
+[2K[1A[2K[G✔ Generated Prisma Client (v6.19.2) to ./node_modules/@prisma/client in 169ms
+
+==========================================
+[2026-09-20 07:38:59] Completed: bun run db:push
+[LOG] Step: bun run db:push | Duration: 2s
+==========================================
+
+==========================================
+[2026-09-20 07:38:59] Starting: Starting Next.js dev server
+==========================================
+[BUN] Starting development server...
+$ next dev -p 3000 2>&1 | tee dev.log
+==========================================
+[2026-09-20 07:38:59] Completed: Starting Next.js dev server
+[LOG] Step: Starting Next.js dev server | Duration: 0s
+==========================================
+
+==========================================
+[2026-09-20 07:38:59] Starting: Waiting for Next.js dev server
+==========================================
+Waiting for Next.js dev server to be ready on localhost:3000...
+⨯ Failed to start server
+Error: listen EADDRINUSE: address already in use :::3000
+    at <unknown> (Error: listen EADDRINUSE: address already in use :::3000)
+    at new Promise (<anonymous>) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+[?25h
+Attempt 1/60: Next.js dev server not ready yet, waiting...
+Next.js dev server is ready!
+==========================================
+[2026-09-20 07:39:08] Completed: Waiting for Next.js dev server
+[LOG] Step: Waiting for Next.js dev server | Duration: 9s
+==========================================
+
+==========================================
+[2026-09-20 07:39:08] Starting: Health check
+==========================================
+[BUN] Performing health check...
+[BUN] Health check passed
+==========================================
+[2026-09-20 07:39:08] Completed: Health check
+[LOG] Step: Health check | Duration: 0s
+==========================================
+
+==========================================
+[2026-09-20 07:39:08] Starting: Starting mini-services
+==========================================
+Found mini-services directory, scanning for sub-services...
+Mini-services startup completed. Started 0 service(s).
+==========================================
+[2026-09-20 07:39:08] Completed: Starting mini-services
+[LOG] Step: Starting mini-services | Duration: 0s
+==========================================
+
+Next.js dev server is running in background (PID: 1187).
+Use 'kill 1187' to stop it.

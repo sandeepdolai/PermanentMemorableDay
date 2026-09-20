@@ -1302,3 +1302,34 @@ Stage Summary:
 - Design decisions worth remembering: (1) hidden codes make the claw-grabs-assigned-coupon rule hold BY CONSTRUCTION (any ticket can reveal the assignment) — the old priority-slot logic was dead weight; (2) phase-driven (not token-keyed) framer animations eliminated the remount keyframe-jump bug class entirely; (3) the joystick's release-is-the-drop semantics match the user's spec literally — even a quick tap drops the claw.
 - SECURITY (carried): the GitHub classic PAT was posted in chat — user should rotate it at github.com/settings/tokens after sandbox work.
 - Next-phase queue: Rose block, library search field, public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, claw-machine miss/grab-strength variance (optional difficulty knob).
+
+---
+Task ID: 37
+Agent: Z.ai Code (main orchestrator)
+Task: Fix the coupon claw machine per user report: joystick broken, cards unrealistically placed, PLAY & WIN dead in new moments, and make the joystick→claw connection + grab animation feel realistic.
+
+Work Log:
+- Reproduced all three bugs live via agent-browser (desktop 1512×900 + mobile 390×844):
+  1. PLAY & WIN dead in NEW moments: coupon blocks created from the builder block-tray or "start with a block" seed spawned with NO data → empty pool → machine button showed "NO PRIZES" and clicks did nothing.
+  2. Joystick: drag mapping multiplied pointer dx by 4× — a ~30px drag slammed the claw from center to the far edge (aria-valuenow jumped 50→100), no fine control; releasing the stick also instantly dropped the claw (accidental grabs).
+  3. Pile: tickets laid out in evenly-spaced aligned rows (grid look).
+- Fixed the builder (src/components/memorableday/builder.tsx): new starterBlockData() factory — coupon blocks now spawn with a working starter pool (SAVE10 / FREESHIP / WELCOME15 via existing samplePool()), wired into (a) the block-tray add button, (b) single-scene seed blocks, (c) multi-scene seed blocks. Machine is playable the instant the block lands.
+- Rebuilt the joystick (coupon-machine.tsx) with real-cabinet mechanics:
+  - Deflection-based proportional control: finger travel 26 viewBox units = full deflection; full deflection sweeps ±64 claw units from where the claw hung at grab (dead zone 6%).
+  - Claw HOLDS its position when the stick springs home — multi-stroke aiming, exactly like a real machine.
+  - Knob art deflects with the drag (ball translates + stick pivots 14° at the collar) with spring-return wobble; new dashed gimbal guide ring.
+  - Arrow keys nudge (Shift = big step), Home/End jump to edges, Enter/Space drops.
+- New DROP button: during the control phase the big pill morphs into a green DROP button (green gradient, white glow, down-arrows) that actually sends the claw down — fixes users who clicked "AIM & DROP" expecting a drop. Hint copy updated to match.
+- Claw↔joystick connection realism:
+  - Claw follows the stick through a softer motor spring (stiffness 260/damping 26 — visible lag).
+  - New velocity-driven pendulum sway group around cable+claw (leans against stick motion, spring-settles), plus choreographed swing during lift/glide.
+  - Throttled motor whirr while the trolley travels; press blip on grab; whirr on release.
+- Rebuilt the ticket pile as a dumped heap: deterministic mulberry32 PRNG scatter — per-row wandering cluster centers, uneven 0.55–0.95w gaps, random tilt (±13°, ~14% "tossed" ±28°), per-ticket y-jitter ±4.5, depth-based size + dimming. VLM confirms it reads as a natural scattered heap, not a grid.
+- Rebuilt the grab choreography with a shared MACHINE_BEAT map (open 0.07 → drop 0.40 → bounce 0.47 → snap 0.52 → pluck 0.62 → lift 0.70 → glide 0.84 → settle 0.92), duration 1700→2600ms, hook timers + all SVG keyframes read the same beats:
+  - Pincers flare open before the dive, gravity easeIn drop, overshoot+rebound bounce on contact, snap shut, grabbed pile ticket is tugged loose (y −16, rotate wiggle) and fades into the claw-held card exactly as the pincers close, lift with swing, trolley glides to center, pincers loosen at the settle, golden burst reveal. Pile squashes at contact. Reduced-motion path still collapses to 800ms.
+- E2E verified with agent-browser: player golden path (PLAY & WIN → drag 50→67% proportional → release holds → DROP → full choreography → golden ticket + reveal card + COPY CODE → PLAY AGAIN resets claw to 50%); builder preview (tray coupon block → pre-filled "SAVE10 +2 more" → editor machine → full play cycle); multi-stroke aiming (24% → hold → 0%); mobile 390px touch drag (75% proportional, hold, DROP, reveal, no horizontal overflow); zero console/server errors; bun run lint clean; tsc clean for edited files.
+
+Stage Summary:
+- All three reported bugs root-caused and fixed; the machine now works end-to-end in new moments, the joystick gives proportional multi-stroke control with a real DROP button, and the pile + grab choreography read as a physical machine.
+- Key artifacts: MACHINE_BEAT shared timing map + starterBlockData() in builder.tsx; deflection joystick + pendulum sway + scatter pile in coupon-machine.tsx.
+- Suggested next phase: (1) optional haptics (navigator.vibrate) on grab for mobile, (2) a "miss" variant where the claw visibly nudges neighboring tickets, (3) replay micro-skip button during the 2.6s choreography, (4) consider the welcome-tour overlay z-index vs. builder (it blocked a synthetic click during testing).
