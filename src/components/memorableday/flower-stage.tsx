@@ -1,23 +1,25 @@
 "use client";
 
 /**
- * rose-stage.tsx — the client-only wrapper for the 3D rose.
+ * flower-stage.tsx — the client-only wrapper for the 3D flower stage.
  *
- * The R3F canvas is loaded via next/dynamic (ssr: false) so three.js never
- * runs on the server; a soft skeleton shows while the chunk loads, and a
- * static SVG rose is the graceful fallback if WebGL is unavailable.
+ * The R3F canvas loads via next/dynamic (ssr: false) so three.js never runs
+ * on the server. While a model downloads (the azalea is ~13 MB) a soft
+ * progress veil shows live percentage; a static SVG bloom is the graceful
+ * fallback if WebGL is unavailable.
  */
 import dynamic from "next/dynamic";
 import { Component, type ReactNode } from "react";
+import { useProgress } from "@react-three/drei";
 import { cn } from "@/lib/utils";
-import { rosePalette, type RosePalette } from "@/lib/md-blocks";
+import { flowerMotion, flowerVariety, type FlowerMotion } from "@/lib/md-blocks";
 
-const Rose3D = dynamic(() => import("./rose-3d").then((m) => m.Rose3D), {
+const Flower3D = dynamic(() => import("./flower-3d").then((m) => m.Flower3D), {
   ssr: false,
-  loading: () => <RoseLoading />,
+  loading: () => <FlowerLoading />,
 });
 
-function RoseLoading() {
+function FlowerLoading() {
   return (
     <div className="flex h-full w-full items-center justify-center" aria-hidden>
       <div className="relative">
@@ -30,8 +32,22 @@ function RoseLoading() {
   );
 }
 
-/** Static SVG rose — WebGL fallback + list thumbnails. */
-export function RoseGlyph({ size = 64, className }: { size?: number; className?: string }) {
+/** Live download veil — appears while the GLB streams in. */
+function LoadVeil({ varietyName }: { varietyName: string }) {
+  const { active, progress } = useProgress();
+  if (!active || progress >= 100) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2.5">
+      <FlowerLoading />
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
+        Blooming the {varietyName.toLowerCase()} · {Math.round(progress)}%
+      </p>
+    </div>
+  );
+}
+
+/** Static SVG bloom — WebGL fallback + list thumbnails. */
+export function FlowerGlyph({ size = 64, className }: { size?: number; className?: string }) {
   return (
     <svg
       width={size}
@@ -44,7 +60,7 @@ export function RoseGlyph({ size = 64, className }: { size?: number; className?:
       {/* spiral bloom */}
       <path
         d="M32 12c7 4 11 9.5 11 15.5 0 3-1.2 5.6-3.2 7.6 3.6-1 6.4-3.3 8.2-7 .6 2.3.8 4.4.8 6.4 0 9.3-7.5 16.9-16.8 16.9S15 43.8 15 34.5c0-2 .2-4.1.8-6.4 1.8 3.7 4.6 6 8.2 7-2-2-3.2-4.6-3.2-7.6C20.8 21.5 25 16 32 12Z"
-        fill="url(#roseG1)"
+        fill="url(#flowerG1)"
       />
       <path
         d="M32 20c3.6 2.6 5.6 5.7 5.6 9.2 0 2.6-1.2 4.8-3.2 6.4 2.6-.6 4.6-2.2 5.8-4.6.3 1.3.4 2.5.4 3.6 0 5.4-4 9.8-9.3 10.6v1.6h-1.3v-1.6c-5.3-.8-9.3-5.2-9.3-10.6 0-1.1.1-2.3.4-3.6 1.2 2.4 3.2 4 5.8 4.6-2-1.6-3.2-3.8-3.2-6.4 0-3.5 2-6.6 5.6-9.2l1.7 2.4L32 20Z"
@@ -57,7 +73,7 @@ export function RoseGlyph({ size = 64, className }: { size?: number; className?:
       <path d="M33 55c4.5-1.5 8-4.5 10-9-5-.5-9 1-11.5 4.5l1.5 4.5Z" fill="#3E7C3A" />
       <path d="M31 59c-4.5-1-7.5-3.5-9.5-7.5 4.5-.5 8 .5 10.5 3.5l-1 4Z" fill="#4C8A47" />
       <defs>
-        <linearGradient id="roseG1" x1="32" y1="12" x2="32" y2="48" gradientUnits="userSpaceOnUse">
+        <linearGradient id="flowerG1" x1="32" y1="12" x2="32" y2="48" gradientUnits="userSpaceOnUse">
           <stop stopColor="#F06292" />
           <stop offset="1" stopColor="#AD1457" />
         </linearGradient>
@@ -66,8 +82,8 @@ export function RoseGlyph({ size = 64, className }: { size?: number; className?:
   );
 }
 
-/** WebGL error boundary → static rose fallback. */
-class RoseBoundary extends Component<{ children: ReactNode; palette: RosePalette }, { failed: boolean }> {
+/** WebGL error boundary → static bloom fallback. */
+class FlowerBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
@@ -79,7 +95,7 @@ class RoseBoundary extends Component<{ children: ReactNode; palette: RosePalette
     if (this.state.failed) {
       return (
         <div className="flex h-full w-full items-center justify-center">
-          <RoseGlyph size={120} />
+          <FlowerGlyph size={120} />
         </div>
       );
     }
@@ -87,19 +103,28 @@ class RoseBoundary extends Component<{ children: ReactNode; palette: RosePalette
   }
 }
 
-export function RoseStage({
-  roseStyle,
+export function FlowerStage({
+  varietyId,
+  motion,
   className,
-  autoRotate = true,
 }: {
-  roseStyle?: string;
+  varietyId?: string;
+  motion?: string;
   className?: string;
-  autoRotate?: boolean;
 }) {
-  const palette = rosePalette(roseStyle);
+  const variety = flowerVariety(varietyId);
+  const m: FlowerMotion = flowerMotion(motion);
   return (
-    <RoseBoundary palette={palette}>
-      <Rose3D palette={palette} className={cn("h-full w-full", className)} autoRotate={autoRotate} />
-    </RoseBoundary>
+    <FlowerBoundary>
+      <div className="relative h-full w-full">
+        <Flower3D
+          key={variety.id}
+          variety={variety}
+          motion={m}
+          className={cn("h-full w-full", className)}
+        />
+        <LoadVeil varietyName={variety.name} />
+      </div>
+    </FlowerBoundary>
   );
 }

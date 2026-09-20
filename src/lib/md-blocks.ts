@@ -41,22 +41,70 @@ export interface SongResult {
 /** Card colors the creator can assign to claw-machine coupons (pile art). */
 export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"] as const;
 
-/** 3D-rose varieties — the petal/leaf color stories the creator picks.
- *  "classic" matches the reference miniature-rose look: deep magenta-pink
- *  spiral petals with a dense furled center. */
-export const ROSE_PALETTES = [
-  { id: "classic", name: "Classic Pink", base: "#A80F56", mid: "#E23D84", edge: "#FFA9C9", back: "#C4578A", leaf: "#3E7C3A", stem: "#4A8746" },
-  { id: "crimson", name: "Crimson", base: "#8E0A22", mid: "#C41433", edge: "#FF7A8A", back: "#A33A4C", leaf: "#35702F", stem: "#3F7A3A" },
-  { id: "blush", name: "Blush", base: "#D97A9C", mid: "#F2AFC4", edge: "#FFE4EC", back: "#E0A3B8", leaf: "#6FA35E", stem: "#7AA96C" },
-  { id: "lavender", name: "Lavender", base: "#8E5AA8", mid: "#B583D6", edge: "#EBD0F7", back: "#A57FBE", leaf: "#5E8F55", stem: "#6A9B60" },
-  { id: "apricot", name: "Apricot", base: "#C96A2E", mid: "#F09A52", edge: "#FFDDB0", back: "#D68A55", leaf: "#558B48", stem: "#629553" },
+/** 3D-flower varieties — real GLB models (user-authored assets from the repo).
+ *  Each variety carries its hero camera ("best angle": azimuth/elevation in
+ *  degrees, distance in model-heights, target height fraction), accent colors
+ *  for the stage glow/petals/card, and a thumbnail used across lists. */
+export const FLOWER_VARIETIES = [
+  {
+    id: "rose",
+    name: "Rose",
+    model: "/models/rose.glb",
+    thumb: "/models/rose-thumb.png",
+    /* curated hero angle — 3/4 view, bloom prominent, whole plant in frame */
+    az: 42,
+    el: 10,
+    dist: 2.3,
+    ty: 0.58,
+    base: "#7A0E30",
+    mid: "#C2185B",
+    edge: "#FF9EBE",
+    leaf: "#3E7C3A",
+    /** the exporter shipped TEXCOORD_0 as all zeros — real UVs live in uv1 */
+    needsUvRebind: true,
+    /** azalea-style PBR metals read as wet plastic under stage light */
+    matte: false,
+    playAnim: false,
+  },
+  {
+    id: "azalea",
+    name: "Azalea",
+    model: "/models/rhododendron_azalea.glb",
+    thumb: "/models/azalea-thumb.png",
+    az: 30,
+    el: 12,
+    dist: 3.2,
+    ty: 0.5,
+    base: "#8E2A2A",
+    mid: "#E85858",
+    edge: "#FFB3A8",
+    leaf: "#2E5B2B",
+    needsUvRebind: false,
+    matte: true,
+    /** the GLB ships a looping "Insectfly" clip — a bee orbiting the bloom */
+    playAnim: true,
+  },
 ] as const;
 
-export type RosePalette = (typeof ROSE_PALETTES)[number];
+export type FlowerVariety = (typeof FLOWER_VARIETIES)[number];
 
-/** Resolves a palette id (or raw style string) → palette (falls back to classic). */
-export function rosePalette(style?: string): RosePalette {
-  return ROSE_PALETTES.find((p) => p.id === style) ?? ROSE_PALETTES[0];
+/** Resolves a stored variety id → variety. Legacy rose-style palette ids
+ *  (classic / crimson / blush / lavender / apricot) map to the rose model. */
+export function flowerVariety(style?: string): FlowerVariety {
+  const hit = FLOWER_VARIETIES.find((v) => v.id === style);
+  if (hit) return hit;
+  return style && ["classic", "crimson", "blush", "lavender", "apricot"].includes(style)
+    ? FLOWER_VARIETIES[0]
+    : FLOWER_VARIETIES[0];
+}
+
+/** How the flower presents in the player — "still" parks it at its curated
+ *  best angle (the default), "spin" adds a slow turntable. Recipients can
+ *  always drag to look around. */
+export type FlowerMotion = "still" | "spin";
+
+export function flowerMotion(motion?: string): FlowerMotion {
+  return motion === "spin" ? "spin" : "still";
 }
 
 /** One coupon in the claw-machine pool (creator-managed in the block editor).
@@ -131,9 +179,13 @@ export interface BlockData {
   url?: string;
   /** confetti */
   style?: string;
-  /** rose: variety preset id (ROSE_PALETTES) — petal/leaf color story.
-   *  The dedication copy lives in `message` (shared with gift). */
+  /** rose: which GLB flower model (FLOWER_VARIETIES id — "rose" | "azalea").
+   *  Legacy palette ids still resolve to the rose model. The dedication copy
+   *  lives in `message` (shared with gift). */
   roseStyle?: string;
+  /** rose: presentation in the player — "still" (curated best angle, the
+   *  default) or "spin" (slow turntable). Drag-to-look works either way. */
+  flowerMotion?: string;
 }
 
 export interface BlockDoc {

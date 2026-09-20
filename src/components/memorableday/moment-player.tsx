@@ -31,8 +31,8 @@ import { CONFETTI_PALETTES, ConfettiFX, type ConfettiStyleName } from "./confett
 import { RewardTicket } from "./reward-ticket";
 import { CouponMachine, useCouponMachine, type MachineCoupon } from "./coupon-machine";
 import { useMachineSfx } from "./coupon-sfx";
-import { RoseStage } from "./rose-stage";
-import { rosePalette } from "@/lib/md-blocks";
+import { FlowerStage } from "./flower-stage";
+import { flowerMotion, flowerVariety } from "@/lib/md-blocks";
 import { apiDrawCoupon, apiPeekCoupon } from "@/lib/md-client";
 import { couponPool } from "@/lib/md-blocks";
 import { LogoMark } from "./bits";
@@ -646,11 +646,13 @@ function QuizBlockView({
   );
 }
 
-/* Rose — a living 3D miniature rose on a dark velvet stage. The bloom
- * unfurls when the scene opens; petals drift; the recipient spins it. */
-function RoseBlockView({ block, index }: { block: BlockDoc; index: number }) {
+/* Flower — the real 3D bloom (GLB) floating frameless on the scene. The
+ * creator chooses the variety and whether it turns or rests at its best
+ * angle; the recipient can always drag to look around. */
+function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const d = block.data;
-  const pal = rosePalette(d?.roseStyle);
+  const variety = flowerVariety(d?.roseStyle);
+  const present = flowerMotion(d?.flowerMotion);
   const message = d?.message?.trim();
   const [hintGone, setHintGone] = useState(false);
 
@@ -665,27 +667,28 @@ function RoseBlockView({ block, index }: { block: BlockDoc; index: number }) {
         <Sparkles size={11} aria-hidden /> For you
       </p>
 
-      {/* The stage — full-width dark velvet with a soft rose glow */}
+      {/* Frameless stage — the bloom floats directly on the scene with a
+       * soft aura behind it (no box, no border) */}
       <div className="relative mt-4 w-full max-w-[460px]">
         <div
           aria-hidden
-          className="absolute inset-0 rounded-[26px] opacity-70 blur-2xl"
-          style={{ background: `radial-gradient(circle at 50% 30%, ${pal.mid}55 0%, transparent 65%)` }}
+          className="absolute inset-x-8 top-4 bottom-10 rounded-[40px] opacity-60 blur-3xl"
+          style={{ background: `radial-gradient(circle at 50% 34%, ${variety.mid}4D 0%, transparent 68%)` }}
         />
-        <div className="relative h-[380px] overflow-hidden rounded-[26px] border border-white/12 bg-[radial-gradient(circle_at_50%_22%,#41202f_0%,#191318_74%)] md:h-[430px]">
-          <RoseStage roseStyle={d?.roseStyle} className="h-full w-full" />
+        <div className="relative h-[380px] overflow-hidden md:h-[430px]">
+          <FlowerStage varietyId={d?.roseStyle} motion={d?.flowerMotion} className="h-full w-full" />
           {/* drifting petals */}
-          <PetalDrift color={pal.edge} />
-          {/* the spin hint fades on first interaction */}
+          <PetalDrift color={variety.edge} />
+          {/* the look hint fades on first interaction */}
           {!hintGone ? (
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 2.6 }}
-              className="pointer-events-none absolute bottom-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/35 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.08em] text-white/80 backdrop-blur-sm"
+              className="pointer-events-none absolute bottom-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/30 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.08em] text-white/75 backdrop-blur-sm"
               onPointerEnter={() => setHintGone(true)}
             >
-              DRAG TO SPIN · PINCH TO ZOOM
+              {present === "spin" ? "DRAG TO SPIN · PINCH TO ZOOM" : "DRAG TO LOOK CLOSER"}
             </motion.p>
           ) : null}
         </div>
@@ -701,22 +704,23 @@ function RoseBlockView({ block, index }: { block: BlockDoc; index: number }) {
         <span
           aria-hidden
           className="mx-auto mb-2.5 flex h-8 w-8 items-center justify-center rounded-full"
-          style={{ backgroundColor: `${pal.mid}40` }}
+          style={{ backgroundColor: `${variety.mid}40` }}
         >
-          <Heart size={15} style={{ color: pal.edge }} fill="currentColor" strokeWidth={0} aria-hidden />
+          <Heart size={15} style={{ color: variety.edge }} fill="currentColor" strokeWidth={0} aria-hidden />
         </span>
         <p className="text-[18px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[21px]">
-          {message || "A rose that will never wilt."}
+          {message ||
+            (variety.id === "azalea" ? "An azalea that will never fade." : "A rose that will never wilt.")}
         </p>
         <p className="mt-1.5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-white/50">
-          {pal.name} · grown in real 3D
+          {variety.name} · real 3D
         </p>
       </motion.div>
     </motion.div>
   );
 }
 
-/** Gentle endless petal drift inside the rose stage (pure CSS motion). */
+/** Gentle endless petal drift inside the flower stage (pure CSS motion). */
 function PetalDrift({ color }: { color: string }) {
   const petals = useMemo(
     () =>
@@ -1524,7 +1528,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                         />
                       );
                     case "rose":
-                      return <RoseBlockView key={b.id} block={b} index={i} />;
+                      return <FlowerBlockView key={b.id} block={b} index={i} />;
                     case "countdown":
                       return (
                         <CountdownBlockView

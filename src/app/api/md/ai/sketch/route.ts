@@ -36,6 +36,7 @@ interface SketchBlock {
   url?: unknown;
   style?: unknown;
   roseStyle?: unknown;
+  flowerMotion?: unknown;
   heading?: unknown;
   stepLabel?: unknown;
   song?: unknown;
@@ -180,8 +181,12 @@ function sanitizeBlock(raw: SketchBlock, idx: number, sceneNo: number): BlockDoc
     case "rose": {
       data.message = str(raw.message, 90) ?? "This one never wilts.";
       const variety = str(raw.roseStyle, 20);
-      if (variety && ["classic", "crimson", "blush", "lavender", "apricot"].includes(variety)) {
+      if (variety && ["rose", "azalea"].includes(variety)) {
         data.roseStyle = variety;
+      }
+      const motion = str(raw.flowerMotion, 10);
+      if (motion && ["still", "spin"].includes(motion)) {
+        data.flowerMotion = motion;
       }
       break;
     }
@@ -242,7 +247,7 @@ export async function POST(req: Request) {
             "- Allowed block types and fields:\n" +
             '  · {"type":"text","body": string} — a message, 1–2 sentences, max 220 chars. The FIRST scene must start with a text block addressing the recipient directly.\n' +
             '  · {"type":"gift","message": string} — a wrapped gift that opens to reveal a short note, max 90 chars.\n' +
-            '  · {"type":"rose","message": string, "roseStyle": one of "classic"|"crimson"|"blush"|"lavender"|"apricot"} — a living 3D rose that blooms and can be spun; message is a short dedication under it (at most once, for love/gratitude moments).\n' +
+            '  · {"type":"rose","message": string, "roseStyle": "rose"|"azalea", "flowerMotion": "still"|"spin"} — a real 3D flower model (rose or azalea) floating frameless on the scene; "still" rests it at its best angle (preferred), "spin" turns it slowly; message is a short dedication under it (at most once, for love/gratitude moments).\n' +
             '  · {"type":"countdown","minutes": number 1–30} — a timed lock building anticipation (at most once).\n' +
             '  · {"type":"quiz","question": string, "options": [string ×2–4], "answer": 0-based index} — a fun question about the sender/recipient or the occasion.\n' +
             '  · {"type":"reward","rewardKind": string like \"Coffee on me\", "code": string like \"NIGHT-OUT\"} — a redeemable treat in a golden ticket.\n' +
