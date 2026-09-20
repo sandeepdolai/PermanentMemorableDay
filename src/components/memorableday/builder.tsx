@@ -14,6 +14,7 @@ import {
   Download,
   ExternalLink,
   FileMusic,
+  Flower2,
   Gift,
   GripVertical,
   Heart,
@@ -54,6 +55,8 @@ import {
   freshBlockId,
   freshSceneId,
   photoFilterCss,
+  ROSE_PALETTES,
+  rosePalette,
   uid,
   urlDomain,
   BACKGROUND_DIMS,
@@ -75,6 +78,7 @@ import {
   type ConfettiStyleName,
 } from "./confetti";
 import { RewardTicket, rewardKindMeta } from "./reward-ticket";
+import { RoseStage, RoseGlyph } from "./rose-stage";
 import { CouponMachine, useCouponMachine, type MachinePrize } from "./coupon-machine";
 import { useMachineSfx } from "./coupon-sfx";
 import {
@@ -111,6 +115,7 @@ const BLOCKS: BlockDef[] = [
   { type: "audio", label: "Audio", icon: Music, tint: "#FF375F" },
   { type: "background", label: "Background", icon: Wallpaper, tint: "#64D2FF" },
   { type: "gift", label: "Gift", icon: Gift, tint: "#5E5CE6" },
+  { type: "rose", label: "Rose", icon: Flower2, tint: "#FF375F" },
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
   { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
@@ -469,6 +474,31 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
             ) : null}
             <span className="rounded-full bg-[#5E5CE6]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#5E5CE6]">
               Reveal
+            </span>
+          </span>
+        </div>
+      );
+    }
+    case "rose": {
+      const pal = rosePalette(d?.roseStyle);
+      const roseMessage = d?.message?.trim();
+      return (
+        <div className="flex items-center gap-3">
+          <span aria-hidden className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[14px] bg-[radial-gradient(circle_at_50%_35%,#FF9EBE_0%,#5C1637_78%)]">
+            <RoseGlyph size={40} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D Rose · {pal.name}</p>
+            {roseMessage ? (
+              <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{roseMessage}”</p>
+            ) : (
+              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">A living rose they can spin, touch & bloom</p>
+            )}
+          </div>
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span aria-hidden className="h-3.5 w-3.5 rounded-full ring-2 ring-white" style={{ backgroundColor: pal.mid }} />
+            <span className="rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
+              3D
             </span>
           </span>
         </div>
@@ -1694,6 +1724,95 @@ function UploadAudioContent({
 }
 
 /* ------------------------------------------------------------------ */
+/* Rose block — the living 3D rose (variety + dedication)              */
+/* ------------------------------------------------------------------ */
+
+function RoseBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const style = d.roseStyle ?? "classic";
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live 3D preview — the exact rose the recipient will get */}
+      <div className="overflow-hidden rounded-[18px] border border-[#1D1D1F]/[0.07] bg-[radial-gradient(circle_at_50%_20%,#3A1526_0%,#1D1D1F_72%)]">
+        <div className="h-[240px]">
+          <RoseStage roseStyle={style} autoRotate />
+        </div>
+        <div className="flex items-center justify-between border-t border-white/10 px-3.5 py-2">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-white/50">
+            Live 3D — drag to spin
+          </p>
+          <p className="text-[10.5px] font-semibold text-white/40">Real-time · no video</p>
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Variety</FieldLabel>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Rose variety">
+          {ROSE_PALETTES.map((p) => {
+            const active = style === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => set({ roseStyle: p.id })}
+                className={cn(
+                  "flex items-center gap-2 rounded-full border-2 py-1.5 pl-1.5 pr-3.5 text-[12.5px] font-bold transition-all active:scale-[0.96]",
+                  active
+                    ? "border-[#FF375F] bg-[#FF375F]/[0.06] text-[#D6336C]"
+                    : "border-[#1D1D1F]/[0.09] bg-white text-[#1D1D1F]/75"
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="h-6 w-6 rounded-full"
+                  style={{
+                    background: `linear-gradient(135deg, ${p.edge} 0%, ${p.mid} 45%, ${p.base} 100%)`,
+                    boxShadow: "inset 0 1px 2px rgba(255,255,255,0.4)",
+                  }}
+                />
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="md-rose-note"
+          className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]"
+        >
+          Dedication
+        </label>
+        <textarea
+          id="md-rose-note"
+          rows={2}
+          maxLength={90}
+          value={d.message ?? ""}
+          onChange={(e) => set({ message: e.target.value })}
+          placeholder="Shown under the rose — e.g. “For the one who makes ordinary days bloom.”"
+          className={cn(fieldInput, "resize-none leading-relaxed")}
+        />
+        <div className="mt-1.5 flex justify-end">
+          <span className="text-[10.5px] font-semibold tabular-nums text-[#AAAAAA]">
+            {(d.message ?? "").length}/90
+          </span>
+        </div>
+      </div>
+
+      <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+        A whole miniature rose — spiral bloom, stem and leaves — grown in real-time 3D. It unfurls
+        when the scene opens, sways in a breeze, and the recipient can spin it with a finger.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Gift block — wrapped box reveal (note, wrap color, ribbon)           */
 /* ------------------------------------------------------------------ */
 
@@ -2127,6 +2246,19 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     },
   },
   {
+    id: "rose-3d",
+    type: "rose",
+    name: "3D Rose",
+    blurb: "A living rose they can spin — it blooms in real 3D",
+    category: "Rewards",
+    accent: "#FF375F",
+    isNew: true,
+    data: {
+      message: "This one never wilts.",
+      roseStyle: "classic",
+    },
+  },
+  {
     id: "gift-box",
     type: "gift",
     name: "Gift Box",
@@ -2284,6 +2416,12 @@ function LibraryThumb({ t }: { t: LibraryTemplate }) {
       return (
         <span aria-hidden className="flex items-center justify-center">
           <GiftBox wrap="#5E5CE6" ribbon="classic" still scale={0.3} sparkle={false} />
+        </span>
+      );
+    case "rose":
+      return (
+        <span aria-hidden className="flex items-center justify-center">
+          <RoseGlyph size={64} />
         </span>
       );
     case "reward":
@@ -2562,6 +2700,12 @@ function starterBlockData(type: string): BlockData | undefined {
       stepLabel: "YOUR COUPON CODE",
       label: "PLAY & WIN",
       coupons: samplePool(),
+    };
+  }
+  if (type === "rose") {
+    return {
+      message: "",
+      roseStyle: "classic",
     };
   }
   return undefined;
@@ -3344,6 +3488,8 @@ function BlockEditorContent({
       );
     case "audio":
       return <AudioBlockEditor block={block} onChange={onChange} />;
+    case "rose":
+      return <RoseBlockEditor block={block} onChange={onChange} />;
     case "gift":
       return <GiftBlockEditor block={block} onChange={onChange} />;
     case "countdown": {

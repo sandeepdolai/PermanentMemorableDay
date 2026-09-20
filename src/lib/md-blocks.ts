@@ -41,6 +41,24 @@ export interface SongResult {
 /** Card colors the creator can assign to claw-machine coupons (pile art). */
 export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"] as const;
 
+/** 3D-rose varieties — the petal/leaf color stories the creator picks.
+ *  "classic" matches the reference miniature-rose look: deep magenta-pink
+ *  spiral petals with a dense furled center. */
+export const ROSE_PALETTES = [
+  { id: "classic", name: "Classic Pink", base: "#A80F56", mid: "#E23D84", edge: "#FFA9C9", back: "#C4578A", leaf: "#3E7C3A", stem: "#4A8746" },
+  { id: "crimson", name: "Crimson", base: "#8E0A22", mid: "#C41433", edge: "#FF7A8A", back: "#A33A4C", leaf: "#35702F", stem: "#3F7A3A" },
+  { id: "blush", name: "Blush", base: "#D97A9C", mid: "#F2AFC4", edge: "#FFE4EC", back: "#E0A3B8", leaf: "#6FA35E", stem: "#7AA96C" },
+  { id: "lavender", name: "Lavender", base: "#8E5AA8", mid: "#B583D6", edge: "#EBD0F7", back: "#A57FBE", leaf: "#5E8F55", stem: "#6A9B60" },
+  { id: "apricot", name: "Apricot", base: "#C96A2E", mid: "#F09A52", edge: "#FFDDB0", back: "#D68A55", leaf: "#558B48", stem: "#629553" },
+] as const;
+
+export type RosePalette = (typeof ROSE_PALETTES)[number];
+
+/** Resolves a palette id (or raw style string) → palette (falls back to classic). */
+export function rosePalette(style?: string): RosePalette {
+  return ROSE_PALETTES.find((p) => p.id === style) ?? ROSE_PALETTES[0];
+}
+
 /** One coupon in the claw-machine pool (creator-managed in the block editor).
  *  Lives inside BlockData.coupons and round-trips through the sceneData JSON
  *  column — assignments reference these by id. */
@@ -113,6 +131,9 @@ export interface BlockData {
   url?: string;
   /** confetti */
   style?: string;
+  /** rose: variety preset id (ROSE_PALETTES) — petal/leaf color story.
+   *  The dedication copy lives in `message` (shared with gift). */
+  roseStyle?: string;
 }
 
 export interface BlockDoc {

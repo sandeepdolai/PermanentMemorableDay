@@ -3,6 +3,7 @@
 import {
   Award,
   Clock,
+  Flower2,
   Gift,
   Images as ImagesIcon,
   ListChecks,
@@ -27,6 +28,7 @@ const SCENE_BLOCKS = [
   { label: "Audio", type: "audio", icon: Music, tint: "#FF375F" },
   { label: "Background", type: "background", icon: Wallpaper, tint: "#64D2FF" },
   { label: "Gift", type: "gift", icon: Gift, tint: "#5E5CE6" },
+  { label: "Rose", type: "rose", icon: Flower2, tint: "#FF375F" },
   { label: "Countdown", type: "countdown", icon: Clock, tint: "#FF9F0A" },
   { label: "Quiz", type: "quiz", icon: ListChecks, tint: "#007AFF" },
   { label: "Reward", type: "reward", icon: Award, tint: "#30D158" },

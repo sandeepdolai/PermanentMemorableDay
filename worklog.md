@@ -1374,3 +1374,33 @@ Stage Summary:
 - The user's repo-root PNG file is kept in git untouched (their commit).
 - SECURITY (carried): the GitHub classic PAT was posted in chat — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: Rose block, library search field, public /e/[slug] recipient page, per-scene soundtrack override, AI sketch->soundtrack, creator claims analytics dashboard; coupon relaunch flag COUPON_REVEAL_ENABLED=false.
+
+---
+Task ID: 40
+Agent: Z.ai Code (main orchestrator)
+Task: User asked to make a "same to same" rose like the Sketchfab "Anatomy of a miniature rose — Photogrammetry" model (referenced via kokraf.com, their collaborative 3D modeling tool), then push the rose to GitHub.
+
+Work Log:
+- Researched the reference: studied the Sketchfab model page + VLM analysis of it (full miniature rose plant: deep magenta-pink spiral bloom with dense furled center, five sepals, curved stem, compound leaves; photoreal photogrammetry on black). Logged into kokraf.com with the user's account and surveyed the tool — it is a manual Blender-style modeler whose GENERATE button is texture-only; hand-modeling a photogrammetry-grade rose via browser automation is not feasible, so the rose was built programmatically (three.js) to match the reference. No credentials stored anywhere.
+- Installed three + @react-three/fiber + @react-three/drei (v9/10/0.186).
+- NEW src/components/memorableday/rose-3d.tsx — a fully procedural real-time 3D miniature rose:
+  - Every petal is a parametric surface (28x40 grid): obovate outline (claw base -> broad blade -> rounded notched apex), parabolic cup cross-section, cubic-ease recurve, soft travelling ruffle on the outer edge only, midrib fold, per-petal asymmetry jitter. Vertex colors bake the deep-magenta-base -> pink-mid -> pale-edge gradient + AO (bases sink into whorl shadow) + rim brightening + faint veins.
+  - 48 petals across 8 whorls on a golden-angle phyllotactic spiral (137.5 deg), inner whorls nearly vertical and tightly wrapped, outer whorls opening to ~77 deg with recurved tips; whorl-by-whorl darkening (0.55 -> 1.05) creates the heart-to-edge color story. F bud sphere + receptacle + 5 splayed sepals.
+  - Gently S-curved stem tube, 7 prickles, 4 compound leaves (curved rachis + 5 serrated leaflets each with midrib crease).
+  - MeshPhysicalMaterial with sheen + clearcoat + dim magenta emissive (fake SSS); 3-point + hemisphere lighting, ACES tone mapping, exposure 1.12.
+  - Choreography: bloom unfurls whorl-by-whorl over ~2.4s on entry (petals start at 16% tilt), breeze sway (plant + bloom), flutter per petal; OrbitControls damped drag-to-spin/pinch-zoom with slow autoRotate; prefers-reduced-motion collapses all motion; dpr [1.5, 2].
+- NEW src/components/memorableday/rose-stage.tsx — client wrapper: next/dynamic ssr:false + loading skeleton + WebGL-fail error boundary (static RoseGlyph SVG fallback) + exported RoseGlyph (list thumbs).
+- md-blocks.ts: ROSE_PALETTES (Classic Pink matching the reference, Crimson, Blush, Lavender, Apricot) + rosePalette() + BlockData.roseStyle.
+- Wired the "rose" block across every surface: builder BLOCKS tray (12 kinds now) + RoseBlockEditor (live 3D preview stage, variety radio chips, dedication textarea w/ counter) + BlockSummary row + LibraryThumb + LIBRARY_TEMPLATES ("3D Rose", Rewards, isNew) + starterBlockData; create-view SCENE_BLOCKS; sheet-contents SKETCH_BLOCK_META; AI sketch route (ALLOWED_TYPES, prompt line, sanitizer with roseStyle whitelist); moment-player RoseBlockView (dark velvet stage, radial glow, CSS PetalDrift overlay, DRAG TO SPIN hint, glass dedication card) + render case.
+- Iterated the rose through 11 tuning rounds driven by native-canvas VLM checks + quantitative pixel analysis (luminance histograms, gradient-smoothness scanlines):
+  - Fixed NaN tip shatter (sin(pi*x) past pi -> pow(negative) = NaN -> jagged shards), over-cupped taco petals, flat starburst tilt schedule, invisible leaves (rachis grew vertically along the stem — now arcs outward), missing heart density, uniform color (added AO + whorl shading).
+  - Verified smooth shading quantitatively (92% smooth-gradient pixels, 73px continuous runs; offline three.js test: 2-4 deg neighbor-normal variance, zero NaN/degenerate) — the headless browser's WebGL context loss during HMR had also been corrupting some checks.
+  - Final VLM read: "color story reads beautifully — deep rich pink core to soft pale edges... crafted quality, intentional and sophisticated."
+- E2E via agent-browser: Create -> Rose scene block; builder tray "12 block kinds"; editor opens live WebGL canvas (594x360); Library "All 13" + "Rewards & Prizes 3" + "Add 3D Rose block"; player shows FOR YOU + full 3D stage (686x642 backing) + DRAG TO SPIN + dedication card; bun run lint clean; tsc clean for all rose files; no server errors in dev.log.
+
+Stage Summary:
+- MemorableDay now has a Rose block — an interactive, animated, real-time 3D miniature rose (5 varieties) that recipients can spin, matching the Sketchfab reference's structure and color story. It was pushed to GitHub.
+- Tuning knobs for future polish are all in WHORLS + buildPetalGeometry params; next realism steps if ever needed: transmission-based petal translucency, normal-map veins, environment lighting.
+- Kokraf login worked with the user's account; the tool cannot generate geometry (texture AI only) — noted for future 3D asset needs.
+- SECURITY (carried): the GitHub PAT and the Kokraf credentials were posted in chat — rotate both after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch->soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false).
