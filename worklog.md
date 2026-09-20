@@ -1044,3 +1044,23 @@ Stage Summary:
 - SECURITY (carried over): the GitHub classic PAT was posted in chat in earlier sessions — user must rotate it.
 - Next-phase candidates (queue): REAL upload backend (multipart API + persistent storage — user mandate "no mock upload"), GitHub push of full source (token rotation reminder), Spotify credentials drop-in, library search field, claw-machine sound FX (arcade grab/win chimes), public /e/[slug] recipient page, per-scene soundtrack override.
 - Recurring 15-min webDevReview cron: job_id 397590 (re-verified in place this round).
+
+---
+Task ID: 28
+Agent: Z.ai Code (main orchestrator)
+Task: User: "Now This Project Lool The Previous One That Lost Memory, Now Push This To Github https://github.com/sandeepdolai/PermanentMemorableDay.git" — push the full project (source + history) to the new permanent repo as a durable backup.
+
+Work Log:
+- Verified project state: dev server healthy on :3000 (POST /api/md/bootstrap 200, prisma queries flowing); git tree clean except the runtime .zscripts/dev.pid; 146 tracked files; .gitignore correctly excludes db/*.db, storage/, logs, env files.
+- Verified token + repo via GitHub API: user sandeepdolai OK; PermanentMemorableDay (private) existed with only an auto-generated "Initial commit" on main — no real content to preserve.
+- Appended this worklog entry, committed the full working tree.
+- Force-pushed local main (full history incl. Tasks 0–27: PRD, iOS 26/27-style app shell, builder + block system, moment player, gift box, reward ticket, coupon claw machine, block library, confetti, uploads API, etc.) to github.com/sandeepdolai/PermanentMemorableDay.git — replacing the placeholder initial commit.
+- Verified push via GitHub API (commit list + file tree).
+- Reset origin to the clean token-less URL https://github.com/sandeepdolai/PermanentMemorableDay.git so future pushes target the permanent repo without embedding credentials.
+- Re-created the recurring 15-minute webDevReview cron job (lost with the previous session).
+
+Stage Summary:
+- The complete MemorableDay project now lives permanently at github.com/sandeepdolai/PermanentMemorableDay (private) — full git history + worklog, safe against session memory loss.
+- Origin remote now points at PermanentMemorableDay (token-less URL).
+- SECURITY: the GitHub classic PAT (user sandeepdolai) was again shared in chat — it MUST be rotated by the user (GitHub → Settings → Developer settings → Personal access tokens → delete/regenerate). It was used only transiently for this push and is NOT stored on disk.
+- Next-phase candidates (carried queue): REAL upload backend hardening, library search field, more library templates per category, public /e/[slug] recipient page, per-scene soundtrack override, claw-machine sound FX, Rose block (native CSS/SVG rose, 4 colors, animation modes — no Sketchfab).
