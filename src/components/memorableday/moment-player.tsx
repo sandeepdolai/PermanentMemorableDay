@@ -969,14 +969,16 @@ function CouponBlockView({ block, index, momentId }: { block: BlockDoc; index: n
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      {/* The machine owns the whole flow: PLAY → claw hunts + grabs the
-          player's assigned card → golden reveal → COPY CODE (built in). */}
+      {/* The machine owns the whole flow: PLAY → the joystick goes live →
+          the player aims + releases → the claw grabs a face-down ticket →
+          golden reveal → COPY CODE (built in). */}
       <CouponMachine
         title={d?.heading?.trim() || "COUPON CODE"}
         subtitle={d?.body?.trim() || "REVEAL"}
         ticketLabel={d?.stepLabel?.trim() || "YOUR COUPON CODE"}
         buttonLabel={d?.label?.trim() || "PLAY & WIN"}
         coupons={cards}
+        cardCount={d?.displayCount}
         prize={m.prize}
         phase={m.phase}
         playToken={m.playToken}
@@ -984,6 +986,10 @@ function CouponBlockView({ block, index, momentId }: { block: BlockDoc; index: n
         error={m.error}
         soldOut={m.soldOut}
         onPlay={m.play}
+        clawX={m.clawX}
+        onAim={m.setClawX}
+        onGrab={m.beginGrab}
+        grabPlan={m.grabPlan}
         sfx={sfx}
       />
 

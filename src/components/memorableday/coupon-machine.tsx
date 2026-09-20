@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, Copy, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { AlertTriangle, Check, Copy, Hand, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { ConfettiFX } from "./confetti";
 import { useMD } from "./md-context";
 import type { MachineSfxName } from "./coupon-sfx";
@@ -10,15 +10,22 @@ import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /* CouponMachine — the blue arcade claw machine with a REAL prize      */
-/* flow: every coupon in the creator's pool is a distinct card in the  */
-/* pile. PLAY → the machine wakes (starting) → the claw sweeps left /  */
-/* right hunting (searching) → locks onto the player's assigned card   */
-/* (chosen by the SERVER — first play assigns randomly + persists,     */
-/* replays always return the same one) → descends, pincers snap shut  */
-/* (grab) → lifts the card out with a pendulum sway (lift) → glides    */
-/* to center (center) → the card bursts into the golden ticket and     */
-/* the code reveals (reveal). PLAY AGAIN reruns the whole choreography */
-/* and always grabs the SAME card — the visual and the data agree.     */
+/* flow. The machine is PLAYER-CONTROLLED:                             */
+/*                                                                     */
+/*   PLAY & WIN → the machine wakes (starting, the server deal runs)   */
+/*   → CONTROL — the red joystick goes live; drag it (or arrow keys)   */
+/*   to sweep the claw across the chamber; every ticket is face-down   */
+/*   (all read "COUPON" with a blurred code strip, so nobody can      */
+/*   cheat by reading codes in the pile)                               */
+/*   → RELEASE the joystick → the claw drops onto the nearest ticket,  */
+/*   the pincers snap shut (grabbing), it lifts + glides to center     */
+/*   → the ticket bursts into the golden ticket and the code reveals.  */
+/*                                                                     */
+/* The SERVER still decides the prize: the first play assigns one      */
+/* coupon from the creator's eligible pool (persisted, stock-guarded); */
+/* every replay returns the SAME coupon no matter which ticket the    */
+/* player grabs — the codes were never visible, so the reveal is       */
+/* always a perfect match.                                             */
 /*                                                                     */
 /* One art source for the moment player and the builder's live stage.  */
 /* ------------------------------------------------------------------ */
@@ -66,11 +73,11 @@ function codeFontSize(len: number): number {
   return 7;
 }
 
-/** Pile-card code font (smaller surface than the golden ticket). */
-function cardCodeFontSize(len: number): number {
-  if (len <= 5) return 8;
-  if (len <= 8) return 7;
-  return 6.2;
+/** Font for a ticket's hidden code strip (tiny surface, blurred anyway). */
+function stripFontSize(len: number): number {
+  if (len <= 6) return 4.7;
+  if (len <= 10) return 4.2;
+  return 3.7;
 }
 
 /** A four-point sparkle star. */
@@ -116,7 +123,7 @@ function Star5({
 /* Public machine types                                                */
 /* ------------------------------------------------------------------ */
 
-/** A coupon as the machine displays it (a card in the pile). */
+/** A coupon as the machine displays it (a face-down ticket in the pile). */
 export interface MachineCoupon {
   id: string;
   code: string;
@@ -133,13 +140,23 @@ export interface MachinePrize {
   color: string;
 }
 
-export type MachinePhase = "idle" | "starting" | "running" | "revealed";
+/** idle → starting (wake + server deal) → control (player aims via the
+ *  joystick) → grabbing (drop → snap → lift → center) → revealed. */
+export type MachinePhase = "idle" | "starting" | "control" | "grabbing" | "revealed";
 
-/** Total choreography duration: search → grab → lift → center → present. */
-export const MACHINE_SEQ_MS = 4600;
+/** Duration of the release choreography: drop → snap → lift → center. */
+export const MACHINE_SEQ_MS = 1700;
+
+/** Ticket-count bounds the creator can dial the pile to. */
+export const TICKETS_MIN = 6;
+export const TICKETS_MAX = 28;
+export const TICKETS_DEFAULT = 12;
+
+/** Horizontal claw travel (viewBox units from center x=160). */
+const CLAW_RANGE = 112;
 
 /* ------------------------------------------------------------------ */
-/* Pile layout — deterministic card slots (stable across plays)        */
+/* Pile layout — a procedural, deterministic ticket mountain           */
 /* ------------------------------------------------------------------ */
 
 interface PileSlot {
@@ -150,32 +167,89 @@ interface PileSlot {
   rot: number;
 }
 
-/** Ten natural card positions across three depth rows inside the window
- *  (window x 30–290, floor ≈ 336 — front-row bottoms tuck behind the lip). */
-const SLOTS: PileSlot[] = [
-  { x: 38, y: 278, w: 54, h: 19, rot: -8 },
-  { x: 133, y: 276, w: 56, h: 19, rot: 4 },
-  { x: 230, y: 278, w: 52, h: 19, rot: -6 },
-  { x: 30, y: 298, w: 58, h: 21, rot: 7 },
-  { x: 99, y: 294, w: 60, h: 22, rot: -4 },
-  { x: 168, y: 296, w: 58, h: 21, rot: 9 },
-  { x: 236, y: 299, w: 56, h: 21, rot: -10 },
-  { x: 46, y: 316, w: 50, h: 19, rot: -3 },
-  { x: 128, y: 318, w: 52, h: 19, rot: 6 },
-  { x: 208, y: 317, w: 50, h: 19, rot: -7 },
-];
-
-const FILLER_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"];
-
+/** Stable pseudo-random from a string (same pile every play/refresh). */
 function hashStr(s: string): number {
   return [...s].reduce((a, ch) => (a * 33 + ch.charCodeAt(0)) % 100003, 11);
 }
 
+/** Jitter in [-spread, +spread] from a stable key. */
+function jitter(key: string, spread: number): number {
+  return ((hashStr(key) % 1000) / 1000 - 0.5) * 2 * spread;
+}
+
+/** Front-heavy row weights — the pile reads deeper with more cards up front. */
+const ROW_WEIGHTS: Record<number, number[]> = {
+  3: [0.85, 1, 1.3],
+  4: [0.75, 0.95, 1.15, 1.35],
+  5: [0.7, 0.9, 1.05, 1.2, 1.35],
+};
+
+/** Front row baseline — bottoms tuck just behind the chamber lip (y 336). */
+const FRONT_ROW_Y = 314;
+/** Vertical gap between depth rows. */
+const ROW_GAP = 22;
+
+/**
+ * Deals `count` tickets into a heaped mound at the bottom of the glass
+ * (window x 30–290, floor ≈ 336). 3 rows for small piles, up to 5 for the
+ * stuffed look; back rows are smaller/higher (perspective), front rows
+ * bigger and spread wider — dense piles fill the full width, sparse ones
+ * cluster in the middle like a real prize pile. Deterministic — the same
+ * count always builds the same mound.
+ */
+function generateSlots(count: number): PileSlot[] {
+  const R = count <= 10 ? 3 : count <= 16 ? 4 : 5;
+  const weights = ROW_WEIGHTS[R];
+  const totalW = weights.reduce((a, b) => a + b, 0);
+
+  // Distribute tickets across rows (front-heavy), each row ≥ 1.
+  const rowCounts = weights.map((w) => Math.max(1, Math.round((count * w) / totalW)));
+  let diff = rowCounts.reduce((a, b) => a + b, 0) - count;
+  let guard = 0;
+  while (diff !== 0 && guard++ < 100) {
+    const idx = rowCounts.reduce((best, c, i) => (c > rowCounts[best] ? i : best), 0);
+    if (diff > 0 && rowCounts[idx] > 1) {
+      rowCounts[idx] -= 1;
+      diff -= 1;
+    } else if (diff < 0) {
+      rowCounts[idx] += 1;
+      diff += 1;
+    }
+  }
+
+  const slots: PileSlot[] = [];
+  let g = 0; // global ticket index → stable jitter
+  for (let r = 0; r < R; r++) {
+    const t = R === 1 ? 1 : r / (R - 1);
+    const y = FRONT_ROW_Y - (R - 1 - r) * ROW_GAP;
+    const h = 16.5 + (20.5 - 16.5) * t;
+    const w = 44 + (57 - 44) * t;
+    const n = rowCounts[r];
+    // Dense rows spread across the glass; sparse rows cluster centrally —
+    // no floating lonely tickets at the edges.
+    const spanW = Math.min(286 - w - 34, n * w * 0.96 + (n - 1) * 3);
+    const startX = 160 - spanW / 2;
+    for (let i = 0; i < n; i++) {
+      const key = `slot-${g}-${i}`;
+      let x: number;
+      if (n === 1) x = 160 - w / 2 + jitter(`${key}-x`, 8);
+      else {
+        const step = spanW / (n - 1);
+        x = startX + i * step + jitter(`${key}-x`, Math.min(4, step * 0.2));
+      }
+      slots.push({ x, y, w, h, rot: jitter(`${key}-r`, 8) });
+      g += 1;
+    }
+  }
+  return slots;
+}
+
+const FILLER_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"];
+
 interface PileCard {
   key: string;
-  couponId?: string;
+  /** Real coupon code (rendered BLURRED — never readable in the pile). */
   code?: string;
-  label?: string;
   fill: string;
 }
 
@@ -185,78 +259,102 @@ interface PileEntry {
 }
 
 /**
- * Deals the pool's coupons into the slot grid — each coupon gets a stable
- * slot derived from its id (same card, same place, every play and refresh);
- * remaining slots get generic "COUPON" filler cards (set dressing, never
- * grabbable). Sorted back-to-front for natural depth stacking.
+ * Builds the face-down ticket pile: the pool's coupons are dealt into the
+ * mountain at stable positions; every remaining slot gets a generic filler
+ * ticket. All tickets look identical (COUPON + blurred strip) — which
+ * ticket hides which code is nobody's business until the claw reveals it.
+ * Sorted back-to-front for natural depth stacking.
  */
-function layoutPile(coupons: MachineCoupon[], priorityId?: string): PileEntry[] {
+function layoutPile(coupons: MachineCoupon[], ticketCount: number): PileEntry[] {
+  const total = Math.max(ticketCount, coupons.length, TICKETS_MIN);
+  const slots = generateSlots(total);
   const used = new Set<number>();
   const entries: PileEntry[] = [];
-  /* The assigned coupon is dealt FIRST so it always owns a distinct slot —
-   * even in pools larger than the slot grid, the claw's target card exists. */
-  const ordered = [...coupons].sort((a, b) => (a.id === priorityId ? -1 : 0) - (b.id === priorityId ? -1 : 0));
-  ordered.forEach((c, i) => {
-    let idx = (hashStr(c.id) + i * 3) % SLOTS.length;
+
+  coupons.forEach((c, i) => {
+    let idx = (hashStr(c.id) + i * 3) % slots.length;
     let guard = 0;
-    while (used.has(idx) && guard++ < SLOTS.length) idx = (idx + 1) % SLOTS.length;
+    while (used.has(idx) && guard++ < slots.length) idx = (idx + 1) % slots.length;
     used.add(idx);
     entries.push({
-      card: { key: `c-${c.id}`, couponId: c.id, code: c.code, fill: c.color || FILLER_COLORS[i % FILLER_COLORS.length] },
-      slot: SLOTS[idx],
+      card: { key: `c-${c.id}`, code: c.code, fill: c.color || FILLER_COLORS[i % FILLER_COLORS.length] },
+      slot: slots[idx],
     });
   });
-  SLOTS.forEach((slot, idx) => {
+
+  slots.forEach((slot, idx) => {
     if (used.has(idx)) return;
     entries.push({
-      /* set-dressing cards all read "COUPON" — exactly like the reference art */
-      card: { key: `f-${idx}`, fill: FILLER_COLORS[idx % FILLER_COLORS.length], label: "COUPON" },
+      card: { key: `f-${idx}`, fill: FILLER_COLORS[idx % FILLER_COLORS.length] },
       slot,
     });
   });
+
   return entries.sort((a, b) => a.slot.y - b.slot.y);
 }
 
-/** One pile card — a scalloped ticket stub with printed star marks (set
- *  dressing) or the coupon's real code (pool cards, the claw's targets). */
-function PileCardArt({ w, h, fill, code, label }: { w: number; h: number; fill: string; code?: string; label?: string }) {
-  const text = code ? (code.length > 9 ? `${code.slice(0, 8)}…` : code) : (label ?? "COUPON");
+/** One face-down pile ticket — a scalloped stub that reads "COUPON" with
+ *  a blurred mystery-code strip. Pool tickets carry their real code under
+ *  the blur; fillers carry dot leaders. Visually identical either way. */
+function PileCardArt({ w, h, fill, code }: { w: number; h: number; fill: string; code?: string }) {
   const cr = Math.max(1.5, Math.min(4.5, h * 0.12));
   const br = (h - 2 * cr) / 6;
+  const dots = "•".repeat(4 + (hashStr(fill + w) % 3));
+  const hidden = code?.trim() ? code.trim().slice(0, 12) : dots;
+  const showStrip = h >= 16.5;
   return (
     <g>
-      {/* soft contact shadow — the card rests on the pile */}
+      {/* soft contact shadow — the ticket rests on the pile */}
       <path d={ticketPath(w, h)} transform="translate(1.4 2.4)" fill="#17316B" opacity={0.2} />
       {/* scalloped ticket-stub body */}
       <path d={ticketPath(w, h)} fill={fill} stroke="rgba(0,0,0,0.22)" strokeWidth={1} strokeLinejoin="round" />
       {/* gloss tick along the top edge */}
       <rect x={br + 2} y={1.6} width={Math.max(2, w - 2 * br - 4)} height={Math.max(1.6, h * 0.28)} rx={1.6} fill="#FFFFFF" opacity={0.26} />
-      {/* printed star marks near each end (set-dressing cards only — pool cards carry the code) */}
-      {code ? null : (
-        <>
-          <Star5 x={br + 6.5} y={h / 2} s={0.52} fill="#FFFFFF" stroke="rgba(0,0,0,0.2)" strokeWidth={0.9} />
-          <Star5 x={w - br - 6.5} y={h / 2} s={0.52} fill="#FFFFFF" stroke="rgba(0,0,0,0.2)" strokeWidth={0.9} />
-        </>
-      )}
+      {/* printed star marks near each end */}
+      <Star5 x={br + 5.5} y={h / 2 - 2.5} s={0.46} fill="#FFFFFF" stroke="rgba(0,0,0,0.2)" strokeWidth={0.9} />
+      <Star5 x={w - br - 5.5} y={h / 2 - 2.5} s={0.46} fill="#FFFFFF" stroke="rgba(0,0,0,0.2)" strokeWidth={0.9} />
+      {/* the "COUPON" headline */}
       <text
         x={w / 2}
-        y={h / 2 + 2.6}
+        y={h / 2 + 1.5}
         textAnchor="middle"
-        fontSize={code ? cardCodeFontSize(text.length) : text.length > 6 ? 5.2 : 6}
+        fontSize={h >= 18 ? 6 : 5.2}
         fontWeight={800}
-        letterSpacing={code ? 0.4 : 1.1}
+        letterSpacing={1}
         fill="#FFFFFF"
-        fontFamily={code ? MONO : ARCADE}
+        fontFamily={ARCADE}
       >
-        {text}
+        COUPON
       </text>
+      {/* the hidden code strip — blurred until the claw wins it */}
+      {showStrip ? (
+        <>
+          <rect x={br + 5} y={h - 6.6} width={Math.max(6, w - 2 * br - 10)} height={4.6} rx={2.3} fill="#FFFFFF" opacity={0.24} />
+          <text
+            x={w / 2}
+            y={h - 3.3}
+            textAnchor="middle"
+            fontSize={stripFontSize(hidden.length)}
+            fontWeight={800}
+            letterSpacing={0.4}
+            fill="#FFFFFF"
+            opacity={0.9}
+            fontFamily={MONO}
+            style={{ filter: "blur(1.3px)" }}
+          >
+            {hidden}
+          </text>
+        </>
+      ) : null}
     </g>
   );
 }
 
-/** Claw travel: from rest (pincer tips ≈ y 217.5) down to a card's row. */
+/** Claw travel: from rest (pincer tips ≈ y 217.5) down to a ticket's row.
+ *  Top-of-the-mound rows sit high, so the floor is lower than the old
+ *  calibration (min 12 = a shallow reach onto the top row). */
 function clawDropFor(slot: PileSlot): number {
-  return Math.max(58, Math.min(106, slot.y + 6 - 217.5));
+  return Math.max(12, Math.min(106, slot.y + 6 - 217.5));
 }
 
 /** Cable stretch that matches a claw drop distance (existing calibration). */
@@ -265,7 +363,7 @@ function cableScaleFor(dropY: number): number {
 }
 
 /* ------------------------------------------------------------------ */
-/* The golden ticket art — the winning card's presentation at the      */
+/* The golden ticket art — the winning ticket's presentation at the    */
 /* reveal (112 × 42 in local coords).                                  */
 /* ------------------------------------------------------------------ */
 function GoldTicket({ code, eyebrow, reveal }: { code: string; eyebrow: string; reveal: boolean }) {
@@ -324,20 +422,36 @@ function GoldTicket({ code, eyebrow, reveal }: { code: string; eyebrow: string; 
 /* ------------------------------------------------------------------ */
 /* useCouponMachine — the play-flow state machine (player + editor).   */
 /*                                                                     */
-/* IDLE → STARTING (machine wakes while `draw()` talks to the server)  */
-/*      → RUNNING (full claw choreography, MACHINE_SEQ_MS)             */
-/*      → REVEALED (golden ticket + code + copy). PLAY AGAIN repeats   */
-/* the whole thing. `draw()` returns the player's assigned coupon —    */
-/* the server assigns once and persists; it never re-rolls.            */
+/* IDLE → STARTING (machine wakes while `draw()` deals with the        */
+/* server) → CONTROL (the player aims the claw with the red joystick;  */
+/* `clawX` is the live aim, ±112 from center) → GRABBING (`beginGrab`  */
+/* runs the drop → snap → lift → center choreography) → REVEALED       */
+/* (golden ticket + code + copy). PLAY AGAIN repeats the whole thing   */
+/* and the server always returns the player's one assigned coupon.     */
 /* ------------------------------------------------------------------ */
+
+/** What the component resolves the moment the player releases the stick. */
+export interface GrabPlan {
+  /** Pile card key that gets lifted out (fades from the pile). */
+  key: string;
+  /** Vertical drop distance for the claw. */
+  dropY: number;
+  /** The grabbed ticket's color (continuity for the claw-held card). */
+  color: string;
+  /** Claw x at release (start of the glide-to-center keyframes). */
+  x: number;
+}
 
 function messageForReason(reason?: string): string {
   switch (reason) {
+    case "pool-empty":
+      return "No coupons in this machine yet — ask the creator to add some.";
     case "no-eligible-coupons":
       return "All coupons have been claimed — check back later!";
     case "moment-not-found":
+      return "This experience is no longer available.";
     case "machine-missing":
-      return "This machine isn’t set up yet — ask the creator to add coupons.";
+      return "This machine was just updated — reopen the experience and play again.";
     default:
       return "The machine jammed — check your connection and try again.";
   }
@@ -359,6 +473,8 @@ export function useCouponMachine({
   const [hasAssignment, setHasAssignment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [soldOut, setSoldOut] = useState(false);
+  const [clawX, setClawXState] = useState(0);
+  const [grabPlan, setGrabPlan] = useState<GrabPlan | null>(null);
   const timers = useRef<number[]>([]);
 
   // Reduced motion: keep every beat functional but shorten the waits
@@ -366,7 +482,7 @@ export function useCouponMachine({
   // transforms — the claw simply arrives, the coupon still reveals).
   const [seq] = useState(() => {
     if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      return Math.min(seqMs, 1100);
+      return Math.min(seqMs, 800);
     }
     return seqMs;
   });
@@ -376,12 +492,18 @@ export function useCouponMachine({
     timers.current = [];
   };
 
-  const busy = phase === "starting" || phase === "running";
+  const busy = phase === "starting" || phase === "control" || phase === "grabbing";
+  const setClawX = (next: number) => {
+    if (phase !== "control") return;
+    setClawXState(Math.max(-CLAW_RANGE, Math.min(CLAW_RANGE, next)));
+  };
 
   const play = () => {
-    if (busy) return; // one choreography at a time
+    if (busy) return; // one run at a time — aim, then grab
     clearTimers();
     setError(null);
+    setGrabPlan(null);
+    setClawXState(0);
     sfx?.play("press");
     setPhase("idle"); // reset any held end-state before the fresh run
     window.requestAnimationFrame(() => {
@@ -398,11 +520,8 @@ export function useCouponMachine({
           setHasAssignment(true);
           setSoldOut(false);
           setPlayToken((t) => t + 1);
-          setPhase("running");
-          sfx?.play("whirr");
-          timers.current.push(window.setTimeout(() => sfx?.play("grab"), seq * 0.735));
-          timers.current.push(window.setTimeout(() => setPhase("revealed"), seq));
-          timers.current.push(window.setTimeout(() => sfx?.play("win"), seq + 0.05 * seq));
+          setPhase("control");
+          sfx?.play("whirr"); // motor spins up — the claw is armed
         },
         (err) => {
           console.warn("[coupon-machine] draw failed:", err);
@@ -413,9 +532,39 @@ export function useCouponMachine({
     });
   };
 
+  /** Joystick released → resolve the grab and run the choreography. */
+  const beginGrab = (plan: GrabPlan) => {
+    if (phase !== "control") return;
+    setGrabPlan(plan);
+    setPhase("grabbing");
+    const g = seq / 1000;
+    sfx?.play("whirr"); // descent motor
+    timers.current.push(window.setTimeout(() => sfx?.play("grab"), g * 420));
+    timers.current.push(
+      window.setTimeout(() => {
+        setPhase("revealed");
+        sfx?.play("win");
+      }, seq)
+    );
+  };
+
   useEffect(() => clearTimers, []);
 
-  return { phase, prize, playToken, hasAssignment, setHasAssignment, error, soldOut, play, busy };
+  return {
+    phase,
+    prize,
+    playToken,
+    hasAssignment,
+    setHasAssignment,
+    error,
+    soldOut,
+    play,
+    busy,
+    clawX,
+    setClawX,
+    grabPlan,
+    beginGrab,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -427,6 +576,7 @@ export function CouponMachine({
   ticketLabel = "YOUR COUPON CODE",
   buttonLabel = "PLAY & WIN",
   coupons = [],
+  cardCount,
   prize = null,
   phase = "idle",
   playToken = 0,
@@ -435,6 +585,14 @@ export function CouponMachine({
   soldOut = false,
   /** Omit for a static, non-interactive rendering. */
   onPlay,
+  /** Live claw aim (−112…112 from center) while phase is "control". */
+  clawX = 0,
+  /** Aim update from the joystick / arrow keys. */
+  onAim,
+  /** Joystick released — grab the resolved ticket and run the show. */
+  onGrab,
+  /** The active grab plan (drives drop height + held-ticket color). */
+  grabPlan = null,
   celebrateFx = true,
   sfx,
 }: {
@@ -442,9 +600,11 @@ export function CouponMachine({
   subtitle?: string;
   ticketLabel?: string;
   buttonLabel?: string;
-  /** The pool as displayed in the machine (one card per coupon). */
+  /** The pool as displayed in the machine (one ticket per coupon). */
   coupons?: MachineCoupon[];
-  /** The player's assigned coupon — the card the claw grabs. */
+  /** How many tickets the creator wants piled in the glass (6–28). */
+  cardCount?: number;
+  /** The player's assigned coupon — the code the claw reveals. */
   prize?: MachinePrize | null;
   phase?: MachinePhase;
   playToken?: number;
@@ -452,6 +612,10 @@ export function CouponMachine({
   error?: string | null;
   soldOut?: boolean;
   onPlay?: () => void;
+  clawX?: number;
+  onAim?: (x: number) => void;
+  onGrab?: (plan: GrabPlan) => void;
+  grabPlan?: GrabPlan | null;
   celebrateFx?: boolean;
   sfx?: { play: (name: MachineSfxName) => void; muted: boolean; toggle: () => void };
 }) {
@@ -459,36 +623,58 @@ export function CouponMachine({
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<number | null>(null);
   const revealRef = useRef<HTMLDivElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const stickRef = useRef<SVGCircleElement | null>(null);
+  const playBtnRef = useRef<SVGGElement | null>(null);
+  const [stickFocus, setStickFocus] = useState(false);
+
+  /* Manual-aim state (pointer drag on the red knob). */
+  const stickDrag = useRef<{ startX: number; startClaw: number; scale: number } | null>(null);
+  const [tilt, setTilt] = useState(0);
 
   const revealed = phase === "revealed";
-  const running = phase === "running" || revealed;
-  const busy = phase === "starting" || phase === "running";
+  const grabbing = phase === "grabbing";
+  const controlling = phase === "control";
+  const busy = phase === "starting" || phase === "control" || phase === "grabbing";
   const emptyPool = coupons.length === 0;
 
-  /* The pile: pool cards + (if the creator removed it since) a restored
-   * card for the player's assigned coupon — the claw must always find it. */
-  const pile = useMemo(() => {
-    const cards = [...coupons];
-    if (prize && !cards.some((c) => c.id === prize.couponId)) {
-      cards.push({ id: prize.couponId, code: prize.code, title: prize.title, color: prize.color });
+  /* The face-down ticket mountain (pool + fillers up to the dial count). */
+  const ticketCount = Math.max(TICKETS_MIN, Math.min(TICKETS_MAX, cardCount ?? TICKETS_DEFAULT));
+  const pile = useMemo(() => layoutPile(coupons, ticketCount), [coupons, ticketCount]);
+
+  /* Release → grab the ticket nearest the claw's center. */
+  const computeGrab = (x: number): GrabPlan => {
+    const clawAbs = 160 + x;
+    let best: PileEntry | null = null;
+    let bestD = Infinity;
+    for (const e of pile) {
+      const c = e.slot.x + e.slot.w / 2;
+      const d = Math.abs(c - clawAbs);
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
     }
-    return layoutPile(cards, prize?.couponId);
-  }, [coupons, prize]);
+    if (!best) return { key: "", dropY: 86, color: "#9B59B6", x };
+    return { key: best.card.key, dropY: clawDropFor(best.slot), color: best.card.fill, x };
+  };
 
-  /* The grab target — the assigned coupon's slot (fallback: middle card). */
-  const target = useMemo(() => {
-    if (!prize) return null;
-    return (
-      pile.find((e) => e.card.couponId === prize.couponId) ??
-      pile[Math.floor(pile.length / 2)] ??
-      null
-    );
-  }, [pile, prize]);
+  const releaseStick = () => {
+    if (phase !== "control") return;
+    onGrab?.(computeGrab(clawX));
+  };
 
-  const tx = target ? target.slot.x + target.slot.w / 2 : 160;
-  const dropY = target ? clawDropFor(target.slot) : 86;
+  const dropY = grabPlan?.dropY ?? 86;
+  const releaseX = grabPlan?.x ?? 0;
   const cableDrop = cableScaleFor(dropY);
-  const seq = MACHINE_SEQ_MS / 1000;
+  /* Grab-choreography duration — matches the hook's timer schedule
+   * (shortened for prefers-reduced-motion the same way). */
+  const [g] = useState(() => {
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      return 0.8;
+    }
+    return MACHINE_SEQ_MS / 1000;
+  });
 
   /* COPY CODE → real clipboard (with the legacy + toast fallbacks) */
   const shown = prize?.code?.trim() || "";
@@ -544,9 +730,13 @@ export function CouponMachine({
     ? "SOLD OUT"
     : emptyPool
       ? "NO PRIZES"
-      : revealed || (hasAssignment && phase === "idle")
-        ? "PLAY AGAIN"
-        : buttonLabel;
+      : controlling
+        ? "AIM & DROP"
+        : phase === "starting" || grabbing
+          ? "···"
+          : revealed || (hasAssignment && phase === "idle")
+            ? "PLAY AGAIN"
+            : buttonLabel;
   const buttonAction = () => {
     if (canPlay && onPlay) onPlay();
   };
@@ -554,11 +744,13 @@ export function CouponMachine({
     ? "All coupons have been claimed"
     : emptyPool
       ? "No coupons in this machine yet"
-      : busy
-        ? "Drawing your coupon"
-        : hasAssignment || revealed
-          ? "Play again — you’ll win the same coupon"
-          : `${buttonLabel} — play the claw machine`;
+      : controlling
+        ? "Aim with the joystick, then release it to drop the claw"
+        : busy
+          ? "Drawing your coupon"
+          : hasAssignment || revealed
+            ? "Play again — you’ll win the same coupon"
+            : `${buttonLabel} — play the claw machine`;
   const onButtonKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -567,11 +759,91 @@ export function CouponMachine({
   };
   const btnTextSize = btnLabel.length > 12 ? 11 : 12.5;
 
+  /* ---------- joystick (manual claw control) ---------- */
+
+  const stickActive = controlling;
+
+  const onStickDown = (e: React.PointerEvent<SVGCircleElement>) => {
+    if (!controlling) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture is best-effort */
+    }
+    const rect = svgRef.current?.getBoundingClientRect();
+    stickDrag.current = {
+      startX: e.clientX,
+      startClaw: clawX,
+      scale: rect ? rect.width / 320 : 1,
+    };
+    sfx?.play("whirr");
+  };
+
+  const onStickMove = (e: React.PointerEvent<SVGCircleElement>) => {
+    const drag = stickDrag.current;
+    if (!drag || !controlling) return;
+    const dx = (e.clientX - drag.startX) / Math.max(0.5, drag.scale);
+    onAim?.(drag.startClaw + dx * 4);
+    setTilt(Math.max(-9, Math.min(9, dx * 0.65)));
+  };
+
+  const endStickDrag = () => {
+    const wasDragging = stickDrag.current !== null;
+    stickDrag.current = null;
+    setTilt(0);
+    if (wasDragging) releaseStick();
+  };
+
+  const onStickKey = (e: React.KeyboardEvent<SVGCircleElement>) => {
+    if (!controlling) return;
+    const step = e.shiftKey ? 34 : 14;
+    switch (e.key) {
+      case "ArrowLeft":
+        e.preventDefault();
+        onAim?.(clawX - step);
+        setTilt(-6);
+        window.setTimeout(() => setTilt(0), 140);
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        onAim?.(clawX + step);
+        setTilt(6);
+        window.setTimeout(() => setTilt(0), 140);
+        break;
+      case "Home":
+        e.preventDefault();
+        onAim?.(-CLAW_RANGE);
+        break;
+      case "End":
+        e.preventDefault();
+        onAim?.(CLAW_RANGE);
+        break;
+      case "Enter":
+      case " ":
+      case "Spacebar":
+        e.preventDefault();
+        releaseStick();
+        break;
+    }
+  };
+
+  /* Keyboard flow: if focus is still on PLAY when control starts, hop it
+   * over to the joystick so arrow-key players aren't left hunting. */
+  useEffect(() => {
+    if (phase === "control" && typeof document !== "undefined" && document.activeElement === playBtnRef.current) {
+      stickRef.current?.focus();
+    }
+  }, [phase]);
+
+  const ariaPct = Math.round(((clawX + CLAW_RANGE) / (CLAW_RANGE * 2)) * 100);
+
   const machine = (
     <svg
+      ref={svgRef}
       viewBox="0 0 320 452"
       role="figure"
-      aria-label={`${title} ${subtitle} — claw machine coupon reveal${
+      aria-label={`${title} ${subtitle} — claw machine coupon game${
         revealed && shown ? ` — you won ${shown}` : ""
       }`}
       className="block h-auto w-full select-none"
@@ -782,35 +1054,33 @@ export function CouponMachine({
 
           {/* ============ the pile (behind the claw) ============ */}
           <motion.g
-            key={`pile-${playToken}`}
             initial={false}
             style={{ transformBox: "fill-box", originX: 0.5, originY: 1 }}
             animate={
-              running
+              grabbing
                 ? {
                     y: [0, 0, 3, 0, 0],
                     scaleX: [1, 1, 1.05, 1, 1],
-                    transition: { duration: seq, times: [0, 0.66, 0.74, 0.86, 1], ease: "easeOut" },
+                    transition: { duration: g, times: [0, 0.4, 0.48, 0.62, 1], ease: "easeOut" },
                   }
                 : { y: 0, scaleX: 1, transition: { duration: 0.3 } }
             }
           >
             <g style={{ filter: "drop-shadow(0 3px 3px rgba(23,43,77,0.22))" }}>
               {pile.map(({ card, slot }) => {
-                const isTarget = Boolean(prize && card.couponId === prize.couponId);
-                const art = <PileCardArt w={slot.w} h={slot.h} fill={card.fill} code={card.code} label={card.label} />;
+                const isGrabbed = Boolean(grabPlan && card.key === grabPlan.key);
+                const art = <PileCardArt w={slot.w} h={slot.h} fill={card.fill} code={card.code} />;
                 return (
                   <g key={card.key} transform={`translate(${slot.x} ${slot.y}) rotate(${slot.rot} ${slot.w / 2} ${slot.h / 2})`}>
-                    {isTarget ? (
-                      /* the assigned card — lifts out with the claw at the grab */
+                    {isGrabbed ? (
+                      /* the grabbed ticket — lifts out with the claw */
                       <motion.g
-                        key={`t-${playToken}`}
                         initial={false}
                         animate={
-                          running
+                          grabbing
                             ? {
                                 opacity: [1, 1, 0, 0],
-                                transition: { duration: seq, times: [0, 0.71, 0.75, 1], ease: "linear" },
+                                transition: { duration: g, times: [0, 0.42, 0.47, 1], ease: "linear" },
                               }
                             : { opacity: 1, transition: { duration: 0.2 } }
                         }
@@ -840,26 +1110,30 @@ export function CouponMachine({
           />
 
           {/* ============ claw assembly ============ */}
-          {/* horizontal travel: sweep left → right → lock onto the target card */}
+          {/* horizontal travel: follows the joystick while aiming; after the
+              grab, glides the prize to the center stage */}
           <motion.g
-            key={`cx-${playToken}`}
             initial={false}
             animate={
-              running
-                ? {
-                    x: [0, 0, -94, 90, tx - 160, tx - 160, tx - 160, 0, 0],
-                    transition: {
-                      duration: seq,
-                      times: [0, 0.05, 0.22, 0.38, 0.55, 0.74, 0.8, 0.93, 1],
-                      ease: ["linear", "easeInOut", "easeInOut", "easeInOut", "linear", "linear", "easeInOut", "easeOut"],
-                    },
-                  }
-                : phase === "starting"
-                  ? { x: [0, -3, 3, 0], transition: { duration: 0.5, repeat: Infinity } }
-                  : { x: 0, transition: { duration: 0.3 } }
+              controlling
+                ? { x: clawX }
+                : grabbing
+                  ? { x: [releaseX, releaseX, releaseX, 0, 0] }
+                  : phase === "starting"
+                    ? { x: [0, -3, 3, 0] }
+                    : { x: 0 }
+            }
+            transition={
+              controlling
+                ? { type: "spring", stiffness: 340, damping: 28 }
+                : grabbing
+                  ? { duration: g, times: [0, 0.34, 0.46, 0.8, 1], ease: ["linear", "linear", "easeInOut", "linear"] }
+                  : phase === "starting"
+                    ? { duration: 0.5, repeat: Infinity }
+                    : { duration: 0.3 }
             }
           >
-            {/* the claw's soft shadow on the pile — tracks the horizontal travel */}
+            {/* the claw's soft shadow on the pile — tracks the travel */}
             <motion.ellipse
               cx={160}
               cy={328}
@@ -867,8 +1141,14 @@ export function CouponMachine({
               ry={5.5}
               fill="#17316B"
               initial={false}
-              animate={running ? { opacity: [0.1, 0.1, 0.26, 0.26, 0.18, 0.18] } : { opacity: 0.1 }}
-              transition={{ duration: seq, times: [0, 0.55, 0.68, 0.74, 0.84, 1] }}
+              animate={
+                grabbing
+                  ? { opacity: [0.16, 0.16, 0.3, 0.3, 0.16] }
+                  : controlling
+                    ? { opacity: 0.16 }
+                    : { opacity: 0.1 }
+              }
+              transition={grabbing ? { duration: g, times: [0, 0.3, 0.36, 0.52, 0.8] } : { duration: 0.25 }}
             />
             {/* motor trolley — rides the rail with the cable */}
             <rect x={149} y={108} width={22} height={17} rx={4} fill="#1F7AE8" stroke="#0A5BB8" strokeWidth={1.5} />
@@ -879,20 +1159,25 @@ export function CouponMachine({
 
             {/* coiled cable — stretches as the claw descends */}
             <motion.g
-              key={`cable-${playToken}`}
               initial={false}
               style={{ transformBox: "fill-box", originX: 0.5, originY: 0 }}
               animate={
-                running
+                grabbing
                   ? {
                       scaleY: [0.355, 0.355, cableDrop, cableDrop, 0.29, 0.29],
-                      transition: {
-                        duration: seq,
-                        times: [0, 0.55, 0.68, 0.74, 0.84, 1],
-                        ease: ["linear", "easeIn", "linear", "easeOut", "easeOut"],
-                      },
                     }
-                  : { scaleY: 0.355, transition: { duration: 0.3 } }
+                  : revealed
+                    ? { scaleY: 0.29 }
+                    : { scaleY: 0.355 }
+              }
+              transition={
+                grabbing
+                  ? {
+                      duration: g,
+                      times: [0, 0.02, 0.34, 0.46, 0.8, 1],
+                      ease: ["linear", "easeIn", "linear", "easeOut", "linear"],
+                    }
+                  : { duration: 0.3 }
               }
             >
               {Array.from({ length: 10 }, (_, i) => (
@@ -903,28 +1188,32 @@ export function CouponMachine({
               ))}
             </motion.g>
 
-            {/* vertical travel: drop to the card, hold for the grab, lift */}
+            {/* vertical travel: drop to the ticket, hold for the grab, lift */}
             <motion.g
-              key={`cy-${playToken}`}
               initial={false}
               animate={
-                running
+                grabbing
+                  ? { y: [0, 0, dropY, dropY, -8, -8] }
+                  : revealed
+                    ? { y: -8 }
+                    : { y: 0 }
+              }
+              transition={
+                grabbing
                   ? {
-                      y: [0, 0, dropY, dropY, -8, -8],
-                      transition: {
-                        duration: seq,
-                        times: [0, 0.55, 0.68, 0.74, 0.84, 1],
-                        ease: ["linear", "easeIn", "linear", "easeOut", "easeOut"],
-                      },
+                      duration: g,
+                      times: [0, 0.02, 0.34, 0.46, 0.8, 1],
+                      ease: ["linear", "easeIn", "linear", "easeOut", "linear"],
                     }
-                  : { y: 0, transition: { duration: 0.3 } }
+                  : { duration: 0.35 }
               }
             >
-              {/* gentle idle bob (switches off once the sequence starts) */}
+              {/* gentle idle bob (keeps floating while the player aims —
+                  switches off for the precise grab run) */}
               <motion.g
                 initial={false}
                 animate={
-                  running ? { y: 0, transition: { duration: 0.25 } } : { y: [0, -4, 0], transition: { duration: 2.6, repeat: Infinity, ease: "easeInOut" } }
+                  grabbing ? { y: 0, transition: { duration: 0.2 } } : { y: [0, -4, 0], transition: { duration: 2.6, repeat: Infinity, ease: "easeInOut" } }
                 }
               >
                 {/* blue cylindrical motor housing with a metallic ring */}
@@ -936,22 +1225,23 @@ export function CouponMachine({
                 <rect x={147.6} y={178.6} width={24.8} height={4.6} rx={2.3} fill="url(#cmMetal)" stroke="#39414F" strokeWidth={0.9} />
                 <rect x={149.2} y={179.4} width={21.6} height={1.3} rx={0.65} fill="#FFFFFF" opacity={0.55} />
 
-                {/* left pincer — opens wide on the drop, snaps shut at the card */}
+                {/* left pincer — armed open while aiming, snaps shut on the ticket */}
                 <motion.g
-                  key={`pl-${playToken}`}
                   initial={false}
                   style={{ transformBox: "fill-box", originX: 0.65, originY: 0 }}
                   animate={
-                    running
-                      ? {
-                          rotate: [-24, -24, -33, -33, -3, -3],
-                          transition: {
-                            duration: seq,
-                            times: [0, 0.55, 0.65, 0.7, 0.745, 1],
-                            ease: ["linear", "easeIn", "linear", "easeOut", "linear"],
-                          },
-                        }
-                      : { rotate: -24, transition: { duration: 0.3 } }
+                    grabbing
+                      ? { rotate: [-33, -33, -3, -3] }
+                      : controlling
+                        ? { rotate: -33 }
+                        : revealed
+                          ? { rotate: -3 }
+                          : { rotate: -24 }
+                  }
+                  transition={
+                    grabbing
+                      ? { duration: g, times: [0, 0.34, 0.47, 1], ease: ["linear", "easeOut", "linear"] }
+                      : { duration: 0.25 }
                   }
                 >
                   <path d="M150 181 C138 189 133 204 143 217 C148 224 158 222 159 214" fill="none" stroke="#39414F" strokeWidth={7.4} strokeLinecap="round" />
@@ -963,20 +1253,21 @@ export function CouponMachine({
 
                 {/* right pincer */}
                 <motion.g
-                  key={`pr-${playToken}`}
                   initial={false}
                   style={{ transformBox: "fill-box", originX: 0.35, originY: 0 }}
                   animate={
-                    running
-                      ? {
-                          rotate: [24, 24, 33, 33, 3, 3],
-                          transition: {
-                            duration: seq,
-                            times: [0, 0.55, 0.65, 0.7, 0.745, 1],
-                            ease: ["linear", "easeIn", "linear", "easeOut", "linear"],
-                          },
-                        }
-                      : { rotate: 24, transition: { duration: 0.3 } }
+                    grabbing
+                      ? { rotate: [33, 33, 3, 3] }
+                      : controlling
+                        ? { rotate: 33 }
+                        : revealed
+                          ? { rotate: 3 }
+                          : { rotate: 24 }
+                  }
+                  transition={
+                    grabbing
+                      ? { duration: g, times: [0, 0.34, 0.47, 1], ease: ["linear", "easeOut", "linear"] }
+                      : { duration: 0.25 }
                   }
                 >
                   <path d="M170 181 C182 189 187 204 177 217 C172 224 162 222 161 214" fill="none" stroke="#39414F" strokeWidth={7.4} strokeLinecap="round" />
@@ -986,7 +1277,7 @@ export function CouponMachine({
                   <circle cx={163.6} cy={216.6} r={1} fill="#8D99AB" opacity={0.85} />
                 </motion.g>
 
-                {/* center prong — the fixed third finger (hides behind the held card) */}
+                {/* center prong — the fixed third finger (hides behind the held ticket) */}
                 <path d="M160 183 C159 190 158.8 198 160 205" fill="none" stroke="#39414F" strokeWidth={7.4} strokeLinecap="round" />
                 <path d="M160 183 C159 190 158.8 198 160 205" fill="none" stroke="url(#cmSilver)" strokeWidth={5} strokeLinecap="round" />
                 <path d="M160 183 C159 190 158.8 198 160 205" fill="none" stroke="#F4F8FC" strokeWidth={1.8} strokeLinecap="round" />
@@ -995,16 +1286,15 @@ export function CouponMachine({
 
                 {/* grab motion lines — flash as the pincers snap shut */}
                 <motion.g
-                  key={`gl-${playToken}`}
                   initial={false}
                   stroke="#6B7A94"
                   strokeWidth={2}
                   strokeLinecap="round"
                   animate={
-                    running
+                    grabbing
                       ? {
-                          opacity: [0, 0, 0, 1, 0, 0],
-                          transition: { duration: seq, times: [0, 0.68, 0.71, 0.735, 0.8, 1], ease: "linear" },
+                          opacity: [0, 0, 1, 0, 0],
+                          transition: { duration: g, times: [0, 0.38, 0.44, 0.6, 1], ease: "linear" },
                         }
                       : { opacity: 0, transition: { duration: 0.2 } }
                   }
@@ -1017,19 +1307,20 @@ export function CouponMachine({
                   <path d="M183 179 L187 183" />
                 </motion.g>
 
-                {/* the claw-held prize card — swaps in exactly as the pincers
+                {/* the claw-held prize ticket — swaps in exactly as the pincers
                     close, rides up with the claw, swings, then bursts into
                     the golden ticket at the reveal */}
                 <motion.g
-                  key={`hold-${playToken}`}
                   initial={false}
                   animate={
-                    running
+                    grabbing
                       ? {
-                          opacity: [0, 0, 0, 1, 1],
-                          transition: { duration: seq, times: [0, 0.71, 0.735, 0.765, 1], ease: "linear" },
+                          opacity: [0, 0, 1, 1],
+                          transition: { duration: g, times: [0, 0.43, 0.48, 1], ease: "linear" },
                         }
-                      : { opacity: 0, transition: { duration: 0.2 } }
+                      : revealed
+                        ? { opacity: 1, transition: { duration: 0.2 } }
+                        : { opacity: 0, transition: { duration: 0.2 } }
                   }
                 >
                   <motion.g
@@ -1041,28 +1332,23 @@ export function CouponMachine({
                             rotate: [0, 1.6, 0, -1.6, 0],
                             transition: { rotate: { duration: 2.8, repeat: Infinity, ease: "easeInOut" } },
                           }
-                        : running
+                        : grabbing
                           ? {
-                              rotate: [0, 0, 0, 0, 5, -4, 2, 0],
+                              rotate: [0, 0, 0, 5, -4, 2, 0],
                               transition: {
-                                duration: seq,
-                                times: [0, 0.75, 0.8, 0.84, 0.88, 0.93, 0.97, 1],
+                                duration: g,
+                                times: [0, 0.5, 0.56, 0.64, 0.74, 0.86, 1],
                                 ease: "easeInOut",
                               },
                             }
                           : { rotate: 0, transition: { duration: 0.3 } }
                     }
                   >
-                    {/* colored pool card (held) — fades out at the reveal */}
-                    {prize ? (
-                      <motion.g
-                        key={`card-${playToken}`}
-                        initial={false}
-                        animate={{ opacity: revealed ? 0 : 1 }}
-                        transition={{ duration: 0.3 }}
-                      >
+                    {/* the face-down pool ticket (held) — fades out at the reveal */}
+                    {grabbing || revealed ? (
+                      <motion.g initial={false} animate={{ opacity: revealed ? 0 : 1 }} transition={{ duration: 0.3 }}>
                         <g transform="translate(128 212)" style={{ filter: "drop-shadow(0 4px 5px rgba(23,43,77,0.3))" }}>
-                          <PileCardArt w={64} h={23} fill={prize.color} code={prize.code} label={prize.code} />
+                          <PileCardArt w={64} h={23} fill={grabPlan?.color ?? "#9B59B6"} code={prize?.code} />
                         </g>
                       </motion.g>
                     ) : null}
@@ -1070,9 +1356,8 @@ export function CouponMachine({
                     {/* golden presentation ticket — pops in at the reveal */}
                     {prize ? (
                       <>
-                        {/* the burst — a golden shockwave that sells the card→ticket transform */}
+                        {/* the burst — a golden shockwave that sells the ticket→gold transform */}
                         <motion.g
-                          key={`burst-${playToken}`}
                           initial={false}
                           style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5 }}
                           animate={
@@ -1085,7 +1370,6 @@ export function CouponMachine({
                           <circle cx={160} cy={235} r={48} fill="none" stroke="#FFD84D" strokeWidth={3.5} />
                         </motion.g>
                         <motion.g
-                          key={`gold-${playToken}`}
                           initial={false}
                           style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5 }}
                           animate={
@@ -1108,12 +1392,12 @@ export function CouponMachine({
 
                   {/* blue vibration lines flanking the held ticket — the shake marks.
                       A CSS timeline (md-vib in globals.css, duration synced to the
-                      sequence) — framer-motion keyframes proved unreliable for this
-                      element (mount with running=true jumps straight to the final
-                      keyframe and the timeline never plays). */}
+                      grab sequence) — framer-motion keyframes proved unreliable for
+                      this element (mount with running=true jumps straight to the
+                      final keyframe and the timeline never plays). */}
                   <g
-                    className={cn("md-vib", running && "is-running")}
-                    style={{ "--md-vib-dur": `${seq}s` } as React.CSSProperties}
+                    className={cn("md-vib", grabbing && "is-running")}
+                    style={{ "--md-vib-dur": `${g}s` } as React.CSSProperties}
                     fill="none"
                     stroke="#29B6F6"
                     strokeWidth={2.2}
@@ -1138,7 +1422,7 @@ export function CouponMachine({
             { x: 214, y: 248 },
           ].map((s, i) => (
             <motion.g
-              key={`sp-${i}-${playToken}`}
+              key={`sp-${i}`}
               initial={false}
               style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5 }}
               animate={
@@ -1177,15 +1461,68 @@ export function CouponMachine({
           </g>
         ))}
 
-        {/* joystick */}
+        {/* ================= joystick — THE control ================= */}
         <ellipse cx={88} cy={408} rx={17} ry={5} fill="#000000" opacity={0.18} />
-        <rect x={85} y={368} width={6} height={24} rx={3} fill="#2A2D35" stroke="#101216" strokeWidth={1} />
-        <rect x={86} y={369.5} width={1.7} height={20} rx={0.85} fill="#8D99AB" opacity={0.75} />
-        <rect x={83} y={388} width={10} height={5} rx={2.5} fill="#3A3F49" />
+        {/* ready halo around the knob while the player can aim */}
+        <motion.circle
+          cx={88}
+          cy={363.5}
+          r={15.5}
+          fill="none"
+          stroke="#FF5A5A"
+          strokeWidth={2}
+          initial={false}
+          animate={stickActive ? { opacity: [0.35, 0.85, 0.35], scale: [1, 1.12, 1] } : { opacity: 0, scale: 1 }}
+          transition={{ duration: 1.4, repeat: stickActive ? Infinity : 0, ease: "easeInOut" }}
+          style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5, pointerEvents: "none" }}
+        />
         <circle cx={88} cy={399} r={15} fill="#23252B" stroke="#AEB8C4" strokeWidth={3.2} />
         <circle cx={88} cy={399} r={12.6} fill="none" stroke="#FFFFFF" strokeOpacity={0.26} strokeWidth={1.4} />
-        <circle cx={88} cy={363.5} r={11} fill="url(#cmBall)" />
-        <ellipse cx={84.6} cy={359.8} rx={3.2} ry={2.4} fill="#FFFFFF" opacity={0.8} />
+        {/* the stick leans with the drag — pivot at the collar */}
+        <motion.g
+          initial={false}
+          style={{ transformBox: "fill-box", originX: 0.5, originY: 1 }}
+          animate={{ rotate: tilt }}
+          transition={{ type: "spring", stiffness: 350, damping: 22 }}
+        >
+          <rect x={85} y={368} width={6} height={24} rx={3} fill="#2A2D35" stroke="#101216" strokeWidth={1} />
+          <rect x={86} y={369.5} width={1.7} height={20} rx={0.85} fill="#8D99AB" opacity={0.75} />
+          <rect x={83} y={388} width={10} height={5} rx={2.5} fill="#3A3F49" />
+          <circle cx={88} cy={363.5} r={11} fill="url(#cmBall)" />
+          <ellipse cx={84.6} cy={359.8} rx={3.2} ry={2.4} fill="#FFFFFF" opacity={0.8} />
+        </motion.g>
+        {/* keyboard focus ring */}
+        {stickFocus ? (
+          <circle cx={88} cy={382} r={26} fill="none" stroke="#FFFFFF" strokeWidth={1.6} strokeDasharray="4 3" opacity={0.9} pointerEvents="none" />
+        ) : null}
+        {/* the invisible grab surface — pointer + keyboard control */}
+        <circle
+          ref={stickRef}
+          cx={88}
+          cy={382}
+          r={26}
+          fill="transparent"
+          style={{
+            touchAction: "none",
+            cursor: stickActive ? "grab" : "default",
+            outline: "none",
+          }}
+          tabIndex={stickActive ? 0 : -1}
+          role="slider"
+          aria-label="Claw aim — drag the knob or use arrow keys to move, press Enter to drop the claw"
+          aria-orientation="horizontal"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={ariaPct}
+          aria-valuetext={ariaPct < 33 ? "Claw over the left side" : ariaPct > 66 ? "Claw over the right side" : "Claw over the middle"}
+          onPointerDown={onStickDown}
+          onPointerMove={onStickMove}
+          onPointerUp={endStickDrag}
+          onPointerCancel={endStickDrag}
+          onKeyDown={onStickKey}
+          onFocus={() => setStickFocus(true)}
+          onBlur={() => setStickFocus(false)}
+        />
 
         {/* soft glow behind the PLAY button while it's tappable */}
         <motion.ellipse
@@ -1200,8 +1537,9 @@ export function CouponMachine({
           style={{ pointerEvents: "none" }}
         />
 
-        {/* PLAY & WIN → … → PLAY AGAIN */}
+        {/* PLAY & WIN → AIM & DROP → ··· → PLAY AGAIN */}
         <motion.g
+          ref={playBtnRef}
           initial={false}
           whileTap={canPlay ? { scale: 0.97 } : undefined}
           style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5, cursor: canPlay ? "pointer" : "default" }}
@@ -1236,7 +1574,7 @@ export function CouponMachine({
           <rect x={129} y={391.8} width={128} height={5.4} rx={2.7} fill="#6A1B9A" opacity={0.45} />
 
           <AnimatePresence mode="wait" initial={false}>
-            {busy ? (
+            {phase === "starting" || grabbing ? (
               <motion.g
                 key="running"
                 initial={{ opacity: 0 }}
@@ -1263,14 +1601,14 @@ export function CouponMachine({
                   fontSize={btnTextSize}
                   fontWeight={800}
                   letterSpacing={0.8}
-                  fill={soldOut || emptyPool ? "#FFC53D" : "#FFFFFF"}
-                  style={soldOut || emptyPool ? { filter: "drop-shadow(0 0 3px rgba(255,197,61,0.95))" } : undefined}
+                  fill={soldOut || emptyPool || controlling ? "#FFC53D" : "#FFFFFF"}
+                  style={soldOut || emptyPool || controlling ? { filter: "drop-shadow(0 0 3px rgba(255,197,61,0.95))" } : undefined}
                   fontFamily={ARCADE}
                 >
                   {btnLabel}
                 </text>
                 {/* three radiating action lines flanking the label */}
-                {soldOut || emptyPool ? null : (
+                {soldOut || emptyPool || controlling ? null : (
                   <g stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" fill="none">
                     <path d="M132 380.5 L138.5 384" />
                     <path d="M130 387 L137.5 387" />
@@ -1314,6 +1652,31 @@ export function CouponMachine({
         {/* reveal burst — spans the whole machine */}
         {revealed && celebrateFx ? <ConfettiFX key={`fx-${playToken}`} /> : null}
       </div>
+
+      {/* ============ aim hint — your turn at the controls ============ */}
+      <AnimatePresence>
+        {controlling ? (
+          <motion.div
+            key="aim-hint"
+            role="status"
+            aria-live="polite"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0, scale: [1, 1.04, 1] }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{
+              opacity: { duration: 0.25 },
+              y: { duration: 0.25 },
+              scale: { duration: 1.6, repeat: Infinity, ease: "easeInOut" },
+            }}
+            className="mt-3 flex w-full max-w-[340px] items-center justify-center gap-2 rounded-full border border-[#F59E0B]/35 bg-gradient-to-b from-[#FFF7E0] to-[#FFEDBF] px-4 py-2.5 shadow-[0_10px_24px_-14px_rgba(180,83,9,0.55)]"
+          >
+            <Hand size={14} className="shrink-0 text-[#B45309]" aria-hidden />
+            <span className="min-w-0 text-center text-[12.5px] font-extrabold tracking-[0.01em] text-[#92400E]">
+              Your turn! Drag the red knob to aim — let go to drop the claw
+            </span>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/* ============ the reveal card (HTML — readable + tappable) ============ */}
       <AnimatePresence>
@@ -1390,7 +1753,7 @@ export function CouponMachine({
           >
             <AlertTriangle size={13} className="shrink-0" aria-hidden />
             <span className="min-w-0 flex-1">{error}</span>
-            {soldOut || error.includes("set up") ? null : (
+            {soldOut || error.includes("no longer available") || error.includes("just updated") ? null : (
               <button
                 type="button"
                 onClick={(e) => {

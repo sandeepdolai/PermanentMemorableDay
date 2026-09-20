@@ -2654,6 +2654,7 @@ function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data
             ticketLabel={d.stepLabel?.trim() || "YOUR COUPON CODE"}
             buttonLabel={d.label?.trim() || "PLAY & WIN"}
             coupons={effective.map((c) => ({ id: c.id, code: c.code, title: c.title, color: c.color }))}
+            cardCount={d.displayCount}
             prize={m.prize}
             phase={m.phase}
             playToken={m.playToken}
@@ -2661,13 +2662,17 @@ function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data
             error={m.error}
             soldOut={m.soldOut}
             onPlay={m.play}
+            clawX={m.clawX}
+            onAim={m.setClawX}
+            onGrab={m.beginGrab}
+            grabPlan={m.grabPlan}
             sfx={sfx}
           />
           <div className="h-2" />
         </div>
         <div className="relative flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3.5 py-2.5">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
-            {m.busy ? "What they’ll see" : "Live preview — tap PLAY & WIN"}
+            {m.busy ? "What they’ll see" : "Live preview — tap PLAY & WIN, then steer the claw"}
           </p>
           <button
             type="button"
@@ -2679,7 +2684,7 @@ function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data
         </div>
       </div>
       <p className="-mt-2 px-1 text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
-        Preview draws locally — in the real experience the server assigns one coupon per player, and it sticks on every replay.
+        Preview draws locally — in the real experience the player steers the claw with the red joystick, and the server assigns one coupon per player that sticks on every replay.
       </p>
 
       {/* Copy fields */}
@@ -2742,6 +2747,41 @@ function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data
             className={fieldInput}
             aria-label="Play button label"
           />
+        </div>
+      </div>
+
+      {/* ===== Ticket pile size ===== */}
+      <div className="flex items-center justify-between gap-3 rounded-[16px] border border-[#1D1D1F]/[0.07] bg-white px-3.5 py-2.5 shadow-[0_10px_24px_-18px_rgba(23,43,77,0.4)]">
+        <div className="min-w-0">
+          <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Tickets in the machine</p>
+          <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+            Every ticket is face-down — codes stay blurred until the claw reveals one.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            aria-label="Fewer tickets"
+            onClick={() => set({ displayCount: Math.max(6, (d.displayCount ?? 12) - 2) })}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1D1D1F]/[0.06] text-[15px] font-bold text-[#1D1D1F]/70 transition-all hover:bg-[#1D1D1F]/[0.12] active:scale-90"
+          >
+            −
+          </button>
+          <span
+            aria-live="polite"
+            aria-label={`${d.displayCount ?? 12} tickets shown in the machine`}
+            className="w-8 text-center font-mono text-[15px] font-bold tabular-nums text-[#1D1D1F]"
+          >
+            {d.displayCount ?? 12}
+          </span>
+          <button
+            type="button"
+            aria-label="More tickets"
+            onClick={() => set({ displayCount: Math.min(28, (d.displayCount ?? 12) + 2) })}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1D1D1F]/[0.06] text-[15px] font-bold text-[#1D1D1F]/70 transition-all hover:bg-[#1D1D1F]/[0.12] active:scale-90"
+          >
+            +
+          </button>
         </div>
       </div>
 

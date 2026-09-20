@@ -99,6 +99,9 @@ export interface BlockData {
   /** coupon (claw machine): the creator-managed prize pool. Falls back to a
    *  single-coupon pool built from `code` for legacy blocks (see couponPool). */
   coupons?: CouponDef[];
+  /** coupon: how many face-down tickets pile up in the glass (6–28).
+   *  The pile always includes every pool coupon; the rest are fillers. */
+  displayCount?: number;
   /** coupon draw: the marquee headline ("COUPON CODE") */
   heading?: string;
   /** coupon draw: the ticket eyebrow shown at the reveal ("YOUR COUPON CODE") */

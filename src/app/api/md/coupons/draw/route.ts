@@ -22,7 +22,7 @@ import { randomInt } from "node:crypto";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { coalesceNotification, fail, getUser, ok } from "@/lib/md-server";
-import { couponPool, eligibleCoupons, parseScenes, type CouponDef } from "@/lib/md-blocks";
+import { couponPool, eligibleCoupons, parseScenes, type CouponDef, type SceneDoc } from "@/lib/md-blocks";
 
 const COOKIE = "md_player";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // one year
@@ -37,8 +37,20 @@ interface AssignmentDTO {
 interface DrawOutcome {
   assignment: AssignmentDTO | null;
   alreadyAssigned?: boolean;
-  /** "no-eligible-coupons" | "moment-not-found" | "machine-missing" */
+  /** "pool-empty" | "no-eligible-coupons" | "moment-not-found" | "machine-missing" */
   reason?: string;
+}
+
+/** Finds the machine block for a draw. If the exact blockId no longer
+ *  exists (the moment was re-saved after this player's link was built),
+ *  a moment with exactly ONE coupon block still resolves — the sent link
+ *  keeps working instead of stranding the player on "not set up". */
+function findMachineBlock(scenes: SceneDoc[], blockId: string) {
+  const all = scenes.flatMap((s) => s.blocks);
+  const byId = all.find((b) => b.id === blockId);
+  if (byId) return byId;
+  const couponBlocks = all.filter((b) => b.type === "coupon");
+  return couponBlocks.length === 1 ? couponBlocks[0] : undefined;
 }
 
 /** Reads (or mints + sets) the anonymous player identity. */
@@ -151,10 +163,11 @@ async function handleDraw(body: { momentId?: string; blockId?: string }): Promis
             const momentRow = await tx.moment.findFirst({ where: { id: momentId, userId: user.id } });
             if (!momentRow) return { assignment: null, reason: "moment-not-found" } as DrawOutcome;
             const scenes = parseScenes(momentRow.sceneData) ?? [];
-            const block = scenes.flatMap((s) => s.blocks).find((b) => b.id === blockId);
+            const block = findMachineBlock(scenes, blockId);
             if (!block) return { assignment: null, reason: "machine-missing" } as DrawOutcome;
 
             const pool = sanitizePool(block.data);
+            if (pool.length === 0) return { assignment: null, reason: "pool-empty" } as DrawOutcome;
             const eligible = eligibleCoupons(pool);
             if (eligible.length === 0) return { assignment: null, reason: "no-eligible-coupons" } as DrawOutcome;
 
