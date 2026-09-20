@@ -18,6 +18,7 @@ export type Sheet =
   | "insights"
   | "stats"
   | "composer"
+  | "ai-creator"
   | "auth"
   | null;
 export type SettingsTopic = "account" | "notifications" | "privacy" | "help";

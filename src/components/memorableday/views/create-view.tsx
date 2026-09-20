@@ -36,7 +36,7 @@ const SCENE_BLOCKS = [
 ];
 
 export function CreateView() {
-  const { openSheet, openBuilder, openComposer } = useMD();
+  const { openSheet, openBuilder } = useMD();
 
   return (
     <div className="px-5 pb-36 pt-[88px] md:px-8 md:pb-16 lg:px-10">
@@ -126,7 +126,7 @@ export function CreateView() {
             <div className="mt-4 flex items-center gap-3 lg:mt-auto">
               <button
                 type="button"
-                onClick={() => openComposer()}
+                onClick={() => openSheet("ai-creator")}
                 className="rounded-full bg-white px-5 py-2.5 text-[14px] font-semibold text-[#007AFF] shadow-[0_8px_20px_-6px_rgba(0,0,0,0.25)] transition-transform active:scale-95"
               >
                 Try it

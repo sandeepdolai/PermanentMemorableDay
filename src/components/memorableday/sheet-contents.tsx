@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  AlertCircle,
   ArrowDown,
   ArrowUp,
+  Award,
   Bell,
   BellOff,
   Send,
@@ -21,19 +23,27 @@ import {
   Eye,
   EyeOff,
   Feather,
+  Gift,
   Heart,
   LifeBuoy,
+  ListChecks,
+  Loader2,
   Mail,
   MessageCircle,
   MessageSquare,
   Minus,
   MoreHorizontal,
+  MousePointerClick,
+  Music,
+  PartyPopper,
   Play,
   RotateCcw,
   Share2,
   Sparkles,
+  Ticket,
   TrendingUp,
   Trash2,
+  Type,
   User,
   Download,
   Lock,
@@ -45,7 +55,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import {
   AI_TONES,
-  AI_MESSAGE_OPTIONS,
   INSIGHTS,
   SHARE_URL_BASE,
   shareSlug,
@@ -57,6 +66,7 @@ import {
   USER,
 } from "@/lib/mock-data";
 import { useMD, type AuthMode, type PlayerPayload, type SettingsTopic, type StatsPayload } from "./md-context";
+import type { SceneDoc } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
 import { LogoMark } from "./bits";
 import { SegmentedControl } from "./segmented-control";
@@ -1259,23 +1269,47 @@ export function AIComposerContent({
   onInsert: (message: string) => void;
   onNotify: (message: string) => void;
 }) {
-  const { credits } = useMD();
+  const { credits, spendCredits } = useMD();
   const [brief, setBrief] = useState("");
   const [tone, setTone] = useState("heartfelt");
   const [phase, setPhase] = useState<"compose" | "generating" | "done">("compose");
+  const [options, setOptions] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
-  // Deterministic option set — shifts with the brief so it feels reactive
-  const options = useMemo(() => {
-    const base = AI_MESSAGE_OPTIONS[tone] ?? AI_MESSAGE_OPTIONS.heartfelt;
-    if (!brief.trim()) return base;
-    const shift = Math.min(brief.trim().length, 2);
-    return ([...base.slice(shift), ...base.slice(0, shift)] as [string, string, string]).slice(0, 3);
-  }, [tone, brief]);
-
-  const generate = () => {
+  /** Real AI generation — POST /api/md/ai/compose (z-ai-web-dev-sdk server-side) */
+  const generate = async () => {
+    if (!brief.trim() || phase === "generating") return;
+    if (!spendCredits(3)) {
+      onNotify("Out of AI credits — upgrade your plan for more");
+      return;
+    }
     setPhase("generating");
-    window.setTimeout(() => setPhase("done"), 1400);
+    setError(null);
+    try {
+      const res = await fetch("/api/md/ai/compose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief: brief.trim(), tone }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; messages?: string[]; error?: string } | null;
+      if (!res.ok || !json?.ok || !Array.isArray(json.messages) || json.messages.length !== 3) {
+        throw new Error(json?.error ?? "The AI couldn't write right now — try again");
+      }
+      setOptions(json.messages);
+      setPhase("done");
+    } catch (e) {
+      // Failed generation — refund the credits it burned.
+      spendCredits(-3);
+      const msg =
+        e instanceof TypeError
+          ? "Couldn't reach the AI — check your connection and try again"
+          : e instanceof Error
+            ? e.message
+            : "The AI couldn't write right now — try again";
+      setError(msg);
+      setPhase("compose");
+    }
   };
 
   const copy = async (msg: string, idx: number) => {
@@ -1346,13 +1380,26 @@ export function AIComposerContent({
           <button
             type="button"
             onClick={generate}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+            disabled={!brief.trim() || phase === "generating"}
+            className={cn(
+              "mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#007AFF] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]",
+              !brief.trim() || phase === "generating" ? "opacity-40" : ""
+            )}
           >
             <Sparkles size={16} aria-hidden /> Write 3 messages
           </button>
-          <p className="mt-2.5 text-center text-[11.5px] font-medium text-[#AAAAAA]">
-            Uses 3 of your {USER.credits - 64} AI credits
-          </p>
+          {error ? (
+            <p
+              role="alert"
+              className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[12.5px] font-semibold text-[#FF375F]"
+            >
+              <AlertCircle size={13} aria-hidden /> {error}
+            </p>
+          ) : (
+            <p className="mt-2.5 text-center text-[11.5px] font-medium text-[#AAAAAA]">
+              Uses 3 of your AI credits — tailored to your brief
+            </p>
+          )}
         </>
       ) : phase === "generating" ? (
         <div aria-live="polite" aria-label="Writing messages">
@@ -1378,7 +1425,7 @@ export function AIComposerContent({
           <div aria-live="polite">
             {options.map((msg, i) => (
               <motion.div
-                key={`${tone}-${i}`}
+                key={`${options[0]?.slice(0, 24)}-${i}`}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.07 * i, duration: 0.3 }}
@@ -1407,20 +1454,313 @@ export function AIComposerContent({
                   onClick={() => onInsert(msg)}
                   className="mt-3 w-full rounded-full bg-[#007AFF] py-2.5 text-[13.5px] font-semibold text-white pill-shadow transition-transform active:scale-[0.97]"
                 >
-                  Use in Scene 1
+                  Use this message
                 </button>
               </motion.div>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setPhase("compose")}
-            className="w-full rounded-full bg-[#1D1D1F]/[0.05] py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/75 transition-transform active:scale-[0.98]"
-          >
-            Try another brief
-          </button>
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={generate}
+              className="flex-1 rounded-full bg-[#5E5CE6]/[0.1] py-2.5 text-[13.5px] font-semibold text-[#5E5CE6] transition-transform active:scale-[0.98]"
+            >
+              <RotateCcw size={12} className="mr-1 inline" aria-hidden /> Write again
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPhase("compose");
+                setOptions([]);
+              }}
+              className="flex-1 rounded-full bg-[#1D1D1F]/[0.05] py-2.5 text-[13.5px] font-semibold text-[#1D1D1F]/75 transition-transform active:scale-[0.98]"
+            >
+              New brief
+            </button>
+          </div>
         </>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* AI Creator — describe the moment, get a full experience             */
+/* ------------------------------------------------------------------ */
+
+/** Sketch block-type display meta (labels + tints match the builder palette). */
+const SKETCH_BLOCK_META: Record<string, { label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>; tint: string }> = {
+  text: { label: "Message", icon: Type, tint: "#007AFF" },
+  gift: { label: "Gift", icon: Gift, tint: "#5E5CE6" },
+  countdown: { label: "Countdown", icon: Clock, tint: "#FF9F0A" },
+  quiz: { label: "Quiz", icon: ListChecks, tint: "#007AFF" },
+  reward: { label: "Reward", icon: Award, tint: "#30D158" },
+  coupon: { label: "Coupon", icon: Ticket, tint: "#218CF4" },
+  cta: { label: "Button", icon: MousePointerClick, tint: "#007AFF" },
+  confetti: { label: "Confetti", icon: PartyPopper, tint: "#FF375F" },
+  audio: { label: "Song", icon: Music, tint: "#FF375F" },
+};
+
+/** Starter briefs — one tap fills the textarea with a workable description. */
+const STARTER_BRIEFS: Array<{ chip: string; brief: string }> = [
+  { chip: "Birthday", brief: "a birthday experience for my best friend — fun, playful, with a quiz about our friendship and a gift at the end" },
+  { chip: "Anniversary", brief: "an anniversary surprise for my partner — romantic and warm, remembering our favorite trip together, ending with a gift" },
+  { chip: "Thank you", brief: "a thank-you experience for a mentor who changed my year — sincere, with a small reward as a token of gratitude" },
+  { chip: "Congrats", brief: "a congratulations experience for a friend who landed their dream job — celebratory and proud, ending with confetti" },
+  { chip: "Love", brief: "a love-letter experience for the person I adore — soft, cinematic, with a countdown before the final message" },
+  { chip: "Farewell", brief: "a farewell experience for a coworker moving abroad — warm and funny, with a quiz about the office and a goodbye gift" },
+  { chip: "Just because", brief: "a just-because pick-me-up for someone having a rough week — gentle and encouraging, ending with a small treat" },
+];
+
+const SKETCH_STATUSES = [
+  "Reading your brief…",
+  "Designing the scenes…",
+  "Writing the copy…",
+  "Arranging the reveals…",
+];
+
+interface SketchResult {
+  title: string;
+  cover: number;
+  scenes: SceneDoc[];
+}
+
+export function AICreatorContent({
+  onOpenDraft,
+}: {
+  onOpenDraft: (draft: SketchResult) => void;
+}) {
+  const { credits, spendCredits } = useMD();
+  const [brief, setBrief] = useState("");
+  const [phase, setPhase] = useState<"compose" | "generating" | "done">("compose");
+  const [result, setResult] = useState<SketchResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [statusIdx, setStatusIdx] = useState(0);
+
+  // Rotate the status line while generating
+  useEffect(() => {
+    if (phase !== "generating") return;
+    setStatusIdx(0);
+    const t = window.setInterval(() => setStatusIdx((i) => Math.min(i + 1, SKETCH_STATUSES.length - 1)), 2600);
+    return () => window.clearInterval(t);
+  }, [phase]);
+
+  /** Real AI sketch — POST /api/md/ai/sketch (z-ai-web-dev-sdk server-side) */
+  const generate = async () => {
+    if (!brief.trim() || phase === "generating") return;
+    if (!spendCredits(6)) {
+      setError("Out of AI credits — upgrade your plan for more");
+      return;
+    }
+    setPhase("generating");
+    setError(null);
+    try {
+      const res = await fetch("/api/md/ai/sketch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief: brief.trim() }),
+      });
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        title?: string;
+        cover?: number;
+        scenes?: SceneDoc[];
+        error?: string;
+      } | null;
+      if (!res.ok || !json?.ok || !Array.isArray(json.scenes) || json.scenes.length === 0) {
+        throw new Error(json?.error ?? "The AI couldn't sketch right now — try again");
+      }
+      setResult({ title: json.title ?? "Untitled Experience", cover: json.cover ?? 5, scenes: json.scenes });
+      setPhase("done");
+    } catch (e) {
+      // Failed sketch — refund the credits it burned.
+      spendCredits(-6);
+      const msg =
+        e instanceof TypeError
+          ? "Couldn't reach the AI — check your connection and try again"
+          : e instanceof Error
+            ? e.message
+            : "The AI couldn't sketch right now — try again";
+      setError(msg);
+      setPhase("compose");
+    }
+  };
+
+  const blockCount = result?.scenes.reduce((n, s) => n + s.blocks.length, 0) ?? 0;
+
+  return (
+    <div className="pb-2">
+      {/* Live AI credit balance (server-synced — each sketch spends 6) */}
+      <div className="mb-3 flex items-center justify-between rounded-[16px] bg-[#5E5CE6]/[0.07] px-3.5 py-2.5">
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[#5E5CE6]">
+          <Sparkles size={13} aria-hidden /> AI Credits
+        </span>
+        <span className="text-[12.5px] font-bold tabular-nums text-[#1D1D1F] dark:text-white">
+          {credits} <span className="font-medium text-[#AAAAAA]">available · 6 per sketch</span>
+        </span>
+      </div>
+
+      {phase === "compose" ? (
+        <>
+          {/* Brief */}
+          <label htmlFor="md-sketch-brief" className="mb-1.5 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+            Describe the moment
+          </label>
+          <textarea
+            id="md-sketch-brief"
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+            rows={4}
+            maxLength={300}
+            placeholder="Who is it for, what's the occasion, and how should it feel? The AI designs the scenes, copy and reveals."
+            className="w-full resize-none rounded-[18px] border border-[#1D1D1F]/[0.09] bg-white px-4 py-3 text-[14.5px] leading-relaxed text-[#1D1D1F] outline-none placeholder:text-[#AAAAAA]/70 focus:border-[#5E5CE6] focus:ring-2 focus:ring-[#5E5CE6]/25"
+          />
+          <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">{brief.length}/300</p>
+
+          {/* Starter briefs */}
+          <p className="mb-2 mt-1 px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Need a start?</p>
+          <div className="flex flex-wrap gap-2">
+            {STARTER_BRIEFS.map((s) => (
+              <button
+                key={s.chip}
+                type="button"
+                onClick={() => setBrief(s.brief)}
+                className="rounded-full border border-[#1D1D1F]/[0.09] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#1D1D1F]/75 transition-all active:scale-[0.96]"
+              >
+                {s.chip}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={generate}
+            disabled={!brief.trim() || phase === "generating"}
+            className={cn(
+              "mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#5E5CE6] py-3.5 text-[16px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]",
+              !brief.trim() ? "opacity-40" : ""
+            )}
+          >
+            <Sparkles size={16} aria-hidden /> Sketch my experience
+          </button>
+          {error ? (
+            <p role="alert" className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[12.5px] font-semibold text-[#FF375F]">
+              <AlertCircle size={13} aria-hidden /> {error}
+            </p>
+          ) : (
+            <p className="mt-2.5 text-center text-[11.5px] font-medium text-[#AAAAAA]">
+              Uses 6 of your AI credits — scenes, copy & reveals included
+            </p>
+          )}
+        </>
+      ) : phase === "generating" ? (
+        <div aria-live="polite" aria-label="Designing your experience">
+          {/* Skeleton storyboard */}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="card-shadow hairline mb-2.5 rounded-[18px] bg-white p-4">
+              <div className="flex items-center gap-2.5">
+                <span className="skeleton h-[26px] w-[26px] rounded-full" />
+                <span className="skeleton h-3 w-1/3 rounded-full" />
+              </div>
+              <div className="mt-3 space-y-2">
+                <span className="skeleton block h-3 w-full rounded-full" style={{ animationDelay: `${i * 120}ms` }} />
+                <span className="skeleton block h-3 w-5/6 rounded-full" style={{ animationDelay: `${i * 120 + 90}ms` }} />
+              </div>
+              <div className="mt-3 flex gap-1.5">
+                <span className="skeleton h-6 w-16 rounded-full" style={{ animationDelay: `${i * 120 + 180}ms` }} />
+                <span className="skeleton h-6 w-14 rounded-full" style={{ animationDelay: `${i * 120 + 260}ms` }} />
+              </div>
+            </div>
+          ))}
+          <p className="mt-1 flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-[#5E5CE6]">
+            <Loader2 size={12} className="animate-spin" aria-hidden /> {SKETCH_STATUSES[statusIdx]}
+          </p>
+        </div>
+      ) : result ? (
+        <>
+          <div aria-live="polite">
+            {/* Title + summary */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="card-shadow hairline mb-2.5 rounded-[18px] bg-white p-4"
+            >
+              <div className="flex items-center gap-3">
+                <CoverArt variant={result.cover} className="h-[52px] w-[72px] shrink-0 rounded-[12px]" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{result.title}</p>
+                  <p className="mt-0.5 text-[12px] font-medium text-[#AAAAAA]">
+                    {result.scenes.length} {result.scenes.length === 1 ? "scene" : "scenes"} · {blockCount} {blockCount === 1 ? "block" : "blocks"} · AI composed
+                  </p>
+                </div>
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[#5E5CE6]/[0.12] text-[#5E5CE6]">
+                  <Sparkles size={13} aria-hidden />
+                </span>
+              </div>
+            </motion.div>
+
+            {/* Scene preview cards */}
+            {result.scenes.map((s, i) => {
+              const firstText = s.blocks.find((b) => b.type === "text")?.data?.body ?? null;
+              return (
+                <motion.div
+                  key={s.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.08 * (i + 1), duration: 0.3 }}
+                  className="card-shadow hairline mb-2.5 rounded-[18px] bg-white p-4"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#1D1D1F]/[0.07] text-[11px] font-bold text-[#1D1D1F]/70">
+                      {i + 1}
+                    </span>
+                    <span className="text-[13px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Scene {i + 1}</span>
+                  </div>
+                  {firstText ? (
+                    <p className="mt-2 line-clamp-2 text-[13.5px] leading-relaxed text-[#1D1D1F]/80">{firstText}</p>
+                  ) : null}
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                    {s.blocks.map((b) => {
+                      const meta = SKETCH_BLOCK_META[b.type];
+                      if (!meta) return null;
+                      const Icon = meta.icon;
+                      return (
+                        <span
+                          key={b.id}
+                          className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                          style={{ backgroundColor: `${meta.tint}14`, color: meta.tint }}
+                        >
+                          <Icon size={11} strokeWidth={2.4} aria-hidden /> {meta.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={() => onOpenDraft(result)}
+              className="flex-[1.4] rounded-full bg-[#007AFF] py-3 text-[14.5px] font-semibold text-white pill-shadow transition-transform active:scale-[0.98]"
+            >
+              Open in Builder
+            </button>
+            <button
+              type="button"
+              onClick={generate}
+              className="flex-1 rounded-full bg-[#1D1D1F]/[0.05] py-3 text-[13.5px] font-semibold text-[#1D1D1F]/75 transition-transform active:scale-[0.98]"
+            >
+              <RotateCcw size={12} className="mr-1 inline" aria-hidden /> Try again
+            </button>
+          </div>
+          <p className="mt-2.5 text-center text-[11.5px] font-medium text-[#AAAAAA]">
+            Everything stays fully editable — scenes, copy, blocks.
+          </p>
+        </>
+      ) : null}
     </div>
   );
 }

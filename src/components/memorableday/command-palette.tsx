@@ -109,7 +109,7 @@ export function CommandPalette() {
       // Create
       { id: "create-new", title: "New moment", subtitle: "Blank or AI-assisted start", icon: Plus, group: "Create", kbd: "N", run: () => md.openSheet("create") },
       { id: "create-blank", title: "Blank canvas", subtitle: "Open the builder empty", icon: LayoutTemplate, group: "Create", run: () => md.openBuilder({ cover: 5 }) },
-      { id: "create-ai", title: "AI-assisted moment", subtitle: "Describe it — AI sketches the scenes", icon: PenLine, group: "Create", keywords: "sparkles assistant generate", run: () => md.openBuilder({ ai: true, cover: 9, title: "Untitled Experience" }) },
+      { id: "create-ai", title: "AI-assisted moment", subtitle: "Describe it — AI sketches the scenes", icon: PenLine, group: "Create", keywords: "sparkles assistant generate", run: () => md.openSheet("ai-creator") },
       { id: "create-composer", title: "AI Message Composer", subtitle: "Compose a message to insert", icon: PenLine, group: "Create", keywords: "write tone", run: () => md.openComposer() },
 
       // Actions

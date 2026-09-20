@@ -45,7 +45,7 @@ import { CommandPalette } from "./command-palette";
 import { MomentPlayer } from "./moment-player";
 import { ExperienceBuilder } from "./builder";
 import { WelcomeTour } from "./welcome-tour";
-import { AuthContent, ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, StatsContent, AIComposerContent } from "./sheet-contents";
+import { AuthContent, ExploreContent, InsightsContent, NotificationsContent, SETTINGS_TITLES, SettingsContent, ShareContent, StatsContent, AIComposerContent, AICreatorContent } from "./sheet-contents";
 import { HomeView } from "./views/home-view";
 import { CreateView } from "./views/create-view";
 import { ExploreView } from "./views/explore-view";
@@ -724,6 +724,9 @@ export function AppShell() {
     // Guard against sheet stacking: an open bottom sheet (z-80/81) would float
     // above the builder (z-60) and later the player (z-70), blocking taps.
     setSheet(null);
+    // Same guard for the player (z-70) — e.g. tapping a Home draft card while
+    // an experience is still open must not leave the player above the builder.
+    setPlayer(null);
     setBuilder(opts ?? {});
   }, []);
 
@@ -974,7 +977,12 @@ export function AppShell() {
           <CreateStartContent
             onStart={(mode) => {
               setSheet(null);
-              openBuilder(mode === "ai" ? { ai: true, cover: 9, title: "Untitled Experience" } : { cover: 5 });
+              if (mode === "ai") {
+                // AI-assisted start → the real AI Creator sketch sheet
+                setSheet("ai-creator");
+              } else {
+                openBuilder({ cover: 5 });
+              }
             }}
           />
         </BottomSheet>
@@ -1096,6 +1104,20 @@ export function AppShell() {
         {/* AI message composer sheet */}
         <BottomSheet open={sheet === "composer"} onClose={() => setSheet(null)} title="AI Message Composer">
           <AIComposerContent onInsert={insertAiMessage} onNotify={notify} />
+        </BottomSheet>
+
+        {/* AI Creator — full experience sketch sheet */}
+        <BottomSheet open={sheet === "ai-creator"} onClose={() => setSheet(null)} title="AI Creator">
+          <AICreatorContent
+            onOpenDraft={(draft) => {
+              setSheet(null);
+              openBuilder({
+                title: draft.title,
+                cover: draft.cover,
+                doc: { scenes: draft.scenes, track: null },
+              });
+            }}
+          />
         </BottomSheet>
 
         {/* Auth sheet (sign in / create account) */}
