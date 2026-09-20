@@ -324,7 +324,13 @@ export function seedSceneDoc(id: string, title: string): SceneDoc[] {
   ];
 }
 
-/** Ensures the demo user exists; seeds moments + notifications on first run. */
+/** Ensures the demo user exists; seeds moments + notifications on first run.
+ * Feed hygiene (backfill + dedupe) is throttled — it's idempotent and only
+ * needs to run occasionally, and skipping it under concurrent requests keeps
+ * SQLite's single write lock free for real work. */
+let lastMaintenanceAt = 0;
+const MAINTENANCE_INTERVAL_MS = 30_000;
+
 export async function getUser() {
   let user = await db.user.findUnique({ where: { email: DEMO_EMAIL } });
   if (!user) {
@@ -333,8 +339,11 @@ export async function getUser() {
     });
     await seedContent(user.id);
   }
-  await backfillSeedDocs();
-  await dedupeNotifications(user.id);
+  if (Date.now() - lastMaintenanceAt > MAINTENANCE_INTERVAL_MS) {
+    lastMaintenanceAt = Date.now();
+    await backfillSeedDocs();
+    await dedupeNotifications(user.id);
+  }
   return user;
 }
 
@@ -389,20 +398,32 @@ async function seedContent(userId: string) {
 
 /** One-time upgrade for DBs seeded before authored scene docs existed
  *  (or before CTA blocks carried links). Seed docs are deterministic, so
- *  refreshing them is always safe — user-created moments are never touched. */
+ *  refreshing them is always safe — user-created moments are never touched.
+ *  Guarded: only one maintenance sweep runs at a time (idempotent hygiene
+ *  doesn't need concurrent runs — and on SQLite they'd fight over the
+ *  single write lock). */
+let maintenanceInFlight = false;
 async function backfillSeedDocs() {
-  const missing = await db.moment.findMany({
-    where: {
-      source: "seed",
-      OR: [{ sceneData: null }, { sceneData: { not: { contains: '"url":' } } }],
-    },
-    select: { id: true, title: true },
-  });
-  for (const m of missing) {
-    await db.moment.update({
-      where: { id: m.id },
-      data: { sceneData: JSON.stringify(seedSceneDoc(m.id, m.title)) },
+  if (maintenanceInFlight) return;
+  maintenanceInFlight = true;
+  try {
+    const missing = await db.moment.findMany({
+      where: {
+        source: "seed",
+        OR: [{ sceneData: null }, { sceneData: { not: { contains: '"url":' } } }],
+      },
+      select: { id: true, title: true },
     });
+    for (const m of missing) {
+      await db.moment
+        .update({
+          where: { id: m.id },
+          data: { sceneData: JSON.stringify(seedSceneDoc(m.id, m.title)) },
+        })
+        .catch(() => {}); // best-effort — another sweep will pick it up
+    }
+  } finally {
+    maintenanceInFlight = false;
   }
 }
 

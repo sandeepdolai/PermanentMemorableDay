@@ -46,7 +46,10 @@ import { formatDuration } from "@/lib/mock-data";
 import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
 import {
   backgroundDimClass,
+  COUPON_COLORS,
+  couponPool,
   dedupeScenes,
+  eligibleCoupons,
   formatClock,
   freshBlockId,
   freshSceneId,
@@ -58,6 +61,7 @@ import {
   PHOTO_FILTERS,
   type BlockData,
   type BlockDoc,
+  type CouponDef,
   type SceneDoc,
   type SongPick,
   type SongResult,
@@ -71,7 +75,8 @@ import {
   type ConfettiStyleName,
 } from "./confetti";
 import { RewardTicket, rewardKindMeta } from "./reward-ticket";
-import { CouponMachine, useCouponPlay } from "./coupon-machine";
+import { CouponMachine, useCouponMachine, type MachinePrize } from "./coupon-machine";
+import { useMachineSfx } from "./coupon-sfx";
 import {
   GiftBox,
   GiftConfetti,
@@ -533,7 +538,13 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     }
     case "coupon": {
       const heading = d?.heading?.trim() || "COUPON CODE";
-      const ccode = d?.code?.trim();
+      const pool = couponPool(d);
+      const prizeLine =
+        pool.length === 0
+          ? ""
+          : pool.length === 1
+            ? pool[0].code
+            : `${pool[0].code} +${pool.length - 1} more`;
       const domain = d?.url?.trim() ? urlDomain(d.url) : null;
       return (
         <div className="flex items-center gap-3 rounded-[14px] bg-[#F5F5F7] px-3.5 py-3 shadow-[0_10px_24px_-14px_rgba(23,43,77,0.45)]">
@@ -571,12 +582,12 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">{heading} reveal</p>
-            {ccode ? (
+            {prizeLine ? (
               <p className="mt-0.5 truncate font-mono text-[12px] font-semibold tracking-[0.08em] text-[#8A5A16]">
-                {ccode}
+                {prizeLine}
               </p>
             ) : (
-              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">Play the claw machine to win a prize</p>
+              <p className="mt-0.5 text-[12px] text-[#AAAAAA]">Add coupons to fill the machine</p>
             )}
             {domain ? (
               <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[#218CF4]/80">
@@ -2097,7 +2108,11 @@ const LIBRARY_TEMPLATES: LibraryTemplate[] = [
       body: "REVEAL",
       stepLabel: "YOUR COUPON CODE",
       label: "PLAY & WIN",
-      code: "SAVE20",
+      coupons: [
+        { id: "tpl-cpn-1", code: "SAVE20", title: "20% off your next order", description: "Use it at checkout — our treat", color: "#9B59B6", enabled: true, stock: null },
+        { id: "tpl-cpn-2", code: "FREESHIP", title: "Free shipping, any order", color: "#2ECC71", enabled: true, stock: null },
+        { id: "tpl-cpn-3", code: "WELCOME15", title: "15% off for new friends", color: "#F59E0B", enabled: true, stock: 50 },
+      ],
     },
   },
   {
@@ -2517,15 +2532,110 @@ function BlockLibraryContent({
 }
 
 /* ------------------------------------------------------------------ */
-/* Coupon Reveal editor — live claw-machine stage + marquee & code fields */
+/* Coupon Reveal editor — machine copy + the creator's coupon pool     */
 /* ------------------------------------------------------------------ */
+
+/** Quick-start pool for empty machines (fresh ids every time). */
+function samplePool(): CouponDef[] {
+  return [
+    { id: uid("cpn"), code: "SAVE10", title: "10% off your next order", color: "#9B59B6", enabled: true, stock: null },
+    { id: uid("cpn"), code: "FREESHIP", title: "Free shipping, any order", color: "#2ECC71", enabled: true, stock: null },
+    { id: uid("cpn"), code: "WELCOME15", title: "15% off for new friends", color: "#F59E0B", enabled: true, stock: 50 },
+  ];
+}
+
+/** A blank coupon row (next unused card color). */
+function newPoolCoupon(existing: CouponDef[]): CouponDef {
+  const used = new Set(existing.map((c) => c.color));
+  const color = COUPON_COLORS.find((c) => !used.has(c)) ?? COUPON_COLORS[existing.length % COUPON_COLORS.length];
+  return { id: uid("cpn"), code: "", title: "", color, enabled: true, stock: null };
+}
+
+/** Tiny iOS-style switch (in-draw / limited-stock toggles). */
+function PoolSwitch({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onToggle}
+      className={cn(
+        "relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors duration-200",
+        on ? "bg-[#30D158]" : "bg-[#1D1D1F]/[0.16]"
+      )}
+    >
+      <motion.span
+        initial={false}
+        animate={{ x: on ? 16 : 0 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        className="absolute left-[2px] top-[2px] block h-[18px] w-[18px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+      />
+    </button>
+  );
+}
 
 function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
   const d = block.data ?? {};
   const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
-  const code = (d.code ?? "").trim() || "SAVE20";
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const domain = d.url?.trim() ? urlDomain(d.url) : null;
-  const { played, revealed, play } = useCouponPlay(1750, 4800);
+
+  /* The pool as the creator edits it. Legacy single-code blocks surface as a
+   * one-row pool so the upgrade path is seamless (editing writes `coupons`). */
+  const pool: CouponDef[] = useMemo(() => {
+    if (d.coupons && d.coupons.length > 0) return d.coupons;
+    const legacy = (d.code ?? "").trim();
+    return legacy
+      ? [{ id: "legacy", code: legacy, title: "", color: COUPON_COLORS[0], enabled: true, stock: null }]
+      : [];
+  }, [d.coupons, d.code]);
+
+  /* What the machine will actually draw from — mirrors couponPool() so the
+   * editor, the player and the server all agree (empty codes are skipped). */
+  const effective = useMemo(() => couponPool({ coupons: pool }), [pool]);
+  const eligibleCount = eligibleCoupons(effective).length;
+
+  const writePool = (next: CouponDef[]) => set({ coupons: next });
+
+  const updateCoupon = (id: string, patch: Partial<CouponDef>) =>
+    writePool(pool.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+
+  const addCoupon = () => {
+    const c = newPoolCoupon(pool);
+    writePool([...pool, c]);
+    setExpandedId(c.id);
+  };
+
+  const removeCoupon = (id: string) => {
+    const next = pool.filter((c) => c.id !== id);
+    // Clear the legacy single code when the last row goes — an empty machine
+    // should show "NO PRIZES", not resurrect the old code via the fallback.
+    if (next.length === 0) set({ coupons: [], code: "" });
+    else writePool(next);
+    if (expandedId === id) setExpandedId(null);
+  };
+
+  /* Preview draw — local simulation of the server's rule (random pick from
+   * the eligible pool). The real player flow is server-persisted. */
+  const drawPreview = useCallback(async (): Promise<{ prize: MachinePrize | null; reason?: string }> => {
+    await new Promise((r) => setTimeout(r, 420));
+    const eligible = eligibleCoupons(effective);
+    if (eligible.length === 0) return { prize: null, reason: "no-eligible-coupons" };
+    const pick = eligible[Math.floor(Math.random() * eligible.length)];
+    return {
+      prize: {
+        couponId: pick.id,
+        code: pick.code,
+        title: pick.title,
+        description: pick.description,
+        color: pick.color,
+      },
+    };
+  }, [effective]);
+
+  const sfx = useMachineSfx();
+  const m = useCouponMachine({ draw: drawPreview, sfx });
 
   return (
     <div className="space-y-4 pb-2">
@@ -2543,26 +2653,34 @@ function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data
             subtitle={d.body?.trim() || "REVEAL"}
             ticketLabel={d.stepLabel?.trim() || "YOUR COUPON CODE"}
             buttonLabel={d.label?.trim() || "PLAY & WIN"}
-            code={code}
-            open={played}
-            celebrate={revealed}
-            onPlay={play}
+            coupons={effective.map((c) => ({ id: c.id, code: c.code, title: c.title, color: c.color }))}
+            prize={m.prize}
+            phase={m.phase}
+            playToken={m.playToken}
+            hasAssignment={m.hasAssignment}
+            error={m.error}
+            soldOut={m.soldOut}
+            onPlay={m.play}
+            sfx={sfx}
           />
           <div className="h-2" />
         </div>
         <div className="relative flex items-center justify-between border-t border-[#1D1D1F]/[0.05] px-3.5 py-2.5">
           <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#AAAAAA]">
-            {played ? "What they’ll see" : "Live preview — tap PLAY & WIN"}
+            {m.busy ? "What they’ll see" : "Live preview — tap PLAY & WIN"}
           </p>
           <button
             type="button"
-            onClick={play}
+            onClick={m.play}
             className="flex items-center gap-1.5 rounded-full bg-[#1D1D1F]/[0.05] px-3 py-1.5 text-[11.5px] font-bold text-[#1D1D1F]/70 transition-all hover:bg-[#1D1D1F]/[0.09] active:scale-95"
           >
             <Play size={11} aria-hidden /> Preview the draw
           </button>
         </div>
       </div>
+      <p className="-mt-2 px-1 text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+        Preview draws locally — in the real experience the server assigns one coupon per player, and it sticks on every replay.
+      </p>
 
       {/* Copy fields */}
       <div className="flex gap-2.5">
@@ -2627,29 +2745,241 @@ function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data
         </div>
       </div>
 
+      {/* ===== Coupon pool ===== */}
       <div>
-        <label htmlFor="md-coupon-code" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
-          Prize code
-        </label>
-        <input
-          id="md-coupon-code"
-          maxLength={24}
-          value={d.code ?? ""}
-          onChange={(e) => set({ code: e.target.value })}
-          placeholder="SAVE20"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          className={cn(fieldInput, "font-mono tracking-[0.08em]")}
-        />
-        <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
-          <p className="text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
-            Any format works — capitals, lowercase, numbers &amp; symbols.
-          </p>
-          <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-[#AAAAAA]">
-            {(d.code ?? "").length}/24
-          </span>
+        <div className="mb-2 flex items-end justify-between gap-2 px-1">
+          <div className="min-w-0">
+            <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">Coupon pool</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-[#AAAAAA]">
+              {effective.length === 0
+                ? "Add at least one coupon to fill the machine"
+                : `${eligibleCount} of ${effective.length} in the draw — first play picks one at random`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addCoupon}
+            className="flex shrink-0 items-center gap-1 rounded-full bg-[#218CF4] px-3 py-1.5 text-[11.5px] font-bold text-white shadow-[0_8px_18px_-8px_rgba(33,140,244,0.8)] transition-all hover:brightness-105 active:scale-95"
+          >
+            <Plus size={12} aria-hidden /> Add coupon
+          </button>
         </div>
+
+        <div className="overflow-hidden rounded-[16px] border border-[#1D1D1F]/[0.07] bg-white shadow-[0_10px_24px_-18px_rgba(23,43,77,0.4)]">
+          {pool.length === 0 ? (
+            <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#218CF4]/10 text-[#218CF4]">
+                <Ticket size={16} aria-hidden />
+              </span>
+              <p className="text-[13px] font-semibold text-[#1D1D1F]">The machine is empty</p>
+              <p className="max-w-[270px] text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                Coupons live in the claw machine — the server deals one per player and it sticks on every replay.
+              </p>
+              <div className="mt-1 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => writePool(samplePool())}
+                  className="rounded-full bg-[#218CF4] px-3.5 py-2 text-[11.5px] font-bold text-white transition-all hover:brightness-105 active:scale-95"
+                >
+                  Use sample pool
+                </button>
+                <button
+                  type="button"
+                  onClick={addCoupon}
+                  className="rounded-full bg-[#1D1D1F]/[0.06] px-3.5 py-2 text-[11.5px] font-bold text-[#1D1D1F]/75 transition-all hover:bg-[#1D1D1F]/[0.1] active:scale-95"
+                >
+                  Add manually
+                </button>
+              </div>
+            </div>
+          ) : (
+            pool.map((c) => {
+              const expanded = expandedId === c.id;
+              const hasCode = c.code.trim() !== "";
+              const inDraw = hasCode && c.enabled !== false && (c.stock == null || c.stock > 0);
+              const chip = inDraw
+                ? "In draw"
+                : c.stock === 0
+                  ? "Empty"
+                  : c.enabled === false
+                    ? "Off"
+                    : "No code";
+              return (
+                <div key={c.id} className="border-b border-[#1D1D1F]/[0.05] last:border-b-0">
+                  {/* row */}
+                  <div className="flex items-center gap-2.5 px-3 py-2.5">
+                    <span className="h-8 w-[5px] shrink-0 rounded-full" style={{ background: c.color }} aria-hidden />
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(expanded ? null : c.id)}
+                      aria-expanded={expanded}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span
+                        className={cn(
+                          "block truncate font-mono text-[13px] font-bold tracking-[0.05em]",
+                          hasCode ? "text-[#1D1D1F]" : "text-[#AAAAAA]/60"
+                        )}
+                      >
+                        {hasCode ? c.code : "add a code…"}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11.5px] font-medium text-[#AAAAAA]">
+                        {c.title.trim() || "No title"}
+                        {c.stock != null ? ` · ${c.stock} left` : ""}
+                      </span>
+                    </button>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
+                        inDraw ? "bg-[#30D158]/10 text-[#1F9D44]" : "bg-[#1D1D1F]/[0.06] text-[#AAAAAA]"
+                      )}
+                    >
+                      {chip}
+                    </span>
+                    <PoolSwitch
+                      on={c.enabled !== false}
+                      onToggle={() => updateCoupon(c.id, { enabled: c.enabled === false })}
+                      label={`${hasCode ? c.code : "coupon"} in the draw`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(expanded ? null : c.id)}
+                      aria-label={expanded ? "Collapse coupon settings" : "Edit coupon settings"}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#AAAAAA] transition-colors hover:bg-[#1D1D1F]/[0.06] hover:text-[#1D1D1F]"
+                    >
+                      <ChevronRight size={14} className={cn("transition-transform", expanded && "rotate-90")} aria-hidden />
+                    </button>
+                  </div>
+
+                  {/* expanded settings */}
+                  <AnimatePresence initial={false}>
+                    {expanded ? (
+                      <motion.div
+                        key="panel"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-3 border-t border-[#1D1D1F]/[0.06] bg-[#F5F5F7]/70 px-3 py-3">
+                          <div className="flex gap-2.5">
+                            <div className="min-w-0 flex-1">
+                              <label htmlFor={`cpn-code-${c.id}`} className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#AAAAAA]">
+                                Code
+                              </label>
+                              <input
+                                id={`cpn-code-${c.id}`}
+                                value={c.code}
+                                onChange={(e) => updateCoupon(c.id, { code: e.target.value })}
+                                maxLength={24}
+                                placeholder="SAVE20"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                className={cn(fieldInput, "py-2 font-mono text-[13.5px] tracking-[0.08em]")}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-[1.4]">
+                              <label htmlFor={`cpn-title-${c.id}`} className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#AAAAAA]">
+                                Title
+                              </label>
+                              <input
+                                id={`cpn-title-${c.id}`}
+                                value={c.title}
+                                onChange={(e) => updateCoupon(c.id, { title: e.target.value })}
+                                maxLength={40}
+                                placeholder="20% off your next order"
+                                className={cn(fieldInput, "py-2 text-[13.5px]")}
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label htmlFor={`cpn-desc-${c.id}`} className="mb-1 block text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#AAAAAA]">
+                              Description · optional
+                            </label>
+                            <input
+                              id={`cpn-desc-${c.id}`}
+                              value={c.description ?? ""}
+                              onChange={(e) => updateCoupon(c.id, { description: e.target.value })}
+                              maxLength={80}
+                              placeholder="Use it at checkout — our treat"
+                              className={cn(fieldInput, "py-2 text-[13.5px]")}
+                            />
+                          </div>
+
+                          <div>
+                            <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#AAAAAA]">Card color</p>
+                            <div className="flex flex-wrap gap-2">
+                              {COUPON_COLORS.map((color) => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  aria-label={`Card color ${color}`}
+                                  aria-pressed={c.color === color}
+                                  onClick={() => updateCoupon(c.id, { color })}
+                                  className={cn(
+                                    "flex h-7 w-7 items-center justify-center rounded-full border-2 transition-transform active:scale-90",
+                                    c.color === color ? "border-[#1D1D1F]" : "border-transparent"
+                                  )}
+                                  style={{ background: color }}
+                                >
+                                  {c.color === color ? <Check size={12} strokeWidth={3} className="text-white" aria-hidden /> : null}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <PoolSwitch
+                              on={c.stock != null}
+                              onToggle={() => updateCoupon(c.id, { stock: c.stock == null ? 10 : null })}
+                              label="Limit stock"
+                            />
+                            <span className="text-[12px] font-semibold text-[#1D1D1F]/75">Limited stock</span>
+                            {c.stock != null ? (
+                              <>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={99999}
+                                  value={c.stock}
+                                  onChange={(e) =>
+                                    updateCoupon(c.id, { stock: Math.max(0, Math.min(99999, Math.floor(Number(e.target.value) || 0))) })
+                                  }
+                                  className="w-[84px] rounded-[10px] border border-[#1D1D1F]/[0.1] bg-white px-2.5 py-1.5 text-right font-mono text-[13px] font-semibold tabular-nums text-[#1D1D1F] outline-none focus:border-[#218CF4]"
+                                  aria-label="Units remaining"
+                                />
+                                <span className="text-[11.5px] font-medium text-[#AAAAAA]">left · the server never oversells</span>
+                              </>
+                            ) : (
+                              <span className="text-[11.5px] font-medium text-[#AAAAAA]">Unlimited — every player can win it</span>
+                            )}
+                          </div>
+
+                          <div className="flex justify-end pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => removeCoupon(c.id)}
+                              className="flex items-center gap-1.5 rounded-full bg-[#FF375F]/10 px-3 py-1.5 text-[11.5px] font-bold text-[#E0245A] transition-colors hover:bg-[#FF375F]/20 active:scale-95"
+                            >
+                              <Trash2 size={12} aria-hidden /> Remove coupon
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <p className="mt-2 px-1 text-[11px] font-medium leading-relaxed text-[#AAAAAA]">
+          One coupon per player, forever — replays run the full claw show and always grab the same card. Winners keep
+          their coupon even if you disable it later.
+        </p>
       </div>
 
       <div>

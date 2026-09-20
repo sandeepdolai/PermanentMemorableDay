@@ -102,3 +102,31 @@ model SavedTemplate {
 
   @@unique([userId, templateId])
 }
+
+/// Claw-machine coupon assignment — ONE coupon per player per machine
+/// (machine = moment + block). Created once on the player's first PLAY by
+/// the server (random pick from the creator's eligible pool, stock-aware);
+/// every later play reads the same row back. The random selection happens
+/// exactly once per player — enforced here, in the database, not in the
+/// browser. `playerId` is the anonymous recipient identity (md_player cookie
+/// — recipients don't log in); swap for the auth user id when auth lands.
+model CouponAssignment {
+  id        String   @id @default(cuid())
+  momentId  String
+  blockId   String
+  playerId  String
+
+  /// Pool-item id at claim time (matches CouponDef.id in the authored block)
+  couponId  String
+  /// Code snapshot — the prize stays valid even if the creator edits the pool
+  code      String
+  /// Title snapshot ("" when the coupon had no title)
+  title     String   @default("")
+  /// Card color snapshot (pile-card visual fallback)
+  color     String   @default("#9B59B6")
+  /// When the player first won the coupon
+  claimedAt DateTime @default(now())
+
+  @@unique([momentId, blockId, playerId])
+  @@index([momentId, blockId])
+}

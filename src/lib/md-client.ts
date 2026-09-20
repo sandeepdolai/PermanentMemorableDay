@@ -139,6 +139,42 @@ export function apiAdjustCredits(creditsDelta: number): Promise<{ user: { name: 
 }
 
 /* ------------------------------------------------------------------ */
+/* Claw machine — server-backed coupon assignment                      */
+/* ------------------------------------------------------------------ */
+
+/** The coupon a player has been assigned (snapshot from the assignment row). */
+export interface CouponAssignmentDTO {
+  couponId: string;
+  code: string;
+  title: string;
+  color: string;
+}
+
+/**
+ * PLAY the claw machine. The SERVER decides: first play → random pick from
+ * the creator's eligible pool (persisted, stock-decremented); every later
+ * play → the same assigned coupon. Never throws for sold-out/missing-machine
+ * (those come back as `assignment: null` + reason) — only for real failures.
+ */
+export function apiDrawCoupon(payload: { momentId: string; blockId: string }): Promise<{
+  assignment: CouponAssignmentDTO | null;
+  alreadyAssigned?: boolean;
+  reason?: string;
+}> {
+  return req("/api/md/coupons/draw", { method: "POST", body: JSON.stringify(payload) });
+}
+
+/** Does this player already have a coupon for this machine? (Peek — no draw.) */
+export async function apiPeekCoupon(
+  momentId: string,
+  blockId: string
+): Promise<{ assignment: CouponAssignmentDTO | null }> {
+  return req(
+    `/api/md/coupons/draw?momentId=${encodeURIComponent(momentId)}&blockId=${encodeURIComponent(blockId)}`
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Media + music                                                       */
 /* ------------------------------------------------------------------ */
 

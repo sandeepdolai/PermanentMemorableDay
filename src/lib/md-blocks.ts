@@ -38,6 +38,29 @@ export interface SongResult {
   source: "itunes" | "spotify";
 }
 
+/** Card colors the creator can assign to claw-machine coupons (pile art). */
+export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"] as const;
+
+/** One coupon in the claw-machine pool (creator-managed in the block editor).
+ *  Lives inside BlockData.coupons and round-trips through the sceneData JSON
+ *  column — assignments reference these by id. */
+export interface CouponDef {
+  /** Stable pool-item id (uid) — the assignment key */
+  id: string;
+  /** The redeemable code, e.g. "SAVE20" */
+  code: string;
+  /** Prize title shown at the reveal, e.g. "20% off your next order" */
+  title: string;
+  /** Optional longer description shown under the reveal */
+  description?: string;
+  /** Pile-card color (COUPON_COLORS pick) */
+  color: string;
+  /** Creator on/off switch — disabled coupons stay visible but never get assigned */
+  enabled: boolean;
+  /** Remaining units; null/undefined = unlimited */
+  stock?: number | null;
+}
+
 /** Per-type block configuration (all optional — unset fields fall back to defaults). */
 export interface BlockData {
   /** text: message body */
@@ -73,9 +96,12 @@ export interface BlockData {
   /** reward */
   rewardKind?: string;
   code?: string;
-  /** coupon draw: the promo headline above the claw machine ("쿠폰 뽑기") */
+  /** coupon (claw machine): the creator-managed prize pool. Falls back to a
+   *  single-coupon pool built from `code` for legacy blocks (see couponPool). */
+  coupons?: CouponDef[];
+  /** coupon draw: the marquee headline ("COUPON CODE") */
   heading?: string;
-  /** coupon draw: the step indicator above the headline ("01") */
+  /** coupon draw: the ticket eyebrow shown at the reveal ("YOUR COUPON CODE") */
   stepLabel?: string;
   /** cta */
   label?: string;
@@ -150,6 +176,41 @@ export function urlDomain(raw: string): string {
   } catch {
     return t.replace(/^https?:\/\//i, "").split("/")[0];
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Claw-machine coupon pool                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The machine's prize pool: the creator-configured coupon list, or the
+ * legacy single-prize fallback built from `code` (blocks saved before the
+ * pool existed keep working — and still get server-backed assignment).
+ * Shared by the player, the builder editor AND the draw API so all three
+ * always agree on what's in the machine.
+ */
+export function couponPool(d: BlockData | undefined | null): CouponDef[] {
+  const pool = (d?.coupons ?? []).filter(
+    (c) => c && typeof c.code === "string" && c.code.trim().length > 0
+  );
+  if (pool.length > 0) return pool;
+  const legacy = d?.code?.trim();
+  if (!legacy) return [];
+  return [
+    {
+      id: "legacy",
+      code: legacy,
+      title: "",
+      color: COUPON_COLORS[0],
+      enabled: true,
+      stock: null,
+    },
+  ];
+}
+
+/** Pool items that may be assigned to a NEW player (enabled + in stock). */
+export function eligibleCoupons(pool: CouponDef[]): CouponDef[] {
+  return pool.filter((c) => c.enabled !== false && (c.stock == null || c.stock > 0));
 }
 
 /** Background-block overlay options (builder chips + player scrim). */

@@ -29,7 +29,10 @@ import { CoverArt } from "./cover-art";
 import { GiftBox, GiftConfetti, isLightWrap } from "./gift-box";
 import { CONFETTI_PALETTES, ConfettiFX, type ConfettiStyleName } from "./confetti";
 import { RewardTicket } from "./reward-ticket";
-import { CouponMachine, useCouponPlay } from "./coupon-machine";
+import { CouponMachine, useCouponMachine, type MachineCoupon } from "./coupon-machine";
+import { useMachineSfx } from "./coupon-sfx";
+import { apiDrawCoupon, apiPeekCoupon } from "@/lib/md-client";
+import { couponPool } from "@/lib/md-blocks";
 import { LogoMark } from "./bits";
 import { useMD } from "./md-context";
 import { cn } from "@/lib/utils";
@@ -907,13 +910,57 @@ function RewardBlockView({ block, index }: { block: BlockDoc; index: number }) {
   );
 }
 
-function CouponBlockView({ block, index }: { block: BlockDoc; index: number }) {
+function CouponBlockView({ block, index, momentId }: { block: BlockDoc; index: number; momentId: string }) {
   const { notify } = useMD();
   const d = block.data;
-  const { played, revealed, play } = useCouponPlay();
-  const code = d?.code?.trim() || "SAVE20";
   const url = d?.url?.trim();
   const domain = url ? urlDomain(url) : null;
+
+  /* The pile: one card per coupon in the creator's pool (legacy single-code
+   * blocks fall back to a one-coupon pool — still server-assigned). */
+  const cards: MachineCoupon[] = useMemo(
+    () =>
+      couponPool(d).map((c) => ({
+        id: c.id,
+        code: c.code,
+        title: c.title,
+        color: c.color,
+      })),
+    [d]
+  );
+
+  const sfx = useMachineSfx();
+
+  /* PLAY → the SERVER decides the prize: first play assigns randomly from
+   * the eligible pool + persists; every replay returns the same coupon. */
+  const draw = useCallback(async () => {
+    const res = await apiDrawCoupon({ momentId, blockId: block.id });
+    if (!res.assignment) return { prize: null, reason: res.reason };
+    return {
+      prize: {
+        couponId: res.assignment.couponId,
+        code: res.assignment.code,
+        title: res.assignment.title,
+        color: res.assignment.color,
+      },
+    };
+  }, [momentId, block.id]);
+
+  const m = useCouponMachine({ draw, sfx });
+
+  /* On mount: has this player already won? (Labels the button PLAY AGAIN —
+   * never re-rolls; the draw itself is the only place a coupon is decided.) */
+  useEffect(() => {
+    let alive = true;
+    apiPeekCoupon(momentId, block.id)
+      .then((res) => {
+        if (alive && res.assignment) m.setHasAssignment(true);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [momentId, block.id]);
 
   return (
     <motion.div
@@ -922,22 +969,27 @@ function CouponBlockView({ block, index }: { block: BlockDoc; index: number }) {
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      {/* The machine owns the whole flow: PLAY & WIN → claw grabs the golden
-          ticket → code reveals → COPY CODE → COPIED ✓ (clipboard built in). */}
+      {/* The machine owns the whole flow: PLAY → claw hunts + grabs the
+          player's assigned card → golden reveal → COPY CODE (built in). */}
       <CouponMachine
         title={d?.heading?.trim() || "COUPON CODE"}
         subtitle={d?.body?.trim() || "REVEAL"}
         ticketLabel={d?.stepLabel?.trim() || "YOUR COUPON CODE"}
         buttonLabel={d?.label?.trim() || "PLAY & WIN"}
-        code={code}
-        open={played}
-        celebrate={revealed}
-        onPlay={play}
+        coupons={cards}
+        prize={m.prize}
+        phase={m.phase}
+        playToken={m.playToken}
+        hasAssignment={m.hasAssignment}
+        error={m.error}
+        soldOut={m.soldOut}
+        onPlay={m.play}
+        sfx={sfx}
       />
 
       {/* Post-reveal action — open the redeem link (copy lives on the machine) */}
       <AnimatePresence>
-        {revealed && url && domain ? (
+        {m.phase === "revealed" && url && domain ? (
           <motion.span
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1365,7 +1417,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                     case "reward":
                       return <RewardBlockView key={b.id} block={b} index={i} />;
                     case "coupon":
-                      return <CouponBlockView key={b.id} block={b} index={i} />;
+                      return <CouponBlockView key={b.id} block={b} index={i} momentId={moment.id} />;
                     case "cta":
                       return <CtaBlockView key={b.id} block={b} index={i} onAction={onCta} />;
                     case "confetti":
