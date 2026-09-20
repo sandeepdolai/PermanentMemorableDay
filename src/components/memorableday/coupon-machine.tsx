@@ -114,6 +114,9 @@ const SLOTS: PileSlot[] = [
 
 const FILLER_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"];
 
+/** Set-dressing words for the generic pile cards (never look like real codes). */
+const FILLER_LABELS = ["COUPON", "PRIZE", "TREAT", "GIFT", "LUCKY", "WIN BIG", "STAR", "HERO", "VIP", "NICE"];
+
 function hashStr(s: string): number {
   return [...s].reduce((a, ch) => (a * 33 + ch.charCodeAt(0)) % 100003, 11);
 }
@@ -122,6 +125,7 @@ interface PileCard {
   key: string;
   couponId?: string;
   code?: string;
+  label?: string;
   fill: string;
 }
 
@@ -136,10 +140,13 @@ interface PileEntry {
  * remaining slots get generic "COUPON" filler cards (set dressing, never
  * grabbable). Sorted back-to-front for natural depth stacking.
  */
-function layoutPile(coupons: MachineCoupon[]): PileEntry[] {
+function layoutPile(coupons: MachineCoupon[], priorityId?: string): PileEntry[] {
   const used = new Set<number>();
   const entries: PileEntry[] = [];
-  coupons.forEach((c, i) => {
+  /* The assigned coupon is dealt FIRST so it always owns a distinct slot —
+   * even in pools larger than the slot grid, the claw's target card exists. */
+  const ordered = [...coupons].sort((a, b) => (a.id === priorityId ? -1 : 0) - (b.id === priorityId ? -1 : 0));
+  ordered.forEach((c, i) => {
     let idx = (hashStr(c.id) + i * 3) % SLOTS.length;
     let guard = 0;
     while (used.has(idx) && guard++ < SLOTS.length) idx = (idx + 1) % SLOTS.length;
@@ -151,30 +158,37 @@ function layoutPile(coupons: MachineCoupon[]): PileEntry[] {
   });
   SLOTS.forEach((slot, idx) => {
     if (used.has(idx)) return;
-    entries.push({ card: { key: `f-${idx}`, fill: FILLER_COLORS[idx % FILLER_COLORS.length] }, slot });
+    entries.push({
+      card: { key: `f-${idx}`, fill: FILLER_COLORS[idx % FILLER_COLORS.length], label: FILLER_LABELS[idx % FILLER_LABELS.length] },
+      slot,
+    });
   });
   return entries.sort((a, b) => a.slot.y - b.slot.y);
 }
 
-/** One pile card — scalloped mini ticket with its code (or "COUPON"). */
-function PileCardArt({ w, h, fill, code }: { w: number; h: number; fill: string; code?: string }) {
-  const label = code ? (code.length > 9 ? `${code.slice(0, 8)}…` : code) : "COUPON";
+/** One pile card — scalloped mini ticket with its code (or set-dressing word). */
+function PileCardArt({ w, h, fill, code, label }: { w: number; h: number; fill: string; code?: string; label?: string }) {
+  const text = code ? (code.length > 9 ? `${code.slice(0, 8)}…` : code) : (label ?? "COUPON");
   return (
     <g>
-      <rect width={w} height={h} rx={4} fill={fill} stroke="rgba(0,0,0,0.16)" strokeWidth={1} />
+      {/* soft contact shadow — the card rests on the pile */}
+      <rect x={1.4} y={2.4} width={w} height={h} rx={4} fill="#17316B" opacity={0.2} />
+      <rect width={w} height={h} rx={4} fill={fill} stroke="rgba(0,0,0,0.22)" strokeWidth={1} />
+      {/* gloss tick along the top edge */}
+      <rect x={2} y={1.6} width={Math.max(2, w - 4)} height={Math.max(1.6, h * 0.28)} rx={1.6} fill="#FFFFFF" opacity={0.24} />
       <circle cx={0} cy={h / 2} r={3.4} fill="#EAF3FD" stroke="rgba(0,0,0,0.12)" strokeWidth={0.8} />
       <circle cx={w} cy={h / 2} r={3.4} fill="#EAF3FD" stroke="rgba(0,0,0,0.12)" strokeWidth={0.8} />
       <text
         x={w / 2}
         y={h / 2 + 2.6}
         textAnchor="middle"
-        fontSize={code ? cardCodeFontSize(label.length) : 6}
+        fontSize={code ? cardCodeFontSize(text.length) : text.length > 6 ? 5.2 : 6}
         fontWeight={800}
-        letterSpacing={code ? 0.4 : 1.4}
+        letterSpacing={code ? 0.4 : 1.1}
         fill="#FFFFFF"
         fontFamily={code ? MONO : ARCADE}
       >
-        {label}
+        {text}
       </text>
     </g>
   );
@@ -384,6 +398,7 @@ export function CouponMachine({
   const { notify } = useMD();
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<number | null>(null);
+  const revealRef = useRef<HTMLDivElement | null>(null);
 
   const revealed = phase === "revealed";
   const running = phase === "running" || revealed;
@@ -397,7 +412,7 @@ export function CouponMachine({
     if (prize && !cards.some((c) => c.id === prize.couponId)) {
       cards.push({ id: prize.couponId, code: prize.code, title: prize.title, color: prize.color });
     }
-    return layoutPile(cards);
+    return layoutPile(cards, prize?.couponId);
   }, [coupons, prize]);
 
   /* The grab target — the assigned coupon's slot (fallback: middle card). */
@@ -453,6 +468,15 @@ export function CouponMachine({
     },
     []
   );
+
+  /* When the golden reveal lands, make sure the code card is on screen —
+   * the machine is tall and mobile viewports can hide it below the fold. */
+  useEffect(() => {
+    if (phase === "revealed") {
+      const t = window.setTimeout(() => revealRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 350);
+      return () => window.clearTimeout(t);
+    }
+  }, [phase, playToken]);
 
   /* Panel button */
   const canPlay = Boolean(onPlay) && !busy && !soldOut && !emptyPool;
@@ -513,10 +537,11 @@ export function CouponMachine({
           <stop offset="45%" stopColor="#FFD84D" />
           <stop offset="100%" stopColor="#F5B93B" />
         </linearGradient>
-        <linearGradient id="cmGlass" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#F7FBFF" />
-          <stop offset="100%" stopColor="#E4F0FC" />
-        </linearGradient>
+        <radialGradient id="cmInterior" cx="50%" cy="40%" r="78%">
+          <stop offset="0%" stopColor="#F2F8FF" />
+          <stop offset="58%" stopColor="#E4EEFB" />
+          <stop offset="100%" stopColor="#CFE0F3" />
+        </radialGradient>
         <linearGradient id="cmMetal" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#E8EDF3" />
           <stop offset="100%" stopColor="#9AA3B2" />
@@ -546,6 +571,41 @@ export function CouponMachine({
           <stop offset="0%" stopColor="#FFF7DC" stopOpacity={0.95} />
           <stop offset="100%" stopColor="#FFF7DC" stopOpacity={0} />
         </radialGradient>
+        <radialGradient id="cmMarqueeGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#A855F7" stopOpacity={0.5} />
+          <stop offset="100%" stopColor="#A855F7" stopOpacity={0} />
+        </radialGradient>
+        <radialGradient id="cmBulbGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#FFE9A8" stopOpacity={0.85} />
+          <stop offset="55%" stopColor="#FFD84D" stopOpacity={0.3} />
+          <stop offset="100%" stopColor="#FFD84D" stopOpacity={0} />
+        </radialGradient>
+        <linearGradient id="cmSilver" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#F4F7FB" />
+          <stop offset="45%" stopColor="#C3CCD9" />
+          <stop offset="100%" stopColor="#8D99AB" />
+        </linearGradient>
+        <linearGradient id="cmSilverR" x1="1" y1="0" x2="0" y2="0">
+          <stop offset="0%" stopColor="#F4F7FB" />
+          <stop offset="45%" stopColor="#C3CCD9" />
+          <stop offset="100%" stopColor="#8D99AB" />
+        </linearGradient>
+        <linearGradient id="cmGloss" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.32} />
+          <stop offset="24%" stopColor="#FFFFFF" stopOpacity={0.1} />
+          <stop offset="48%" stopColor="#FFFFFF" stopOpacity={0} />
+        </linearGradient>
+        <linearGradient id="cmShadeR" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="68%" stopColor="#083B75" stopOpacity={0} />
+          <stop offset="100%" stopColor="#083B75" stopOpacity={0.4} />
+        </linearGradient>
+        <linearGradient id="cmSeam" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#083B75" stopOpacity={0.55} />
+          <stop offset="100%" stopColor="#083B75" stopOpacity={0} />
+        </linearGradient>
+        <clipPath id="cmBodyClip">
+          <rect x={10} y={10} width={300} height={420} rx={26} />
+        </clipPath>
         <clipPath id="cmWinClip">
           <rect x={30} y={96} width={260} height={240} rx={16} />
         </clipPath>
@@ -562,59 +622,81 @@ export function CouponMachine({
       >
         {/* ================= cabinet ================= */}
         <rect x={10} y={10} width={300} height={420} rx={26} fill="url(#cmBody)" stroke="#0A5BB8" strokeWidth={3} />
+        {/* molded-plastic volume — bevel light, right-side shade, vertical gloss */}
+        <rect x={13} y={13} width={294} height={414} rx={23} fill="none" stroke="#FFFFFF" strokeOpacity={0.32} strokeWidth={2.4} />
+        <rect x={10} y={10} width={300} height={420} rx={26} fill="url(#cmShadeR)" clipPath="url(#cmBodyClip)" />
+        <rect x={10} y={10} width={300} height={420} rx={26} fill="url(#cmGloss)" clipPath="url(#cmBodyClip)" />
         <rect x={20} y={15} width={280} height={9} rx={4.5} fill="#FFFFFF" opacity={0.14} />
 
-        {/* ================= marquee ================= */}
+        {/* ================= marquee — backlit sign ================= */}
+        {/* backlight bleeding out of the sign onto the cabinet + glass */}
+        <ellipse cx={160} cy={55} rx={150} ry={44} fill="url(#cmMarqueeGlow)" />
         <rect x={56} y={24} width={208} height={62} rx={16} fill="url(#cmMarquee)" stroke="#4C1D95" strokeWidth={2.5} />
-        <rect x={60} y={27.5} width={200} height={7} rx={3.5} fill="#FFFFFF" opacity={0.14} />
-        <text x={162} y={54.5} textAnchor="middle" fontSize={21} fontWeight={900} letterSpacing={1} fill="#8A4A0E" fontFamily={ARCADE}>
+        <rect x={59} y={27} width={202} height={56} rx={13} fill="none" stroke="#C4B5FD" strokeOpacity={0.45} strokeWidth={1.4} />
+        <ellipse cx={160} cy={54} rx={88} ry={30} fill="#A855F7" opacity={0.22} />
+        <rect x={60} y={27.5} width={200} height={7} rx={3.5} fill="#FFFFFF" opacity={0.16} />
+        {/* golden 3D-extruded lettering — three stacked passes */}
+        <text x={163.6} y={55.6} textAnchor="middle" fontSize={21} fontWeight={900} letterSpacing={1} fill="#5C2E0B" opacity={0.9} fontFamily={ARCADE}>
+          {title}
+        </text>
+        <text x={161.8} y={53.8} textAnchor="middle" fontSize={21} fontWeight={900} letterSpacing={1} fill="#8A5416" fontFamily={ARCADE}>
           {title}
         </text>
         <text x={160} y={52} textAnchor="middle" fontSize={21} fontWeight={900} letterSpacing={1} fill="url(#cmGoldText)" stroke="#B45309" strokeWidth={0.7} fontFamily={ARCADE}>
           {title}
         </text>
-        <text x={161.5} y={76.5} textAnchor="middle" fontSize={13.5} fontWeight={800} letterSpacing={3} fill="#3B0A70" fontFamily={ARCADE}>
+        <text x={161.5} y={76.5} textAnchor="middle" fontSize={14} fontWeight={800} letterSpacing={3.2} fill="#3B0A70" fontFamily={ARCADE}>
           {subtitle}
         </text>
-        <text x={160} y={75} textAnchor="middle" fontSize={13.5} fontWeight={800} letterSpacing={3} fill="#FFFFFF" fontFamily={ARCADE}>
+        <text x={160} y={75} textAnchor="middle" fontSize={14} fontWeight={800} letterSpacing={3.2} fill="none" stroke="#FFFFFF" strokeOpacity={0.3} strokeWidth={2.4} fontFamily={ARCADE}>
+          {subtitle}
+        </text>
+        <text x={160} y={75} textAnchor="middle" fontSize={14} fontWeight={800} letterSpacing={3.2} fill="#FFFFFF" fontFamily={ARCADE} style={{ filter: "drop-shadow(0 0 4px rgba(216,180,254,0.85))" }}>
           {subtitle}
         </text>
         <Spark x={100} y={70.5} fill="#FFD84D" />
         <Spark x={220} y={70.5} fill="#FFD84D" />
 
-        {/* four marquee bulbs — twinkle gently at idle, strobe while starting */}
+        {/* cabinet corner lamps + a running ring of marquee bulbs —
+            twinkle gently at idle, strobe while starting */}
         {[
-          { x: 40, y: 34 },
-          { x: 40, y: 60 },
-          { x: 280, y: 34 },
-          { x: 280, y: 60 },
+          { x: 40, y: 34, r: 4.2, halo: 8.5 },
+          { x: 40, y: 60, r: 4.2, halo: 8.5 },
+          { x: 280, y: 34, r: 4.2, halo: 8.5 },
+          { x: 280, y: 60, r: 4.2, halo: 8.5 },
+          ...[76, 100, 124, 148, 172, 196, 220, 244].map((x) => ({ x, y: 28, r: 1.9, halo: 3.9 })),
+          ...[76, 100, 220, 244].map((x) => ({ x, y: 82, r: 1.9, halo: 3.9 })),
+          ...[42, 55, 68].flatMap((y) => [
+            { x: 63, y, r: 1.9, halo: 3.9 },
+            { x: 257, y, r: 1.9, halo: 3.9 },
+          ]),
         ].map((b, i) => (
           <g key={i}>
             <circle
               className="md-bulb"
               style={{
-                animationDelay: `${i * 0.38}s`,
+                animationDelay: `${i * 0.32}s`,
                 ...(phase === "starting" ? { animationDuration: "0.38s" } : {}),
               }}
               cx={b.x}
               cy={b.y}
-              r={7.5}
-              fill="#FFE9A8"
-              opacity={0.55}
+              r={b.halo}
+              fill="url(#cmBulbGlow)"
             />
-            <circle cx={b.x} cy={b.y} r={4.2} fill="#FFD84D" stroke="#E0A93E" strokeWidth={1} />
-            <circle cx={b.x - 1.3} cy={b.y - 1.3} r={1.3} fill="#FFFFFF" opacity={0.85} />
+            <circle cx={b.x} cy={b.y} r={b.r} fill="#FFE9A8" stroke="#E0A93E" strokeWidth={0.7} />
+            <circle cx={b.x - b.r * 0.32} cy={b.y - b.r * 0.32} r={b.r * 0.32} fill="#FFFFFF" opacity={0.9} />
           </g>
         ))}
 
         {/* ================= glass window ================= */}
-        <rect x={30} y={96} width={260} height={240} rx={16} fill="url(#cmGlass)" stroke="#0A5BB8" strokeWidth={3} />
+        <rect x={30} y={96} width={260} height={240} rx={16} fill="url(#cmInterior)" stroke="#0A5BB8" strokeWidth={3} />
         <g clipPath="url(#cmWinClip)">
-          {/* diagonal glass glare */}
-          <path d="M78 96 L112 96 L62 336 L36 336 L36 300 Z" fill="#FFFFFF" opacity={0.22} />
-          <path d="M126 96 L140 96 L90 336 L76 336 Z" fill="#FFFFFF" opacity={0.13} />
+          {/* interior depth — top AO + the marquee's purple cast on the back wall */}
+          <rect x={30} y={96} width={260} height={42} fill="url(#cmSeam)" opacity={0.5} />
+          <rect x={30} y={96} width={260} height={22} fill="#7C3AED" opacity={0.07} />
           {/* soft floor shading */}
           <ellipse cx={160} cy={336} rx={122} ry={11} fill="#B9CDE8" opacity={0.5} />
+          <rect x={30} y={329} width={260} height={7} fill="#8FA9CE" opacity={0.3} />
 
           {/* gantry rail (fixed) — the trolley rides along it */}
           <rect x={44} y={103} width={232} height={6.5} rx={3.25} fill="#46536B" />
@@ -638,7 +720,7 @@ export function CouponMachine({
             <g style={{ filter: "drop-shadow(0 3px 3px rgba(23,43,77,0.22))" }}>
               {pile.map(({ card, slot }) => {
                 const isTarget = Boolean(prize && card.couponId === prize.couponId);
-                const art = <PileCardArt w={slot.w} h={slot.h} fill={card.fill} code={card.code} />;
+                const art = <PileCardArt w={slot.w} h={slot.h} fill={card.fill} code={card.code} label={card.label} />;
                 return (
                   <g key={card.key} transform={`translate(${slot.x} ${slot.y}) rotate(${slot.rot} ${slot.w / 2} ${slot.h / 2})`}>
                     {isTarget ? (
@@ -699,8 +781,20 @@ export function CouponMachine({
                   : { x: 0, transition: { duration: 0.3 } }
             }
           >
+            {/* the claw's soft shadow on the pile — tracks the horizontal travel */}
+            <motion.ellipse
+              cx={160}
+              cy={328}
+              rx={24}
+              ry={5.5}
+              fill="#17316B"
+              initial={false}
+              animate={running ? { opacity: [0.1, 0.1, 0.26, 0.26, 0.18, 0.18] } : { opacity: 0.1 }}
+              transition={{ duration: seq, times: [0, 0.55, 0.68, 0.74, 0.84, 1] }}
+            />
             {/* motor trolley — rides the rail with the cable */}
             <rect x={149} y={108} width={22} height={17} rx={4} fill="#1F7AE8" stroke="#0A5BB8" strokeWidth={1.5} />
+            <rect x={150.5} y={109.6} width={19} height={4.6} rx={2.3} fill="#FFFFFF" opacity={0.24} />
             <circle cx={154.5} cy={114} r={1.5} fill="#9DC7FF" />
             <circle cx={165.5} cy={114} r={1.5} fill="#9DC7FF" />
             <circle cx={160} cy={124.5} r={2.6} fill="none" stroke="#23252E" strokeWidth={2} />
@@ -724,7 +818,10 @@ export function CouponMachine({
               }
             >
               {Array.from({ length: 10 }, (_, i) => (
-                <ellipse key={i} cx={160} cy={130 + i * 14} rx={5.2} ry={4.5} fill="none" stroke="#23252E" strokeWidth={2.2} />
+                <g key={i}>
+                  <ellipse cx={160} cy={130 + i * 14} rx={5.4} ry={4.7} fill="none" stroke={i % 2 === 0 ? "#2C3038" : "#1B1E24"} strokeWidth={2.7} />
+                  <path d={`M${156.6} ${130 + i * 14} a3.4 3 0 0 1 6.8 0`} fill="none" stroke="#5F6B7E" strokeWidth={0.9} />
+                </g>
               ))}
             </motion.g>
 
@@ -754,9 +851,12 @@ export function CouponMachine({
               >
                 {/* metal head bar */}
                 <rect x={144} y={168} width={32} height={13} rx={5} fill="url(#cmMetal)" stroke="#5B6472" strokeWidth={1.5} />
+                <rect x={146.5} y={169.8} width={27} height={3.6} rx={1.8} fill="#FFFFFF" opacity={0.5} />
                 <circle cx={160} cy={174.5} r={2} fill="#5B6472" />
-                <circle cx={150} cy={181} r={2.4} fill="#5B6472" />
-                <circle cx={170} cy={181} r={2.4} fill="#5B6472" />
+                <circle cx={150} cy={181} r={2.8} fill="#39414F" />
+                <circle cx={150} cy={181} r={1.1} fill="#C3CCD9" />
+                <circle cx={170} cy={181} r={2.8} fill="#39414F" />
+                <circle cx={170} cy={181} r={1.1} fill="#C3CCD9" />
 
                 {/* left pincer — opens wide on the drop, snaps shut at the card */}
                 <motion.g
@@ -776,9 +876,11 @@ export function CouponMachine({
                       : { rotate: -24, transition: { duration: 0.3 } }
                   }
                 >
-                  <path d="M150 181 C138 189 133 204 143 217 C148 224 158 222 159 214" fill="none" stroke="#C3CBD6" strokeWidth={5.5} strokeLinecap="round" />
-                  <path d="M150 181 C138 189 133 204 143 217 C148 224 158 222 159 214" fill="none" stroke="#EFF3F8" strokeWidth={1.7} strokeLinecap="round" />
+                  <path d="M150 181 C138 189 133 204 143 217 C148 224 158 222 159 214" fill="none" stroke="#39414F" strokeWidth={7.4} strokeLinecap="round" />
+                  <path d="M150 181 C138 189 133 204 143 217 C148 224 158 222 159 214" fill="none" stroke="url(#cmSilver)" strokeWidth={5} strokeLinecap="round" />
+                  <path d="M150 181 C138 189 133 204 143 217 C148 224 158 222 159 214" fill="none" stroke="#F4F8FC" strokeWidth={1.8} strokeLinecap="round" />
                   <circle cx={155.5} cy={217.5} r={3.4} fill="#1A1D23" />
+                  <circle cx={154.6} cy={216.6} r={1} fill="#8D99AB" opacity={0.85} />
                 </motion.g>
 
                 {/* right pincer */}
@@ -799,9 +901,11 @@ export function CouponMachine({
                       : { rotate: 24, transition: { duration: 0.3 } }
                   }
                 >
-                  <path d="M170 181 C182 189 187 204 177 217 C172 224 162 222 161 214" fill="none" stroke="#C3CBD6" strokeWidth={5.5} strokeLinecap="round" />
-                  <path d="M170 181 C182 189 187 204 177 217 C172 224 162 222 161 214" fill="none" stroke="#EFF3F8" strokeWidth={1.7} strokeLinecap="round" />
+                  <path d="M170 181 C182 189 187 204 177 217 C172 224 162 222 161 214" fill="none" stroke="#39414F" strokeWidth={7.4} strokeLinecap="round" />
+                  <path d="M170 181 C182 189 187 204 177 217 C172 224 162 222 161 214" fill="none" stroke="url(#cmSilverR)" strokeWidth={5} strokeLinecap="round" />
+                  <path d="M170 181 C182 189 187 204 177 217 C172 224 162 222 161 214" fill="none" stroke="#F4F8FC" strokeWidth={1.8} strokeLinecap="round" />
                   <circle cx={164.5} cy={217.5} r={3.4} fill="#1A1D23" />
+                  <circle cx={163.6} cy={216.6} r={1} fill="#8D99AB" opacity={0.85} />
                 </motion.g>
 
                 {/* grab motion lines — flash as the pincers snap shut */}
@@ -873,31 +977,47 @@ export function CouponMachine({
                         transition={{ duration: 0.3 }}
                       >
                         <g transform="translate(128 212)" style={{ filter: "drop-shadow(0 4px 5px rgba(23,43,77,0.3))" }}>
-                          <PileCardArt w={64} h={23} fill={prize.color} code={prize.code} />
+                          <PileCardArt w={64} h={23} fill={prize.color} code={prize.code} label={prize.code} />
                         </g>
                       </motion.g>
                     ) : null}
 
                     {/* golden presentation ticket — pops in at the reveal */}
                     {prize ? (
-                      <motion.g
-                        key={`gold-${playToken}`}
-                        initial={false}
-                        style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5 }}
-                        animate={
-                          revealed
-                            ? {
-                                opacity: [0, 1, 1],
-                                scale: [0.55, 1.18, 1],
-                                transition: { duration: 0.55, ease: "easeOut", times: [0, 0.7, 1] },
-                              }
-                            : { opacity: 0, scale: 0.55, transition: { duration: 0.2 } }
-                        }
-                      >
-                        <g transform="translate(104 214)" style={{ filter: "drop-shadow(0 4px 5px rgba(23,43,77,0.3))" }}>
-                          <GoldTicket code={prize.code} eyebrow={ticketLabel} reveal={revealed} />
-                        </g>
-                      </motion.g>
+                      <>
+                        {/* the burst — a golden shockwave that sells the card→ticket transform */}
+                        <motion.g
+                          key={`burst-${playToken}`}
+                          initial={false}
+                          style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5 }}
+                          animate={
+                            revealed
+                              ? { scale: [0.25, 1.2], opacity: [0.95, 0], transition: { duration: 0.55, ease: "easeOut" } }
+                              : { scale: 0.25, opacity: 0, transition: { duration: 0.2 } }
+                          }
+                          pointerEvents="none"
+                        >
+                          <circle cx={160} cy={235} r={48} fill="none" stroke="#FFD84D" strokeWidth={3.5} />
+                        </motion.g>
+                        <motion.g
+                          key={`gold-${playToken}`}
+                          initial={false}
+                          style={{ transformBox: "fill-box", originX: 0.5, originY: 0.5 }}
+                          animate={
+                            revealed
+                              ? {
+                                  opacity: [0, 1, 1],
+                                  scale: [0.55, 1.18, 1],
+                                  transition: { duration: 0.55, ease: "easeOut", times: [0, 0.7, 1] },
+                                }
+                              : { opacity: 0, scale: 0.55, transition: { duration: 0.2 } }
+                          }
+                        >
+                          <g transform="translate(104 214)" style={{ filter: "drop-shadow(0 4px 5px rgba(23,43,77,0.3))" }}>
+                            <GoldTicket code={prize.code} eyebrow={ticketLabel} reveal={revealed} />
+                          </g>
+                        </motion.g>
+                      </>
                     ) : null}
                   </motion.g>
                 </motion.g>
@@ -923,9 +1043,17 @@ export function CouponMachine({
               <Spark x={s.x} y={s.y} s={1.35} fill={i === 0 ? "#FFD84D" : "#FF9F0A"} />
             </motion.g>
           ))}
+
+          {/* glass glare — ON the pane, layered over the contents */}
+          <path d="M78 96 L112 96 L62 336 L36 336 L36 300 Z" fill="#FFFFFF" opacity={0.24} pointerEvents="none" />
+          <path d="M126 96 L140 96 L90 336 L76 336 Z" fill="#FFFFFF" opacity={0.15} pointerEvents="none" />
         </g>
+        {/* glass inner bevel */}
+        <rect x={33} y={99} width={254} height={234} rx={13} fill="none" stroke="#FFFFFF" strokeOpacity={0.5} strokeWidth={1.8} pointerEvents="none" />
 
         {/* ================= control panel ================= */}
+        {/* ambient occlusion where the panel meets the body */}
+        <rect x={22} y={341} width={276} height={10} rx={5} fill="url(#cmSeam)" opacity={0.6} />
         <rect x={22} y={348} width={276} height={72} rx={18} fill="url(#cmPanel)" stroke="#0A5BB8" strokeWidth={2.5} />
         <rect x={34} y={356} width={252} height={56} rx={13} fill="url(#cmInset)" stroke="#0F5FC0" strokeWidth={1.8} />
         <rect x={40} y={359} width={240} height={5} rx={2.5} fill="#FFFFFF" opacity={0.22} />
@@ -945,10 +1073,21 @@ export function CouponMachine({
         {/* joystick */}
         <ellipse cx={88} cy={408} rx={17} ry={5} fill="#000000" opacity={0.18} />
         <rect x={85} y={368} width={6} height={24} rx={3} fill="#2A2D35" stroke="#101216" strokeWidth={1} />
+        <rect x={86} y={369.5} width={1.7} height={20} rx={0.85} fill="#8D99AB" opacity={0.75} />
         <rect x={83} y={388} width={10} height={5} rx={2.5} fill="#3A3F49" />
         <circle cx={88} cy={399} r={15} fill="#23252B" stroke="#AEB8C4" strokeWidth={3.2} />
+        <circle cx={88} cy={399} r={12.6} fill="none" stroke="#FFFFFF" strokeOpacity={0.26} strokeWidth={1.4} />
         <circle cx={88} cy={363.5} r={11} fill="url(#cmBall)" />
         <ellipse cx={84.6} cy={359.8} rx={3.2} ry={2.4} fill="#FFFFFF" opacity={0.8} />
+
+        {/* coin slot plate — arcade authenticity */}
+        <rect x={265} y={370} width={20} height={32} rx={5.5} fill="url(#cmMetal)" stroke="#5B6472" strokeWidth={1.2} />
+        <rect x={266.5} y={371.5} width={17} height={3} rx={1.5} fill="#39414F" opacity={0.4} />
+        <rect x={270} y={375} width={10} height={17} rx={5} fill="#39414F" opacity={0.55} />
+        <rect x={271} y={376} width={8} height={15} rx={4} fill="#15171C" />
+        <rect x={272.8} y={377.6} width={2.2} height={11.8} rx={1.1} fill="#5F6B7E" />
+        <circle cx={268.6} cy={373.6} r={0.9} fill="#5B6472" />
+        <circle cx={281.4} cy={373.6} r={0.9} fill="#5B6472" />
 
         {/* soft glow behind the PLAY button while it's tappable */}
         <motion.ellipse
@@ -994,6 +1133,9 @@ export function CouponMachine({
             transition={{ duration: 0.25 }}
           />
           <rect x={129} y={374.5} width={128} height={11} rx={5.5} fill="#FFFFFF" opacity={0.16} />
+          {/* dome shading — specular top, pressed-in bottom */}
+          <ellipse cx={177} cy={379.2} rx={52} ry={4.4} fill="#FFFFFF" opacity={0.34} />
+          <rect x={129} y={391.8} width={128} height={5.4} rx={2.7} fill="#5B21B6" opacity={0.45} />
 
           <AnimatePresence mode="wait" initial={false}>
             {busy ? (
@@ -1005,7 +1147,7 @@ export function CouponMachine({
                 transition={{ duration: 0.18 }}
               >
                 {[185, 193, 201].map((cx, i) => (
-                  <circle key={cx} className="md-dot" style={{ animationDelay: `${i * 0.12}s` }} cx={cx} cy={389} r={2.7} fill="#FFFFFF" />
+                  <circle key={cx} className="md-dot" style={{ animationDelay: `${i * 0.12}s` }} cx={cx} cy={387} r={2.7} fill="#FFFFFF" />
                 ))}
               </motion.g>
             ) : (
@@ -1023,14 +1165,19 @@ export function CouponMachine({
                   fontSize={btnTextSize}
                   fontWeight={800}
                   letterSpacing={0.8}
-                  fill="#FFFFFF"
+                  fill={soldOut || emptyPool ? "#FFC53D" : "#FFFFFF"}
+                  style={soldOut || emptyPool ? { filter: "drop-shadow(0 0 3px rgba(255,197,61,0.95))" } : undefined}
                   fontFamily={ARCADE}
                 >
                   {btnLabel}
                 </text>
                 {/* sparkle action marks */}
-                <path d="M132 381 L137 387 M137 378 L142 384" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" fill="none" />
-                <path d="M254 381 L249 387 M249 378 L244 384" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" fill="none" />
+                {soldOut || emptyPool ? null : (
+                  <>
+                    <path d="M132 381 L137 387 M137 378 L142 384" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" fill="none" />
+                    <path d="M254 381 L249 387 M249 378 L244 384" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" fill="none" />
+                  </>
+                )}
               </motion.g>
             )}
           </AnimatePresence>
@@ -1047,7 +1194,7 @@ export function CouponMachine({
       <div className="relative w-full max-w-[340px]">
         {machine}
 
-        {/* sound toggle — tiny, top-right, out of the machine's way */}
+        {/* sound toggle — a small chip set into the cabinet's top-right corner */}
         {sfx ? (
           <button
             type="button"
@@ -1056,9 +1203,9 @@ export function CouponMachine({
               sfx.toggle();
             }}
             aria-label={sfx.muted ? "Unmute machine sounds" : "Mute machine sounds"}
-            className="absolute right-0 top-0 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#1D1D1F]/[0.08] bg-white/80 text-[#1D1D1F]/55 shadow-sm backdrop-blur transition-all hover:bg-white hover:text-[#1D1D1F]/80 active:scale-90"
+            className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-[#083B75]/45 text-white/85 shadow-[inset_0_1px_2px_rgba(255,255,255,0.35)] backdrop-blur-[2px] transition-all hover:bg-[#083B75]/65 hover:text-white active:scale-90"
           >
-            {sfx.muted ? <VolumeX size={13} aria-hidden /> : <Volume2 size={13} aria-hidden />}
+            {sfx.muted ? <VolumeX size={12} aria-hidden /> : <Volume2 size={12} aria-hidden />}
           </button>
         ) : null}
 
@@ -1072,6 +1219,7 @@ export function CouponMachine({
           <motion.div
             key={`reveal-${playToken}`}
             role="status"
+            ref={revealRef}
             initial={{ opacity: 0, y: 16, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -1088,7 +1236,9 @@ export function CouponMachine({
               <p className="mt-1 text-center text-[15px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
                 {prize.title?.trim() || "A little something for you"}
               </p>
-              <div className="mt-3 flex items-center gap-2 rounded-[14px] bg-[#F5F5F7] px-3 py-2.5">
+              <div className="relative mt-3 flex items-center gap-2 rounded-[14px] border border-dashed border-[#F59E0B]/45 bg-gradient-to-b from-[#FFFBEB] to-[#FFF6DC] px-3.5 py-2.5">
+                <span aria-hidden className="absolute -left-[5px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white shadow-[inset_0_0_0_1.5px_rgba(245,158,11,0.28)]" />
+                <span aria-hidden className="absolute -right-[5px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white shadow-[inset_0_0_0_1.5px_rgba(245,158,11,0.28)]" />
                 <span
                   className="min-w-0 flex-1 truncate font-mono text-[16px] font-bold tracking-[0.14em] text-[#1D1D1F]"
                   aria-label={`Coupon code ${prize.code}`}
@@ -1105,7 +1255,7 @@ export function CouponMachine({
                   className={cn(
                     "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[11.5px] font-extrabold tracking-wide text-white transition-all active:scale-95",
                     copied
-                      ? "bg-gradient-to-br from-[#4ADE80] to-[#16A34A] shadow-[0_8px_20px_-8px_rgba(22,163,74,0.7)]"
+                      ? "md-pop bg-gradient-to-br from-[#4ADE80] to-[#16A34A] shadow-[0_8px_20px_-8px_rgba(22,163,74,0.7)]"
                       : "bg-gradient-to-br from-[#A96BFF] to-[#8B3FE8] shadow-[0_8px_20px_-8px_rgba(139,92,246,0.75)]"
                   )}
                 >
