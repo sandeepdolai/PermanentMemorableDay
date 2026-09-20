@@ -96,7 +96,7 @@ export function SideNav({
     >
       {/* Brand */}
       <div className={cn("flex items-center gap-3", collapsed ? "justify-center" : "px-2")}>
-        <LogoMark size={collapsed ? 34 : 38} />
+        <LogoMark size={collapsed ? 40 : 44} />
         {!collapsed && (
           <div className="min-w-0">
             <p className="truncate text-[16px] font-bold tracking-[-0.015em] text-[#1D1D1F]">

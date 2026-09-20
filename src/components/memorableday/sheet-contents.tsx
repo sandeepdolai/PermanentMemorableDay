@@ -1184,7 +1184,7 @@ function ShareReportCard({
       <div className="relative overflow-hidden rounded-[18px] bg-[#1D1D1F] p-4 text-white shadow-[0_16px_36px_-14px_rgba(29,29,31,0.55)]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <LogoMark size={24} />
+            <LogoMark size={28} />
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/90">
                 Performance report
@@ -1820,7 +1820,7 @@ export function AuthContent({
     <div className="pb-2">
       {/* Brand */}
       <div className="mb-4 flex flex-col items-center pt-1">
-        <LogoMark size={52} />
+        <LogoMark size={64} />
         <h3 className="mt-3 text-[20px] font-bold tracking-[-0.02em] text-[#1D1D1F]">
           {isSignIn ? "Welcome back" : "Create your account"}
         </h3>

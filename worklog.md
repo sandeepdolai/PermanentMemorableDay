@@ -1355,3 +1355,22 @@ Stage Summary:
 - Repo state committed and pushed to sandeepdolai/PermanentMemorableDay.
 - SECURITY (carried): the GitHub classic PAT was posted in chat again this round — user should rotate it at github.com/settings/tokens after sandbox work.
 - Next-phase queue: Rose block, library search field, public /e/[slug] recipient page, per-scene soundtrack override, AI sketch->soundtrack, creator claims analytics dashboard; when coupon relaunches: haptics on grab, miss-variant choreography, replay micro-skip.
+
+---
+Task ID: 39
+Agent: Z.ai Code (main orchestrator)
+Task: User reported the website logo looked low quality and small. Replace it with the EXACT logo file the user pushed to GitHub (commit b02dc96 "MemorableDay Logo"), with zero quality reduction.
+
+Work Log:
+- Pulled the user's commit b02dc96 which added the exact original PNG (36336c20-b4c6-11f1-9ab4-9bcd5ed98ca4.png, 1254x1254 RGBA, 1.06MB) at the repo root. Verified md5-identical to the upload-folder copy.
+- Root cause of the quality loss: the previous round quantized public/logo.png to a 256-color palette (P mode) and downscaled to 512px — visible banding/softening in the emblem.
+- Replaced assets with the EXACT original, byte-for-byte (md5 367d80ad...): public/logo.png and src/app/icon.png are now straight copies of the user's file. apple-icon.png stays 180x180 (Apple's hard requirement; already losslessly built from the original). Cleared .next/cache/images to purge stale optimizer variants.
+- LogoMark (bits.tsx) now renders with `unoptimized` — next/image serves the exact PNG bytes directly, bypassing the sharp optimizer (which recompresses at q=75 and can emit lossy WebP). The browser downsamples the full-res source for display, which is lossless.
+- Bumped display sizes across all LogoMark call sites (was too small): side-nav 38->44 (collapsed 34->40), welcome-tour 34->40, insights report card 24->28, auth sheet 52->64, moment-player end screen 56->68. Default prop 36->40.
+- Verified: curl shows /logo.png and /icon.png serve 1,060,040 bytes with md5 equal to the uploaded file; DOM check shows the sidebar logo displayed 44x44 with naturalWidth 1254; VLM visual assessment of the screenshot: "crisp and high quality... no banding, color loss, or compression artifacts... reasonable and prominent". bun run lint clean; dev.log healthy.
+
+Stage Summary:
+- The official bunny logo now ships as the user's exact uploaded PNG everywhere (sidebar, tour, sheets, player end screen, favicon) with zero recompression, at more prominent sizes.
+- The user's repo-root PNG file is kept in git untouched (their commit).
+- SECURITY (carried): the GitHub classic PAT was posted in chat — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: Rose block, library search field, public /e/[slug] recipient page, per-scene soundtrack override, AI sketch->soundtrack, creator claims analytics dashboard; coupon relaunch flag COUPON_REVEAL_ENABLED=false.

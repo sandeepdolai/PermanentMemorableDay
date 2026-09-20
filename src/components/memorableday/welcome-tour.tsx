@@ -113,7 +113,7 @@ export function WelcomeTour({
             />
             <div className="mx-auto max-w-[340px]">
               <div className="flex items-center gap-2.5">
-                <LogoMark size={34} />
+                <LogoMark size={40} />
                 <p className="text-[13px] font-bold uppercase tracking-[0.12em] text-[#AAAAAA]">
                   MemorableDay
                 </p>

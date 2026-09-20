@@ -1686,7 +1686,7 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", stiffness: 240, damping: 18 }}
                 >
-                  <LogoMark size={56} />
+                  <LogoMark size={68} />
                 </motion.div>
                 <motion.p
                   initial={{ opacity: 0, y: 14 }}

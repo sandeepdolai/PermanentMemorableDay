@@ -71,8 +71,10 @@ export function StatusBadge({ status, className }: { status: MomentStatus; class
   );
 }
 
-/** MemorableDay logo mark — the official brand emblem (public/logo.png) */
-export function LogoMark({ size = 36 }: { size?: number }) {
+/** MemorableDay logo mark — the official brand emblem (public/logo.png).
+ *  `unoptimized` ships the exact uploaded PNG bytes — no recompression,
+ *  no color reduction, no resizing. The browser downsamples for display. */
+export function LogoMark({ size = 40 }: { size?: number }) {
   return (
     <span
       aria-hidden
@@ -84,7 +86,7 @@ export function LogoMark({ size = 36 }: { size?: number }) {
         alt=""
         width={size}
         height={size}
-        sizes={`${size}px`}
+        unoptimized
         className="h-full w-full select-none object-contain"
         draggable={false}
       />
