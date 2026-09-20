@@ -1431,3 +1431,27 @@ Stage Summary:
 - Model gotchas documented for future 3D assets: (a) check TEXCOORD_0 for all-zero UVs (fab-conversion exports can be broken — runtime rebind fix is in flower-3d.tsx), (b) Sketchfab PBR metalness needs a matte pass under stage lighting, (c) skinned models must clone via SkeletonUtils.
 - SECURITY (carried): GitHub PAT + Kokraf credentials were posted in chat during earlier rounds — rotate both after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), optional haptics on claw grab.
+
+---
+Task ID: 42
+Agent: Z.ai Code (main orchestrator)
+Task: User feedback on the flower block player: (1) rose looks like opacity was reduced — fix it; (2) remove the glow; (3) remove the rain-looking thing (drifting petals); (4) remove zoom; (5) there still looks like a frame — remove it; (6) remove the "ROSE · REAL 3D" card text (viewers don't care); (7) match the rose camera angle to the 2 reference screenshots the user uploaded (same-to-same); (8) apply everything to the Azalea too.
+
+Work Log:
+- Analyzed the user's 2 uploaded reference screenshots (upload/Screenshot_2026_0920_204810.png + 204832.png) with VLM: target = bloom facing the camera dead-front, camera slightly above looking into the open bloom, intimate close-up framing (plant fills ~97% height / ~90% width, top margin ~2%, stem cropped at bottom), clean dark background, zero UI/frame/glow. Quantified the reference with PIL masks: REF-B = 97%h/90%w fill, top-margin 2%.
+- Rebuilt the offline tuning rig (public/_rig + import-map page served by the dev server, mirroring three 0.186 build + GLTFLoader/RoomEnvironment; pngjs devDep temporarily for a headless attempt that lost to the browser route). Swept az 0-84 (contact sheet → VLM: az≈0 is dead-front; 72-84 = side profile) then elevation grid + tightness grid; measured every candidate's plant bbox fill with the same PIL mask used on the reference. Final pick (VLM A/B winner vs reference): az=6, el=22, dist=1.15, ty=0.62 → app measures 97%h/84%w, top-margin 3%, stem bottom-cropped (width gap vs reference is model shape — user's rose is a tall bud, reference is a wide garden rose; VLM confirmed model is different, framing treatment now matches).
+- ROOT CAUSE of the washed-out rose: rose.glb material is alphaMode BLEND (atlas alpha is 99.6% binary) → three.js renders it in the transparent pass: no depth write + triangle sorting → petals read translucent/mis-sorted. FIX: new variety flag `cutout` (rose: true) → at load, transparent=false + alphaTest 0.5 + depthWrite=true → fully opaque, correctly depth-sorted petals (the binary alpha makes alphaTest lossless). Azalea verified OPAQUE already (1 material, no BLEND).
+- flower-3d.tsx: cutout hardening pass ③; OrbitControls enableZoom={false} (min/maxDistance removed); toneMappingExposure 1.1→1.12; header comment documents no-zoom policy.
+- md-blocks.ts: rose hero angle 42/10/2.3/0.58 → 6/22/1.15/0.62 with reference-matching comment; cutout flag on both varieties (rose true / azalea false).
+- moment-player.tsx FlowerBlockView: REMOVED the rounded-rect aura glow div (this was both the "glow" AND the pseudo-frame — its blurred rounded boundary read as a panel edge); REMOVED PetalDrift component + usage entirely (the rain-looking falling petals); REMOVED the "Rose · real 3D" card subtitle; hint now "DRAG TO LOOK" (still) / "DRAG TO SPIN" (spin) — no zoom mention.
+- builder.tsx: editor caption no longer mentions pinch-to-zoom.
+- Regenerated public/models/rose-thumb.png with the new hero angle (560×560, velvet bg) so Library cards/variety chips match the new presentation.
+- E2E (agent-browser 1280×860 + 390×844, VLM-verified): rose player — opacity PASS (petals + leaves solid), glow PASS (none), particles PASS (none), frame PASS (none), card shows only the dedication (no tech label), angle/framing matches reference treatment; zoom test — 3 wheel events over the canvas = 0 pixels changed (disabled); spin mode — 21k px change over 3s (turntable live) + "DRAG TO SPIN" hint; azalea player — same all-PASS + bee clip playing; mobile 390px — all PASS, no overflow; bun run lint clean; tsc — no new errors (22 pre-existing in HEAD unchanged); dev.log clean, zero console/page errors.
+- Cleaned up: public/_rig + scripts/rose-angle-rig.mjs deleted, pngjs devDep removed.
+
+Stage Summary:
+- The flower player is now exactly what the user asked: a fully-opaque rose at the reference's dead-front slightly-above intimate close-up, floating clean on the scene — no glow, no falling particles, no frame, no zoom, no tech-jargon card text. Azalea gets the identical treatment (keeping its own curated angle per "Rose Angle Only").
+- The cutout flag is the fix pattern for any future BLEND/binary-alpha GLB (washed-out translucency + petal sorting).
+- Key gotcha for future tuning: the player stage aspect (max-w-460 × h-380/430) differs from ad-hoc rig aspect — always tune at the exact stage aspect; and verify with PIL bbox masks (fill %, top margin, bottom crop) against the reference, not just VLM eyes.
+- SECURITY (carried): GitHub PAT + Kokraf credentials were posted in chat during earlier rounds — rotate both after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false).

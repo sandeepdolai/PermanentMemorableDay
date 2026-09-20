@@ -44,18 +44,20 @@ export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498
 /** 3D-flower varieties — real GLB models (user-authored assets from the repo).
  *  Each variety carries its hero camera ("best angle": azimuth/elevation in
  *  degrees, distance in model-heights, target height fraction), accent colors
- *  for the stage glow/petals/card, and a thumbnail used across lists. */
+ *  for the card, and a thumbnail used across lists. */
 export const FLOWER_VARIETIES = [
   {
     id: "rose",
     name: "Rose",
     model: "/models/rose.glb",
     thumb: "/models/rose-thumb.png",
-    /* curated hero angle — 3/4 view, bloom prominent, whole plant in frame */
-    az: 42,
-    el: 10,
-    dist: 2.3,
-    ty: 0.58,
+    /* curated hero angle — matches the user's reference screenshots: bloom
+     * facing the camera dead-front, camera slightly above looking into the
+     * open bloom, intimate close-up framing, stem cropped at the frame bottom */
+    az: 6,
+    el: 22,
+    dist: 1.15,
+    ty: 0.62,
     base: "#7A0E30",
     mid: "#C2185B",
     edge: "#FF9EBE",
@@ -64,6 +66,10 @@ export const FLOWER_VARIETIES = [
     needsUvRebind: true,
     /** azalea-style PBR metals read as wet plastic under stage light */
     matte: false,
+    /** the atlas is alphaMode BLEND with binary alpha — render it as an
+     *  opaque alphaTest cutout so petals stay fully opaque (no washed-out
+     *  translucency) and depth-sort correctly */
+    cutout: true,
     playAnim: false,
   },
   {
@@ -81,6 +87,7 @@ export const FLOWER_VARIETIES = [
     leaf: "#2E5B2B",
     needsUvRebind: false,
     matte: true,
+    cutout: false,
     /** the GLB ships a looping "Insectfly" clip — a bee orbiting the bloom */
     playAnim: true,
   },

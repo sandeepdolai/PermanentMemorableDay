@@ -14,6 +14,9 @@
  *    light — metalness is zeroed for an organic read.
  *  · every model is auto-normalized (centered, base on the ground, unit
  *    height) so both varieties compose identically in the stage.
+ *
+ * Recipients can drag to look around the flower — zoom is intentionally
+ * disabled so the curated framing is always preserved.
  */
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -114,9 +117,24 @@ function FlowerModel({ variety, reducedMotion }: { variety: FlowerVariety; reduc
           std.roughness = Math.max(std.roughness, 0.45);
         }
       }
+
+      // ③ full opacity — the rose's BLEND atlas is effectively binary alpha;
+      //    blended rendering leaves petals washed-out and mis-sorted. An
+      //    opaque alphaTest cutout keeps them solid and correctly depth-sorted.
+      if (variety.cutout) {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const m of mats) {
+          if (!m) continue;
+          const std = m as THREE.MeshStandardMaterial;
+          std.transparent = false;
+          std.alphaTest = 0.5;
+          std.depthWrite = true;
+          std.needsUpdate = true;
+        }
+      }
     });
 
-    // ③ normalize: centered on origin, base at y=0, height H
+    // ④ normalize: centered on origin, base at y=0, height H
     const bbox = new THREE.Box3().setFromObject(root);
     const size = bbox.getSize(new THREE.Vector3());
     const center = bbox.getCenter(new THREE.Vector3());
@@ -175,11 +193,10 @@ function Rig({ variety, motion, reducedMotion }: { variety: FlowerVariety; motio
     <OrbitControls
       target={[0, ty, 0]}
       enablePan={false}
+      enableZoom={false}
       enableDamping
       dampingFactor={0.08}
       rotateSpeed={0.75}
-      minDistance={H * 1.15}
-      maxDistance={H * 3.5}
       minPolarAngle={0.3}
       maxPolarAngle={1.52}
       autoRotate={motion === "spin" && !reducedMotion}
@@ -221,7 +238,7 @@ export function Flower3D({
       <Canvas
         camera={{ fov: 34, position: [...camPos], near: 0.05, far: 80 }}
         onCreated={({ gl }) => {
-          gl.toneMappingExposure = 1.1;
+          gl.toneMappingExposure = 1.12;
         }}
         dpr={[1.5, 2]}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}

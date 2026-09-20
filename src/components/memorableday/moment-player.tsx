@@ -667,18 +667,11 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
         <Sparkles size={11} aria-hidden /> For you
       </p>
 
-      {/* Frameless stage — the bloom floats directly on the scene with a
-       * soft aura behind it (no box, no border) */}
+      {/* Frameless stage — the bloom floats directly on the scene. No box,
+       * no border, no glow, no particles: just the flower. */}
       <div className="relative mt-4 w-full max-w-[460px]">
-        <div
-          aria-hidden
-          className="absolute inset-x-8 top-4 bottom-10 rounded-[40px] opacity-60 blur-3xl"
-          style={{ background: `radial-gradient(circle at 50% 34%, ${variety.mid}4D 0%, transparent 68%)` }}
-        />
         <div className="relative h-[380px] overflow-hidden md:h-[430px]">
           <FlowerStage varietyId={d?.roseStyle} motion={d?.flowerMotion} className="h-full w-full" />
-          {/* drifting petals */}
-          <PetalDrift color={variety.edge} />
           {/* the look hint fades on first interaction */}
           {!hintGone ? (
             <motion.p
@@ -688,7 +681,7 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
               className="pointer-events-none absolute bottom-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/30 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.08em] text-white/75 backdrop-blur-sm"
               onPointerEnter={() => setHintGone(true)}
             >
-              {present === "spin" ? "DRAG TO SPIN · PINCH TO ZOOM" : "DRAG TO LOOK CLOSER"}
+              {present === "spin" ? "DRAG TO SPIN" : "DRAG TO LOOK"}
             </motion.p>
           ) : null}
         </div>
@@ -712,52 +705,8 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
           {message ||
             (variety.id === "azalea" ? "An azalea that will never fade." : "A rose that will never wilt.")}
         </p>
-        <p className="mt-1.5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-white/50">
-          {variety.name} · real 3D
-        </p>
       </motion.div>
     </motion.div>
-  );
-}
-
-/** Gentle endless petal drift inside the flower stage (pure CSS motion). */
-function PetalDrift({ color }: { color: string }) {
-  const petals = useMemo(
-    () =>
-      Array.from({ length: 7 }, (_, i) => ({
-        left: 8 + ((i * 13.7) % 84),
-        delay: -(i * 3.2),
-        dur: 11 + (i % 3) * 2.5,
-        size: 9 + (i % 4) * 3,
-        spin: i % 2 === 0 ? 1 : -1,
-      })),
-    []
-  );
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      {petals.map((p, i) => (
-        <span
-          key={i}
-          className="absolute top-[-6%] block"
-          style={{
-            left: `${p.left}%`,
-            width: p.size,
-            height: p.size * 1.25,
-            borderRadius: "60% 40% 55% 45% / 55% 60% 40% 45%",
-            background: `linear-gradient(135deg, ${color} 0%, ${color}99 100%)`,
-            opacity: 0,
-            animation: `md-rose-drift ${p.dur}s linear ${p.delay}s infinite`,
-            ["--rose-spin" as string]: `${p.spin}`,
-          }}
-        />
-      ))}
-      <style>{`@keyframes md-rose-drift {
-        0%   { transform: translate3d(0,0,0) rotate(0deg); opacity: 0; }
-        8%   { opacity: 0.75; }
-        85%  { opacity: 0.55; }
-        100% { transform: translate3d(34px, 430px, 0) rotate(calc(240deg * var(--rose-spin))); opacity: 0; }
-      }`}</style>
-    </div>
   );
 }
 

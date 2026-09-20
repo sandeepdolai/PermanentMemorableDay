@@ -1852,7 +1852,7 @@ function RoseBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
           })}
         </div>
         <p className="mt-1.5 px-1 text-[11px] font-medium text-[#AAAAAA]">
-          Either way, they can still drag the flower to look around — and pinch to zoom.
+          Either way, they can still gently drag the flower to look around.
         </p>
       </div>
 
