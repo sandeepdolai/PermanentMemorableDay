@@ -384,10 +384,40 @@
   }
 }
 
+/* Coupon machine — blue vibration lines flanking the held ticket. A CSS
+   timeline (duration set inline to match the claw sequence) instead of a
+   framer-motion keyframe group, which proved unreliable for this element. */
+.md-vib {
+  opacity: 0;
+}
+.md-vib.is-running {
+  animation: md-vib var(--md-vib-dur, 4.6s) linear both;
+}
+@keyframes md-vib {
+  0%,
+  75% {
+    opacity: 0;
+  }
+  79%,
+  94% {
+    opacity: 1;
+  }
+  98.5% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .md-bulb,
   .md-dot,
   .md-pop {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+  .md-vib.is-running {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
