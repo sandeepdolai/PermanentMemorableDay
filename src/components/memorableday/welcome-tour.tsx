@@ -89,7 +89,7 @@ export function WelcomeTour({
                 {/* soft gradient into the sheet below */}
                 <span
                   aria-hidden
-                  className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[#F5F5F7]"
+                  className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[#F5F5F7] dark:to-[#101014]"
                 />
               </motion.div>
             </AnimatePresence>

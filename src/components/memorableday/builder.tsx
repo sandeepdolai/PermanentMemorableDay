@@ -5213,7 +5213,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             <div
               aria-hidden
               className={cn(
-                "pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-[#F5F5F7] via-[#F5F5F7]/80 to-transparent transition-opacity duration-300 lg:hidden",
+                "pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-[#F5F5F7] via-[#F5F5F7]/80 to-transparent transition-opacity duration-300 dark:from-[#101014] dark:via-[#101014]/80 lg:hidden",
                 paletteAtEnd ? "opacity-0" : "opacity-100"
               )}
             />
