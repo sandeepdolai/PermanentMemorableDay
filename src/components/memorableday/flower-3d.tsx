@@ -1,86 +1,79 @@
 "use client";
 
 /**
- * flower-3d.tsx — the real 3D flower stage (GLB models).
+ * flower-3d.tsx — the 3D flower stage (GLB models, selection-only block).
  *
- * Renders the user-authored flower models (public/models/*.glb) with a
- * curated hero camera per variety ("best angle"), a slow optional turntable,
- * and the model's own baked animation (the azalea ships a looping bee).
+ * Renders the user's rose-bouquet GLB (public/models/rose-bouquet.glb — a
+ * 1.86M-triangle photogrammetry model, opaque, meshopt-compressed) at its
+ * curated hero angle. Recipients can drag to look around — no zoom, no pan,
+ * no spin, no extras: the flower is the whole block.
  *
- * Model hardening done at load (never touching the files on disk):
- *  · rose.glb exports TEXCOORD_0 as all zeros — the real UVs live in
- *    TEXCOORD_1, so the rebind below restores textured rendering.
- *  · the azalea's PBR metalness makes it look wet-plastic under stage
- *    light — metalness is zeroed for an organic read.
- *  · every model is auto-normalized (centered, base on the ground, unit
- *    height) so both varieties compose identically in the stage.
- *
- * Recipients can drag to look around the flower — zoom is intentionally
- * disabled so the curated framing is always preserved.
+ * Model notes (from load-time forensics):
+ *  · EXT_meshopt_compression + KHR_mesh_quantization — drei's useGLTF wires
+ *    the MeshoptDecoder automatically.
+ *  · The material is OPAQUE with a packed ORM texture — no alpha games needed.
+ *  · The black wrapping needs a warm rim light to separate from the dark
+ *    stage backdrop (the gold trim + rim do the work).
  */
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, OrbitControls, useAnimations, useGLTF } from "@react-three/drei";
+import { ContactShadows, OrbitControls, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
-import type { FlowerMotion, FlowerVariety } from "@/lib/md-blocks";
+import type { Flower } from "@/lib/md-blocks";
 
 /** Normalized model height in world units — the stage is built around it. */
 const H = 1.7;
 
-/** Per-variety light rig tuning (soft env for the matte azalea). */
-const LIGHT_RIG: Record<string, { env: number; key: number }> = {
-  rose: { env: 0.42, key: 1.7 },
-  azalea: { env: 0.2, key: 1.3 },
-};
-
 /* ------------------------------------------------------------------ */
-/* Studio lighting — procedural environment (no network HDR) + 3-point  */
+/* Studio lighting — procedural env (no network HDR) + 3-point + rim    */
 /* ------------------------------------------------------------------ */
 
-function StudioLighting({ variety }: { variety: FlowerVariety }) {
+function StudioLighting() {
   const { gl, scene } = useThree();
-  const rig = LIGHT_RIG[variety.id] ?? LIGHT_RIG.rose;
 
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
     const env = pmrem.fromScene(new RoomEnvironment(), 0.04);
     // eslint-disable-next-line react-hooks/immutability -- three.js scene objects are mutable by design; this is the standard env-map pattern
     scene.environment = env.texture;
-    scene.environmentIntensity = rig.env;
+    scene.environmentIntensity = 0.42;
     return () => {
       scene.environment = null;
       env.dispose();
       pmrem.dispose();
     };
-  }, [gl, scene, rig.env]);
+  }, [gl, scene]);
 
   return (
     <>
-      <hemisphereLight args={["#fff1f4", "#30201c", 0.5]} />
-      <directionalLight position={[2.6, 4.2, 3.2]} intensity={rig.key} color="#fff6ee" />
+      <hemisphereLight args={["#fff1f4", "#2b1512", 0.55]} />
+      {/* key — warm, from upper front-right */}
+      <directionalLight position={[2.6, 4.2, 3.2]} intensity={1.7} color="#fff6ee" />
+      {/* fill — soft pink from the left */}
       <directionalLight position={[-3.4, 1.6, 1.8]} intensity={0.5} color="#ffe3ec" />
-      <directionalLight position={[-1.2, 3.0, -3.6]} intensity={0.8} color="#ffc9d9" />
+      {/* rim — warm edge from behind so the black wrapping reads on the dark stage */}
+      <directionalLight position={[-2.2, 3.4, -3.4]} intensity={1.05} color="#ffd9a8" />
     </>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* The model — clone, harden, normalize, animate                        */
+/* The model — clone, soften metals, normalize, gentle entry            */
 /* ------------------------------------------------------------------ */
 
 function easeOutCubic(t: number) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function FlowerModel({ variety, reducedMotion }: { variety: FlowerVariety; reducedMotion: boolean }) {
-  const { scene, animations } = useGLTF(variety.model);
+function FlowerModel({ flower, reducedMotion }: { flower: Flower; reducedMotion: boolean }) {
+  const { scene } = useGLTF(flower.model);
   const entry = useRef<THREE.Group>(null);
   const startRef = useRef<number | null>(null);
 
-  // Clone (skeleton-safe) + harden + normalize. Keyed by the cached scene +
-  // variety — a remount (parent keys by variety id) rebuilds everything.
+  // Clone + harden + normalize. Keyed by the cached scene + flower — a
+  // remount (parent keys by flower id) rebuilds everything.
   const model = useMemo(() => {
     const root = skeletonClone(scene);
 
@@ -88,53 +81,19 @@ function FlowerModel({ variety, reducedMotion }: { variety: FlowerVariety; reduc
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh || !mesh.geometry) return;
 
-      // ① exporter-broken UVs: TEXCOORD_0 all zeros, real atlas UVs in uv1
-      const uv = mesh.geometry.getAttribute("uv");
-      const uv1 = mesh.geometry.getAttribute("uv1");
-      if (uv && uv1) {
-        let dead = true;
-        for (let i = 0; i < Math.min(uv.count, 64) && dead; i++) {
-          if (uv.getX(i) !== 0 || uv.getY(i) !== 0) dead = false;
-        }
-        if (dead) {
-          let alive = false;
-          for (let i = 0; i < Math.min(uv1.count, 64) && !alive; i++) {
-            if (uv1.getX(i) !== 0 || uv1.getY(i) !== 0) alive = true;
-          }
-          if (alive) mesh.geometry.setAttribute("uv", uv1);
-        }
-      }
-
-      // ② organic read — kill baked metalness, tame the env reflections
-      if (variety.matte) {
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const m of mats) {
-          if (!m) continue;
-          const std = m as THREE.MeshStandardMaterial;
-          std.metalness = 0;
-          std.metalnessMap = null;
-          std.envMapIntensity = 0.3;
-          std.roughness = Math.max(std.roughness, 0.45);
-        }
-      }
-
-      // ③ full opacity — the rose's BLEND atlas is effectively binary alpha;
-      //    blended rendering leaves petals washed-out and mis-sorted. An
-      //    opaque alphaTest cutout keeps them solid and correctly depth-sorted.
-      if (variety.cutout) {
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const m of mats) {
-          if (!m) continue;
-          const std = m as THREE.MeshStandardMaterial;
-          std.transparent = false;
-          std.alphaTest = 0.5;
-          std.depthWrite = true;
-          std.needsUpdate = true;
-        }
+      // Photogrammetry bakes can carry hot metalness — tame it so the
+      // wrapping reads as paper under stage light, not wet foil.
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        if (!m) continue;
+        const std = m as THREE.MeshStandardMaterial;
+        if (std.metalness > 0.55) std.metalness = 0.35;
+        std.envMapIntensity = 0.45;
+        std.needsUpdate = true;
       }
     });
 
-    // ④ normalize: centered on origin, base at y=0, height H
+    // Normalize: centered on origin, base at y=0, height H.
     const bbox = new THREE.Box3().setFromObject(root);
     const size = bbox.getSize(new THREE.Vector3());
     const center = bbox.getCenter(new THREE.Vector3());
@@ -145,19 +104,7 @@ function FlowerModel({ variety, reducedMotion }: { variety: FlowerVariety; reduc
     const wrap = new THREE.Group();
     wrap.add(root);
     return wrap;
-  }, [scene, variety]);
-
-  // The model's own clip (azalea: the bee) — loop it, unless reduced motion.
-  const { actions } = useAnimations(animations, model);
-  useEffect(() => {
-    if (!variety.playAnim || reducedMotion) return;
-    const action = Object.values(actions)[0];
-    if (!action) return;
-    action.reset().setLoop(THREE.LoopRepeat, Infinity).play();
-    return () => {
-      action.stop();
-    };
-  }, [actions, variety, reducedMotion]);
+  }, [scene, flower]);
 
   // Entry: a soft scale-up + rise (0.9s, eased). Snaps when reduced motion.
   useFrame((state) => {
@@ -180,15 +127,11 @@ function FlowerModel({ variety, reducedMotion }: { variety: FlowerVariety; reduc
 }
 
 /* ------------------------------------------------------------------ */
-/* Camera rig — curated best angle + optional turntable                 */
+/* Camera rig — the curated hero angle. Drag-to-look only.              */
 /* ------------------------------------------------------------------ */
 
-function Rig({ variety, motion, reducedMotion }: { variety: FlowerVariety; motion: FlowerMotion; reducedMotion: boolean }) {
-  const az = THREE.MathUtils.degToRad(variety.az);
-  const el = THREE.MathUtils.degToRad(variety.el);
-  const d = variety.dist * H;
-  const ty = variety.ty * H;
-
+function Rig({ flower }: { flower: Flower }) {
+  const ty = flower.ty * H;
   return (
     <OrbitControls
       target={[0, ty, 0]}
@@ -199,8 +142,6 @@ function Rig({ variety, motion, reducedMotion }: { variety: FlowerVariety; motio
       rotateSpeed={0.75}
       minPolarAngle={0.3}
       maxPolarAngle={1.52}
-      autoRotate={motion === "spin" && !reducedMotion}
-      autoRotateSpeed={1.3}
       makeDefault
     />
   );
@@ -210,15 +151,7 @@ function Rig({ variety, motion, reducedMotion }: { variety: FlowerVariety; motio
 /* Public component                                                    */
 /* ------------------------------------------------------------------ */
 
-export function Flower3D({
-  variety,
-  motion = "still",
-  className,
-}: {
-  variety: FlowerVariety;
-  motion?: FlowerMotion;
-  className?: string;
-}) {
+export function Flower3D({ flower, className }: { flower: Flower; className?: string }) {
   const reducedMotion = useMemo(() => {
     if (typeof window === "undefined") return false;
     return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -226,12 +159,12 @@ export function Flower3D({
 
   // Hero camera position from the curated best angle.
   const camPos = useMemo(() => {
-    const az = THREE.MathUtils.degToRad(variety.az);
-    const el = THREE.MathUtils.degToRad(variety.el);
-    const d = variety.dist * H;
-    const ty = variety.ty * H;
+    const az = THREE.MathUtils.degToRad(flower.az);
+    const el = THREE.MathUtils.degToRad(flower.el);
+    const d = flower.dist * H;
+    const ty = flower.ty * H;
     return [d * Math.cos(el) * Math.sin(az), ty + d * Math.sin(el), d * Math.cos(el) * Math.cos(az)] as const;
-  }, [variety]);
+  }, [flower]);
 
   return (
     <div className={className} style={{ touchAction: "none" }}>
@@ -240,28 +173,21 @@ export function Flower3D({
         onCreated={({ gl }) => {
           gl.toneMappingExposure = 1.12;
         }}
-        dpr={[1.5, 2]}
+        dpr={[1, 2]}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
       >
-        <StudioLighting variety={variety} />
+        <StudioLighting />
         <Suspense fallback={null}>
-          <FlowerModel key={variety.id} variety={variety} reducedMotion={reducedMotion} />
+          <FlowerModel key={flower.id} flower={flower} reducedMotion={reducedMotion} />
         </Suspense>
-        <ContactShadows
-          position={[0, 0.001, 0]}
-          scale={2.9}
-          blur={2.4}
-          far={1.4}
-          opacity={0.28}
-          color="#2b0f1d"
-          frames={variety.playAnim ? Infinity : 60}
-        />
-        <Rig variety={variety} motion={motion} reducedMotion={reducedMotion} />
+        {/* grounds the bouquet so its base doesn't float on the dark stage */}
+        <ContactShadows position={[0, 0.001, 0]} scale={2.9} blur={2.4} far={1.4} opacity={0.32} color="#1d0a12" frames={60} />
+        <Rig flower={flower} />
       </Canvas>
     </div>
   );
 }
 
-/* The default variety is small (728 KB) — warm the cache for instant first
- * paint. The azalea (13 MB) is only fetched when it's actually selected. */
-useGLTF.preload("/models/rose.glb");
+/* The bouquet is 17.7 MB — warm the cache as soon as a flower stage mounts
+ * (the load veil covers the wait). */
+useGLTF.preload("/models/rose-bouquet.glb");

@@ -4,15 +4,15 @@
  * flower-stage.tsx — the client-only wrapper for the 3D flower stage.
  *
  * The R3F canvas loads via next/dynamic (ssr: false) so three.js never runs
- * on the server. While a model downloads (the azalea is ~13 MB) a soft
- * progress veil shows live percentage; a static SVG bloom is the graceful
- * fallback if WebGL is unavailable.
+ * on the server. While the bouquet (~18 MB) downloads, a soft progress veil
+ * shows the live percentage; a static SVG bloom is the graceful fallback if
+ * WebGL is unavailable.
  */
 import dynamic from "next/dynamic";
 import { Component, type ReactNode } from "react";
 import { useProgress } from "@react-three/drei";
 import { cn } from "@/lib/utils";
-import { flowerMotion, flowerVariety, type FlowerMotion } from "@/lib/md-blocks";
+import { flower as resolveFlower, type Flower } from "@/lib/md-blocks";
 
 const Flower3D = dynamic(() => import("./flower-3d").then((m) => m.Flower3D), {
   ssr: false,
@@ -33,14 +33,14 @@ function FlowerLoading() {
 }
 
 /** Live download veil — appears while the GLB streams in. */
-function LoadVeil({ varietyName }: { varietyName: string }) {
+function LoadVeil({ name }: { name: string }) {
   const { active, progress } = useProgress();
   if (!active || progress >= 100) return null;
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2.5">
       <FlowerLoading />
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
-        Blooming the {varietyName.toLowerCase()} · {Math.round(progress)}%
+        Blooming the {name.toLowerCase()} · {Math.round(progress)}%
       </p>
     </div>
   );
@@ -104,26 +104,18 @@ class FlowerBoundary extends Component<{ children: ReactNode }, { failed: boolea
 }
 
 export function FlowerStage({
-  varietyId,
-  motion,
+  flowerId,
   className,
 }: {
-  varietyId?: string;
-  motion?: string;
+  flowerId?: string;
   className?: string;
 }) {
-  const variety = flowerVariety(varietyId);
-  const m: FlowerMotion = flowerMotion(motion);
+  const f: Flower = resolveFlower(flowerId);
   return (
     <FlowerBoundary>
       <div className="relative h-full w-full">
-        <Flower3D
-          key={variety.id}
-          variety={variety}
-          motion={m}
-          className={cn("h-full w-full", className)}
-        />
-        <LoadVeil varietyName={variety.name} />
+        <Flower3D key={f.id} flower={f} className={cn("h-full w-full", className)} />
+        <LoadVeil name={f.name} />
       </div>
     </FlowerBoundary>
   );

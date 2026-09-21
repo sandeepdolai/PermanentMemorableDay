@@ -41,77 +41,37 @@ export interface SongResult {
 /** Card colors the creator can assign to claw-machine coupons (pile art). */
 export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"] as const;
 
-/** 3D-flower varieties — real GLB models (user-authored assets from the repo).
- *  Each variety carries its hero camera ("best angle": azimuth/elevation in
- *  degrees, distance in model-heights, target height fraction), accent colors
- *  for the card, and a thumbnail used across lists. */
-export const FLOWER_VARIETIES = [
+/** 3D flowers — real GLB models (user-authored assets from the repo).
+ *  Each flower carries its hero camera ("best angle": azimuth/elevation in
+ *  degrees, distance in model-heights, target height fraction), an accent
+ *  color, and a thumbnail used across lists. The block editor offers ONLY
+ *  this selection — nothing else is configurable. */
+export const FLOWERS = [
   {
-    id: "rose",
-    name: "Rose",
-    model: "/models/rose.glb",
-    thumb: "/models/rose-thumb.png",
-    /* curated hero angle — matches the user's reference screenshots: bloom
-     * facing the camera dead-front, camera slightly above looking into the
-     * open bloom, intimate close-up framing, stem cropped at the frame bottom */
-    az: 6,
-    el: 22,
-    dist: 1.15,
-    ty: 0.62,
-    base: "#7A0E30",
-    mid: "#C2185B",
-    edge: "#FF9EBE",
-    leaf: "#3E7C3A",
-    /** the exporter shipped TEXCOORD_0 as all zeros — real UVs live in uv1 */
-    needsUvRebind: true,
-    /** azalea-style PBR metals read as wet plastic under stage light */
-    matte: false,
-    /** the atlas is alphaMode BLEND with binary alpha — render it as an
-     *  opaque alphaTest cutout so petals stay fully opaque (no washed-out
-     *  translucency) and depth-sort correctly */
-    cutout: true,
-    playAnim: false,
-  },
-  {
-    id: "azalea",
-    name: "Azalea",
-    model: "/models/rhododendron_azalea.glb",
-    thumb: "/models/azalea-thumb.png",
-    az: 30,
-    el: 12,
-    dist: 3.2,
+    id: "bouquet",
+    name: "Rose Bouquet",
+    model: "/models/rose-bouquet.glb",
+    thumb: "/models/bouquet-thumb.png",
+    /* curated hero angle: 3/4 view (az 20) from slightly above (el 15),
+     * intimate close-up framing (92% height fill, dead-centered) — the
+     * wrapping's gold trim reads against the dark stage */
+    az: 20,
+    el: 15,
+    dist: 1.4,
     ty: 0.5,
-    base: "#8E2A2A",
-    mid: "#E85858",
-    edge: "#FFB3A8",
-    leaf: "#2E5B2B",
-    needsUvRebind: false,
-    matte: true,
-    cutout: false,
-    /** the GLB ships a looping "Insectfly" clip — a bee orbiting the bloom */
-    playAnim: true,
+    accent: "#E0244A",
+    caption: "A wrapped bouquet of red roses — ribbon, gold trim and all. A gift that never fades.",
   },
 ] as const;
 
-export type FlowerVariety = (typeof FLOWER_VARIETIES)[number];
+export type Flower = (typeof FLOWERS)[number];
 
-/** Resolves a stored variety id → variety. Legacy rose-style palette ids
- *  (classic / crimson / blush / lavender / apricot) map to the rose model. */
-export function flowerVariety(style?: string): FlowerVariety {
-  const hit = FLOWER_VARIETIES.find((v) => v.id === style);
+/** Resolves a stored flower id → flower. Legacy fields (roseStyle with the
+ *  old "rose"/"azalea"/palette ids) all map to the current bouquet. */
+export function flower(id?: string): Flower {
+  const hit = FLOWERS.find((f) => f.id === id);
   if (hit) return hit;
-  return style && ["classic", "crimson", "blush", "lavender", "apricot"].includes(style)
-    ? FLOWER_VARIETIES[0]
-    : FLOWER_VARIETIES[0];
-}
-
-/** How the flower presents in the player — "still" parks it at its curated
- *  best angle (the default), "spin" adds a slow turntable. Recipients can
- *  always drag to look around. */
-export type FlowerMotion = "still" | "spin";
-
-export function flowerMotion(motion?: string): FlowerMotion {
-  return motion === "spin" ? "spin" : "still";
+  return FLOWERS[0];
 }
 
 /** One coupon in the claw-machine pool (creator-managed in the block editor).
@@ -186,12 +146,13 @@ export interface BlockData {
   url?: string;
   /** confetti */
   style?: string;
-  /** rose: which GLB flower model (FLOWER_VARIETIES id — "rose" | "azalea").
-   *  Legacy palette ids still resolve to the rose model. The dedication copy
-   *  lives in `message` (shared with gift). */
+  /** flower: which GLB flower model (FLOWERS id — currently "bouquet").
+   *  Legacy fields (roseStyle/flowerMotion from the retired rose block)
+   *  resolve to the bouquet. */
+  flower?: string;
+  /** @deprecated legacy rose block — kept so old moments keep resolving */
   roseStyle?: string;
-  /** rose: presentation in the player — "still" (curated best angle, the
-   *  default) or "spin" (slow turntable). Drag-to-look works either way. */
+  /** @deprecated legacy rose block presentation — ignored by the player */
   flowerMotion?: string;
 }
 

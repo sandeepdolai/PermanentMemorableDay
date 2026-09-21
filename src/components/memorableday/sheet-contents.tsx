@@ -1493,7 +1493,7 @@ export function AIComposerContent({
 const SKETCH_BLOCK_META: Record<string, { label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>; tint: string }> = {
   text: { label: "Message", icon: Type, tint: "#007AFF" },
   gift: { label: "Gift", icon: Gift, tint: "#5E5CE6" },
-  rose: { label: "Flower", icon: Flower2, tint: "#FF375F" },
+  flower: { label: "Flower", icon: Flower2, tint: "#FF375F" },
   countdown: { label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   quiz: { label: "Quiz", icon: ListChecks, tint: "#007AFF" },
   reward: { label: "Reward", icon: Award, tint: "#30D158" },

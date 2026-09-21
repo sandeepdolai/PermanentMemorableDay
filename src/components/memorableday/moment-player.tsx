@@ -32,7 +32,6 @@ import { RewardTicket } from "./reward-ticket";
 import { CouponMachine, useCouponMachine, type MachineCoupon } from "./coupon-machine";
 import { useMachineSfx } from "./coupon-sfx";
 import { FlowerStage } from "./flower-stage";
-import { flowerMotion, flowerVariety } from "@/lib/md-blocks";
 import { apiDrawCoupon, apiPeekCoupon } from "@/lib/md-client";
 import { couponPool } from "@/lib/md-blocks";
 import { LogoMark } from "./bits";
@@ -647,13 +646,10 @@ function QuizBlockView({
 }
 
 /* Flower — the real 3D bloom (GLB) floating frameless on the scene. The
- * creator chooses the variety and whether it turns or rests at its best
- * angle; the recipient can always drag to look around. */
+ * block is ONLY the selected flower: no dedication card, no motion options,
+ * no zoom — just the bloom at its curated best angle, draggable to look. */
 function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const d = block.data;
-  const variety = flowerVariety(d?.roseStyle);
-  const present = flowerMotion(d?.flowerMotion);
-  const message = d?.message?.trim();
   const [hintGone, setHintGone] = useState(false);
 
   return (
@@ -671,7 +667,7 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
        * no border, no glow, no particles: just the flower. */}
       <div className="relative mt-4 w-full max-w-[460px]">
         <div className="relative h-[380px] overflow-hidden md:h-[430px]">
-          <FlowerStage varietyId={d?.roseStyle} motion={d?.flowerMotion} className="h-full w-full" />
+          <FlowerStage flowerId={d?.flower ?? d?.roseStyle} className="h-full w-full" />
           {/* the look hint fades on first interaction */}
           {!hintGone ? (
             <motion.p
@@ -681,31 +677,11 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
               className="pointer-events-none absolute bottom-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/30 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.08em] text-white/75 backdrop-blur-sm"
               onPointerEnter={() => setHintGone(true)}
             >
-              {present === "spin" ? "DRAG TO SPIN" : "DRAG TO LOOK"}
+              DRAG TO LOOK
             </motion.p>
           ) : null}
         </div>
       </div>
-
-      {/* The dedication */}
-      <motion.div
-        initial={{ opacity: 0, y: 22 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 240, damping: 22, delay: 1.15 }}
-        className="mt-6 w-full max-w-[360px] rounded-[22px] border border-white/25 bg-white/[0.14] px-6 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl"
-      >
-        <span
-          aria-hidden
-          className="mx-auto mb-2.5 flex h-8 w-8 items-center justify-center rounded-full"
-          style={{ backgroundColor: `${variety.mid}40` }}
-        >
-          <Heart size={15} style={{ color: variety.edge }} fill="currentColor" strokeWidth={0} aria-hidden />
-        </span>
-        <p className="text-[18px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[21px]">
-          {message ||
-            (variety.id === "azalea" ? "An azalea that will never fade." : "A rose that will never wilt.")}
-        </p>
-      </motion.div>
     </motion.div>
   );
 }
@@ -1476,6 +1452,8 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                           onOpen={() => setGiftMap((m) => ({ ...m, [authoredIdx]: true }))}
                         />
                       );
+                    case "flower":
+                    // legacy "rose" blocks render as the new flower block
                     case "rose":
                       return <FlowerBlockView key={b.id} block={b} index={i} />;
                     case "countdown":

@@ -57,9 +57,8 @@ import {
   freshBlockId,
   freshSceneId,
   photoFilterCss,
-  FLOWER_VARIETIES,
-  flowerVariety,
-  flowerMotion,
+  FLOWERS,
+  flower as resolveFlower,
   uid,
   urlDomain,
   BACKGROUND_DIMS,
@@ -118,7 +117,7 @@ const BLOCKS: BlockDef[] = [
   { type: "audio", label: "Audio", icon: Music, tint: "#FF375F" },
   { type: "background", label: "Background", icon: Wallpaper, tint: "#64D2FF" },
   { type: "gift", label: "Gift", icon: Gift, tint: "#5E5CE6" },
-  { type: "rose", label: "Flower", icon: Flower2, tint: "#FF375F" },
+  { type: "flower", label: "Flower", icon: Flower2, tint: "#FF375F" },
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
   { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
@@ -482,30 +481,21 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
         </div>
       );
     }
-    case "rose": {
-      const variety = flowerVariety(d?.roseStyle);
-      const motion = flowerMotion(d?.flowerMotion);
-      const roseMessage = d?.message?.trim();
+    case "flower": {
+      const f = resolveFlower(d?.flower ?? d?.roseStyle);
       return (
         <div className="flex items-center gap-3">
           <span
             aria-hidden
             className="flex h-[58px] w-[58px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[radial-gradient(circle_at_50%_35%,#3A1526_0%,#1D1D1F_78%)]"
           >
-            <img src={variety.thumb} alt="" width={58} height={58} className="h-full w-full object-cover" draggable={false} />
+            <img src={f.thumb} alt="" width={58} height={58} className="h-full w-full object-cover" draggable={false} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D Flower · {variety.name}</p>
-            {roseMessage ? (
-              <p className="mt-1 text-[12.5px] italic leading-snug text-[#1D1D1F]/70">“{roseMessage}”</p>
-            ) : (
-              <p className="mt-1 text-[12.5px] text-[#AAAAAA]">A living bloom they can look around in 3D</p>
-            )}
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D Flower · {f.name}</p>
+            <p className="mt-1 text-[12.5px] text-[#AAAAAA]">A living bloom they can look around in 3D</p>
           </div>
           <span className="flex shrink-0 items-center gap-1.5">
-            <span className="rounded-full bg-[#1D1D1F]/[0.05] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#1D1D1F]/60">
-              {motion === "spin" ? "Spins" : "Best angle"}
-            </span>
             <span className="rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
               3D
             </span>
@@ -1733,43 +1723,41 @@ function UploadAudioContent({
 }
 
 /* ------------------------------------------------------------------ */
-/* Rose block — the living 3D rose (variety + dedication)              */
+/* Flower block — the 3D flower. ONLY the flower selection: no          */
+/* presentation options, no dedication, nothing else.                   */
 /* ------------------------------------------------------------------ */
 
-function RoseBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
   const d = block.data ?? {};
   const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
-  const style = d.roseStyle ?? "rose";
-  const motion = flowerMotion(d.flowerMotion);
-  const activeVariety = flowerVariety(style);
+  const selected = resolveFlower(d.flower ?? d.roseStyle);
 
   return (
     <div className="space-y-4 pb-2">
       {/* Live 3D preview — the exact flower the recipient will get */}
       <div className="overflow-hidden rounded-[18px] border border-[#1D1D1F]/[0.07] bg-[radial-gradient(circle_at_50%_20%,#3A1526_0%,#1D1D1F_72%)]">
         <div className="h-[240px]">
-          <FlowerStage varietyId={style} motion={motion} />
+          <FlowerStage flowerId={selected.id} />
         </div>
         <div className="flex items-center justify-between border-t border-white/10 px-3.5 py-2">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-white/50">
-            Live 3D — {motion === "spin" ? "spinning" : "held at its best angle"}
-          </p>
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-white/50">Live 3D</p>
           <p className="text-[10.5px] font-semibold text-white/40">Real model · drag to look</p>
         </div>
       </div>
 
+      {/* The ONLY setting: which flower */}
       <div>
         <FieldLabel>Flower</FieldLabel>
-        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Flower variety">
-          {FLOWER_VARIETIES.map((v) => {
-            const active = style === v.id;
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Flower selection">
+          {FLOWERS.map((f) => {
+            const active = selected.id === f.id;
             return (
               <button
-                key={v.id}
+                key={f.id}
                 type="button"
                 role="radio"
                 aria-checked={active}
-                onClick={() => set({ roseStyle: v.id })}
+                onClick={() => set({ flower: f.id })}
                 className={cn(
                   "flex items-center gap-2 rounded-full border-2 py-1.5 pl-1.5 pr-3.5 text-[12.5px] font-bold transition-all active:scale-[0.96]",
                   active
@@ -1780,110 +1768,17 @@ function RoseBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
                 <span
                   aria-hidden
                   className="h-6 w-6 overflow-hidden rounded-full ring-1 ring-black/10"
-                  style={{ background: `linear-gradient(135deg, ${v.edge} 0%, ${v.mid} 55%, ${v.base} 100%)` }}
+                  style={{ background: f.accent }}
                 >
-                  <img src={v.thumb} alt="" width={24} height={24} className="h-full w-full object-cover" draggable={false} />
+                  <img src={f.thumb} alt="" width={24} height={24} className="h-full w-full object-cover" draggable={false} />
                 </span>
-                {v.name}
+                {f.name}
               </button>
             );
           })}
         </div>
-        <p className="mt-1.5 px-1 text-[11px] font-medium text-[#AAAAAA]">
-          {activeVariety.id === "azalea"
-            ? "A blooming azalea sprig — with its own little bee circling the flower."
-            : "A deep-red rose in full bloom — stem, leaves and all."}
-        </p>
+        <p className="mt-1.5 px-1 text-[11px] font-medium text-[#AAAAAA]">{selected.caption}</p>
       </div>
-
-      <div>
-        <FieldLabel>Presentation</FieldLabel>
-        <div
-          role="radiogroup"
-          aria-label="How the flower presents"
-          className="grid grid-cols-2 gap-2"
-        >
-          {(
-            [
-              {
-                value: "still",
-                icon: Focus,
-                title: "Best angle",
-                caption: "Rests at its most beautiful view — calm and photogenic.",
-              },
-              {
-                value: "spin",
-                icon: RotateCw,
-                title: "Slow spin",
-                caption: "A gentle turntable that shows the flower from every side.",
-              },
-            ] as const
-          ).map((opt) => {
-            const active = motion === opt.value;
-            const Icon = opt.icon;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => set({ flowerMotion: opt.value })}
-                className={cn(
-                  "flex flex-col gap-1 rounded-[14px] border-2 px-3 py-2.5 text-left transition-all active:scale-[0.97]",
-                  active
-                    ? "border-[#FF375F] bg-[#FF375F]/[0.06]"
-                    : "border-[#1D1D1F]/[0.09] bg-white hover:border-[#1D1D1F]/[0.18]"
-                )}
-              >
-                <span className="flex items-center gap-1.5">
-                  <Icon size={13} aria-hidden className={active ? "text-[#D6336C]" : "text-[#AAAAAA]"} />
-                  <span
-                    className={cn(
-                      "text-[12.5px] font-bold",
-                      active ? "text-[#D6336C]" : "text-[#1D1D1F]/80"
-                    )}
-                  >
-                    {opt.title}
-                  </span>
-                </span>
-                <span className="text-[10.5px] font-medium leading-snug text-[#AAAAAA]">{opt.caption}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="mt-1.5 px-1 text-[11px] font-medium text-[#AAAAAA]">
-          Either way, they can still gently drag the flower to look around.
-        </p>
-      </div>
-
-      <div>
-        <label
-          htmlFor="md-rose-note"
-          className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]"
-        >
-          Dedication
-        </label>
-        <textarea
-          id="md-rose-note"
-          rows={2}
-          maxLength={90}
-          value={d.message ?? ""}
-          onChange={(e) => set({ message: e.target.value })}
-          placeholder="Shown under the flower — e.g. “For the one who makes ordinary days bloom.”"
-          className={cn(fieldInput, "resize-none leading-relaxed")}
-        />
-        <div className="mt-1.5 flex justify-end">
-          <span className="text-[10.5px] font-semibold tabular-nums text-[#AAAAAA]">
-            {(d.message ?? "").length}/90
-          </span>
-        </div>
-      </div>
-
-      <p className="px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
-        A real 3D flower model floating right on the scene — no frame around it, just the bloom. Pick how
-        it presents: resting at its best angle, or slowly spinning. The recipient can always explore it in
-        3D with a drag.
-      </p>
     </div>
   );
 }
@@ -2322,31 +2217,15 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     },
   },
   {
-    id: "rose-3d",
-    type: "rose",
-    name: "3D Rose",
-    blurb: "A real rose model floating in 3D — held at its best angle",
+    id: "flower-3d",
+    type: "flower",
+    name: "3D Rose Bouquet",
+    blurb: "A wrapped bouquet of roses floating in 3D — a gift that never fades",
     category: "Rewards",
     accent: "#FF375F",
     isNew: true,
     data: {
-      message: "This one never wilts.",
-      roseStyle: "rose",
-      flowerMotion: "still",
-    },
-  },
-  {
-    id: "azalea-3d",
-    type: "rose",
-    name: "3D Azalea",
-    blurb: "A blooming azalea in 3D — with a tiny bee circling it",
-    category: "Rewards",
-    accent: "#E85858",
-    isNew: true,
-    data: {
-      message: "Blooming, just for you.",
-      roseStyle: "azalea",
-      flowerMotion: "still",
+      flower: "bouquet",
     },
   },
   {
@@ -2509,14 +2388,14 @@ function LibraryThumb({ t }: { t: LibraryTemplate }) {
           <GiftBox wrap="#5E5CE6" ribbon="classic" still scale={0.3} sparkle={false} />
         </span>
       );
-    case "rose":
+    case "flower":
       return (
         <span
           aria-hidden
           className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-[14px] bg-[radial-gradient(circle_at_50%_35%,#3A1526_0%,#1D1D1F_78%)]"
         >
           <img
-            src={flowerVariety(t.data?.roseStyle).thumb}
+            src={resolveFlower(t.data?.flower ?? t.data?.roseStyle).thumb}
             alt=""
             width={72}
             height={72}
@@ -2803,11 +2682,9 @@ function starterBlockData(type: string): BlockData | undefined {
       coupons: samplePool(),
     };
   }
-  if (type === "rose") {
+  if (type === "flower") {
     return {
-      message: "",
-      roseStyle: "rose",
-      flowerMotion: "still",
+      flower: "bouquet",
     };
   }
   return undefined;
@@ -3590,8 +3467,8 @@ function BlockEditorContent({
       );
     case "audio":
       return <AudioBlockEditor block={block} onChange={onChange} />;
-    case "rose":
-      return <RoseBlockEditor block={block} onChange={onChange} />;
+    case "flower":
+      return <FlowerBlockEditor block={block} onChange={onChange} />;
     case "gift":
       return <GiftBlockEditor block={block} onChange={onChange} />;
     case "countdown": {

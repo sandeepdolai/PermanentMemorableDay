@@ -7,7 +7,7 @@
  * complete authored document — 3 scenes of typed blocks with real copy —
  * validated against the app's block catalogue so the builder can open it
  * directly. Only blocks that render meaningfully without user-uploaded media
- * are allowed (text / gift / rose / countdown / quiz / reward / cta /
+ * are allowed (text / gift / flower / countdown / quiz / reward / cta /
  * confetti / audio — coupon stays hidden until its later-phase relaunch),
  * and the JSON is repaired/sanitized before it ships.
  */
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
 /** Block types the sketch may emit (no media-dependent ones — no photo/video/background). */
-const ALLOWED_TYPES = ["text", "gift", "rose", "countdown", "quiz", "reward", "cta", "confetti", "audio"] as const;
+const ALLOWED_TYPES = ["text", "gift", "flower", "countdown", "quiz", "reward", "cta", "confetti", "audio"] as const;
 type AllowedType = (typeof ALLOWED_TYPES)[number];
 
 interface SketchBlock {
@@ -35,8 +35,7 @@ interface SketchBlock {
   action?: unknown;
   url?: unknown;
   style?: unknown;
-  roseStyle?: unknown;
-  flowerMotion?: unknown;
+  flower?: unknown;
   heading?: unknown;
   stepLabel?: unknown;
   song?: unknown;
@@ -178,16 +177,8 @@ function sanitizeBlock(raw: SketchBlock, idx: number, sceneNo: number): BlockDoc
       data.code = str(raw.code, 24) ?? "GIFT-20";
       break;
     }
-    case "rose": {
-      data.message = str(raw.message, 90) ?? "This one never wilts.";
-      const variety = str(raw.roseStyle, 20);
-      if (variety && ["rose", "azalea"].includes(variety)) {
-        data.roseStyle = variety;
-      }
-      const motion = str(raw.flowerMotion, 10);
-      if (motion && ["still", "spin"].includes(motion)) {
-        data.flowerMotion = motion;
-      }
+    case "flower": {
+      data.flower = "bouquet";
       break;
     }
     case "cta": {
@@ -247,7 +238,7 @@ export async function POST(req: Request) {
             "- Allowed block types and fields:\n" +
             '  · {"type":"text","body": string} — a message, 1–2 sentences, max 220 chars. The FIRST scene must start with a text block addressing the recipient directly.\n' +
             '  · {"type":"gift","message": string} — a wrapped gift that opens to reveal a short note, max 90 chars.\n' +
-            '  · {"type":"rose","message": string, "roseStyle": "rose"|"azalea", "flowerMotion": "still"|"spin"} — a real 3D flower model (rose or azalea) floating frameless on the scene; "still" rests it at its best angle (preferred), "spin" turns it slowly; message is a short dedication under it (at most once, for love/gratitude moments).\n' +
+            '  · {"type":"flower"} — a real 3D rose bouquet model floating frameless on the scene; no other fields needed (at most once, for love/gratitude moments).\n' +
             '  · {"type":"countdown","minutes": number 1–30} — a timed lock building anticipation (at most once).\n' +
             '  · {"type":"quiz","question": string, "options": [string ×2–4], "answer": 0-based index} — a fun question about the sender/recipient or the occasion.\n' +
             '  · {"type":"reward","rewardKind": string like \"Coffee on me\", "code": string like \"NIGHT-OUT\"} — a redeemable treat in a golden ticket.\n' +
