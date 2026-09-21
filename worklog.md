@@ -1631,3 +1631,30 @@ Stage Summary:
 - E2E note: draft-preview player VLM reads dock the score for surrounding app chrome (sidebar, dots, "Tap to continue") — that's the preview shell, not the recipient view; evaluate the bouquet itself.
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 50
+Agent: Z.ai Code (main orchestrator)
+Task: User feedback: "You did Wrong, Please Recome tge previous one, i actually want Grand Rose Bouquet block not Rose Bouquet Block" — the Task 49 replacement artwork was placed on the wrong block. Move the new 9-rose artwork to the GRAND Rose Bouquet block and restore the previous compact bouquet to the Rose Bouquet block.
+
+Work Log:
+- Interpreted the feedback: in Task 49 the user's "Replacement of the png rose bouqet" upload (9-rose, white/burgundy wrap, 'Just for you' card) was meant for the GRAND Rose Bouquet block (bouquet2), NOT the primary Rose Bouquet block (bouquet). "Recome the previous one" = restore the Rose Bouquet block's previous artwork.
+- Asset swap via git (ids unchanged → zero data migration, all saved moments auto-update):
+  - cp bouquet.png → bouquet2.png + bouquet-thumb.png → bouquet2-thumb.png (the 9-rose artwork now drives the Grand block, 1012×1200)
+  - git show f34d7c2:public/models/bouquet.png/.-thumb.png → restored the previous compact 4-rose screenshot-cut artwork (466×606) to the Rose Bouquet block
+- md-blocks.ts: FLOWERS[0] caption restored to "A wrapped bouquet of red roses — ribbon, gold trim and all…"; FLOWERS[1] Grand caption → "A grand bouquet of nine red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'…"; FLOWERS doc comment generalized.
+- builder.tsx: "flower-grand" library template blurb "A dozen red roses…" → "Nine red roses with baby's breath and a satin bow — a grander way…"; default message "A dozen roses…" → "Nine grand roses to make it up to you 💐".
+- bun run lint CLEAN; dev.log zero errors; server HTTP 200.
+- E2E via agent-browser + VLM:
+  - Flower editor: "Rose Bouquet" selected → compact dark-wrap bouquet restored (VLM: ~5-6 blooms, compact, whole & clean). Switched radio to "Grand Rose Bouquet" → the new nine-rose bouquet with 'Just for you' card (VLM 9 roses, red satin wrap, clean edges).
+  - Block Library tiles: Rose Bouquet tile = compact dark-wrap; Grand Rose Bouquet tile = large nine-rose white/red wrap + card — confirmed DIFFERENT images.
+  - Player (recipient preview): tapped through intro → flower scene shows the 9-rose Grand bouquet fully visible, clean edges, cream message card + voice note player below.
+  - Mobile 390×844: bouquet fully visible, card readable, scrollW 390 = innerW 390 (no horizontal overflow), zero console/page errors.
+- Committed 9fb27e5 (6 files).
+
+Stage Summary:
+- The Grand Rose Bouquet block now uses the user's new 9-rose artwork (their latest "Replacement" upload), and the Rose Bouquet block is back to its previous compact bouquet — exactly as the user intended. Both blocks keep their FLOWERS ids ("bouquet"/"bouquet2") so every saved moment updates automatically. The dozen-rose bouquet2 artwork (Task 48 upload) is replaced but recoverable from git history (f34d7c2..6019936).
+- LESSON: when the user pushes a "replacement" asset and multiple similar blocks exist, confirm WHICH block it belongs to — the commit message "Replacement of the png rose bouqet" was ambiguous between the two PNG bouquet blocks; the user meant the Grand one.
+- E2E lessons: agent-browser refuses clicks on elements "covered" by their own SVG path/overlay children (close buttons, library tiles) — click via JS eval or Escape instead; `agent-browser mouse click` is invalid (use click refs); the player overlay intro ("MemorableDay presents…Tap to continue") is a clickable generic div — click it via its snapshot ref to advance to scene 1.
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
