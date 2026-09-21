@@ -1683,3 +1683,30 @@ Stage Summary:
 - TIMELINE FIX: this file was pushed during Task 47's window but the screenshot got used instead — the clean PNG was sitting unused at repo root for hours. Always enumerate ALL recently-pushed root files when the user says "new pushed file".
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 52
+Agent: Z.ai Code (main orchestrator)
+Task: User request: "Now Add New Block, I pushed 2 file in github so now make 2 block, in this file i have pushed one rose .glb file and one flower png, make 2 new block" — create TWO new flower blocks from the user's pushed files (a 3D rose GLB + a flower PNG).
+
+Work Log:
+- Fetched + merged commit 30bc6d5 "A Rose glb file And a Flower PNG": New Project 517 [CA9D68C].png (2160×3840, clean alpha) + tripo-model-7ffeee1a (1).glb (17.5MB, gltfpack'd, meshopt+quantization, 1M verts, 3× 4096² textures).
+- PNG block (bouquet3, "Roses & Hearts Bouquet"): alpha-noise kill (318K px) → trim → downscale 2905→1200px → public/models/bouquet3.png (806×1200, 916KB) + thumb. VLM: 15-18 red roses, pink envelope card with red hearts, glossy pink ribbon bow, whole bouquet visible.
+- GLB block (rose3d, "3D Red Rose"): optimized via bunx @gltf-transform/cli: optimize (prune+weld: 1M→374K verts) → resize textures 4096→2048 → meshopt re-compress = 17.5MB → **5.74MB (67% smaller, visually lossless)** → public/models/rose-3d.glb.
+- Restored flower-3d.tsx from git history (aa97b8b) adapted: model path from flower.model (no hardcoded preload), angle defaults az20/el12/dist1.9/ty0.38, MODEL_FILL 0.78, same proven pipeline (fov 34, NeutralToneMapping 1.16, 3-point+rim lights, RoomEnvironment, demand frameloop, 0.9s eased entry, ContactShadows after settle, pointer-events none).
+- Rebuilt offline rig (public/_rig, now removed): import-map three + GLTFLoader + SkeletonUtils + **BufferGeometryUtils (missed first — GLTFLoader imports it relatively!)** + meshopt decoder. Rig gotcha 2: setMeshoptDecoder needs (await import()).MeshoptDecoder (namespace lacks .supported).
+- ANGLE TUNING (VLM A/B): azimuth sweep 13 angles → az 20 = bloom's face head-on (image 5 of 13); elevation 6/9/12/15/18 → el 12; framing A-E → dist 1.9, ty 0.38; fill 0.72/0.78/0.84 → 0.78. Generated rose3d-thumb.png from the final render (content-cropped 460×430 canvas region, not the viewport).
+- md-blocks.ts: FLOWERS switched from as-const literals to explicit Flower interface (optional image/model/az/el/dist/ty) — supports both IMAGE and MODEL flowers; resolver unchanged (backward compatible). 4 flowers now: bouquet, bouquet2, bouquet3, rose3d.
+- flower-stage.tsx: dual-path — model flowers → FlowerBoundary (WebGL error boundary → glyph fallback) + next/dynamic Flower3D (ssr:false — image-only moments never download three.js) + LoadVeil (live % while GLB streams); image flowers → the existing still <img> path.
+- builder.tsx: 2 new library templates "Roses & Hearts Bouquet" (flower-hearts, accent #E84393) + "3D Red Rose" (flower-3d-rose, accent #FF375F). Editor radiogroup + library tiles auto-render from FLOWERS (no other changes needed).
+- eslint.config.mjs: added public/_rig/**, mini-services/**, scripts/** to ignores (rig's copied three.js files broke lint).
+- E2E via agent-browser + VLM: Block Library shows all 4 flower templates; added both new blocks to the draft scene; editor = 3D rose rendering clean (front-facing, whole rose in frame, no artifacts, render completed) + 4-option radiogroup works; Roses & Hearts editor render verified (pink envelope card + ribbon); player = all 3 stacked flower blocks render (scrolled scene container via JS): Rose Bouquet + card, Roses & Hearts + card, single 3D red rose with soft contact shadow + card; mobile 390px = no overflow, graphics render well; 0 console/page errors from the app (only stale rig-session entries, cleared + verified after reload); lint clean.
+- Committed c0c2dad, PUSHED to origin/main. Rig removed; sources archived to upload/.
+
+Stage Summary:
+- FOUR flower blocks now ship: Rose Bouquet (compact 4-rose PNG), Grand Rose Bouquet (9-rose PNG), Roses & Hearts Bouquet (NEW: lush PNG with heart envelope + pink ribbon), and 3D Red Rose (NEW: WebGL single rose, 5.7MB GLB, one curated angle az20/el12/dist1.9/ty0.38/fill0.78). Both new blocks have library templates + editor radio options; both keep the card + optional voice note structure.
+- Architecture: FlowerStage now branches on flower.model — image flowers stay WebGL-free; model flowers lazy-load three.js (ssr:false) with a WebGL error boundary + progress veil. tsc errors in app-shell/music-search are PRE-EXISTING (verified via git stash).
+- GLB optimization recipe: gltf-transform optimize (weld dedupes!) → resize 2048 → meshopt = 67% off, no visible loss. Rig recipe updated: ALWAYS copy BufferGeometryUtils.js; pass MeshoptDecoder (not the namespace) to setMeshoptDecoder.
+- E2E lessons: agent-browser eval REPL persists declarations across calls (const redeclare SyntaxError) — wrap in IIFE; scroll the player's inner scene container (scrollHeight>clientHeight+100, tallest first) to reach stacked blocks; the Add-block flow keeps the builder open (a failed ref click after sheet close navigated the snapshot to home — re-open the draft, state persists).
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
