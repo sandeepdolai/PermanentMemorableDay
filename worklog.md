@@ -1511,3 +1511,25 @@ Stage Summary:
 - frameloop="demand" is the pattern for any future still 3D block; NeutralToneMapping is the fix pattern for washed-out PBR colors.
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 45
+Agent: Z.ai Code (main orchestrator)
+Task: User feedback on the flower block (reference photo uploaded): (1) make the rose angle match the uploaded reference image "same to same"; (2) the whole bouquet must be visible — not hidden by the card; (3) make the rose a little smaller so it can be fully seen.
+
+Work Log:
+- Analyzed the reference photo (upload/Screenshot_2026_0921_112634.png) via VLM: camera slightly LEFT of the bouquet axis (~10-15°; we read the wrap's right flank, ribbon front-center), 15-20° above looking down at the bloom tops, full bouquet in frame (~70-75% fill), cream card peeking ABOVE the flowers tucked BEHIND the highest rose (nearly fully visible), three little hearts (yellow/orange/red) on the card, portrait framing.
+- md-blocks.ts FLOWERS hero angle retuned: az 20→−18, el 15→16, dist 1.4→1.95, ty 0.5→0.46 — the geometry now matches the reference (verified by landmark checks: ribbon front-center, wrap's right flank open, rose tops visible, content rides upper-middle).
+- flower-3d.tsx: MODEL_FILL 0.94→0.80 — the rose is "a little smaller" so the ENTIRE bouquet (blooms → wrap → stem tip) is always inside the frame with margins.
+- NEW MessageCard component (the big one): the message card now lives INSIDE the 3D scene as a paper card tucked BEHIND the top roses (z −0.22), peeking above the flower line exactly like the reference — because it sits behind the bouquet it can NEVER hide a single petal. Card face is a 768×480 CanvasTexture: cream gradient paper, thin warm edge, red thread accent, heart at top, the sender's message in italic serif (auto-fit 58→26px, wraps up to 220 chars), three little hearts (yellow/orange/red) like the reference. Unlit meshBasicMaterial + toneMapped=false → renders EXACTLY as painted (never washed out). Gentle entrance (fade + rise from behind the flowers, 0.6s, demand-frameloop-safe; snaps under reduced motion).
+- moment-player.tsx FlowerBlockView: portrait stage (max-w 430px, h 400/430px) like the reference framing; the old HTML cream card BELOW the bouquet is REMOVED (replaced by the 3D tucked card); VoiceNotePlayer restyled as a dark-glass pill (white/70 text, backdrop-blur) and now sits alone under the stage when a voice note exists.
+- builder.tsx FlowerBlockEditor: true WYSIWYG — the editor preview passes the live message into FlowerStage so the 3D card updates as the creator types; the duplicate HTML card preview is gone (replaced by a small "voice note attached" chip); stage 205→280px so the card is legible in preview. Removed the now-unused Heart import.
+- flower-stage.tsx: FlowerStage accepts + forwards `message` to Flower3D.
+- Regenerated public/models/bouquet-thumb.png (560×560) from the new hero angle (content-bbox-centered crop of the verified player render).
+- E2E via agent-browser + VLM: editor preview = whole bouquet in frame, card tucked behind roses, message fully readable; recipient player (desktop) = entire bouquet visible (wrap tip included), readable card text, voice pill "VOICE NOTE · 0:42" toggles play/pause, NO DRAG TO LOOK / FOR YOU; DRAG PIXEL TEST on the settled canvas: 0 of 184,900 pixels changed after a full multi-waypoint drag — perfectly still; stability check: 0 pixels drift over 3s idle; mobile 390×844 = full bouquet visible, no horizontal overflow, voice pill sized for thumbs; WYSIWYG test: typing "Forever yours" instantly repainted the 3D card (and matched the reference card's text); zero page errors; bun run lint CLEAN.
+
+Stage Summary:
+- The flower block now mirrors the reference photo: same camera (left, above, front-facing ribbon), whole bouquet fully visible at a slightly smaller scale, and the sender's message on a paper card tucked BEHIND the top roses — the card can never hide the bouquet, and the bouquet never hides the message (text verified readable on desktop + mobile).
+- The MessageCard CanvasTexture pattern (unlit, toneMapped=false, auto-fit text) is reusable for any future in-scene text surface.
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
