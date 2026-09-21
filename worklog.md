@@ -1658,3 +1658,28 @@ Stage Summary:
 - E2E lessons: agent-browser refuses clicks on elements "covered" by their own SVG path/overlay children (close buttons, library tiles) — click via JS eval or Escape instead; `agent-browser mouse click` is invalid (use click refs); the player overlay intro ("MemorableDay presents…Tap to continue") is a clickable generic div — click it via its snapshot ref to advance to scene 1.
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 51
+Agent: Z.ai Code (main orchestrator)
+Task: User request: "Now Replace the Rose Bouquet block with the new Github Pushed file Rose Bouquet PNG" — put the user's GitHub-pushed clean Rose Bouquet PNG into the primary Rose Bouquet block.
+
+Work Log:
+- Fetched origin: new commit a40f4fb "Rose Bouquet png" — but it was EMPTY (no file changes vs its parent 6019936). Diagnosis: the user re-uploaded a file that was ALREADY in the repo (identical content → GitHub created an empty commit).
+- Traced the original push: commit 45c26f4 "Rose Bouquet Png" (Sep 21 12:55 +0530) added file_00000000fb4081f49b22c2c3d431970e.png (1091×1442 RGBA, 2MB) at repo root — NEVER used by the app (Task 47 had processed the screenshot Screenshot_2026_0921_112634.png instead, which had UI chrome + cropped ribbon tails).
+- VLM inspection of the file: clean transparent cutout, 4 red roses, black outer wrap with gold trim + white inner lining, "Just For You" card, red satin ribbon bow, whole bouquet visible, edge quality 9/10 — the CLEAN version of the compact bouquet.
+- scripts/swap_rose_bouquet.py: killed alpha noise (<8→0, 13,101 px), trimmed to alpha bbox +8px margin, downscaled 1430→1200px height → public/models/bouquet.png (882×1200, 1.4MB RGBA) + bouquet-thumb.png (560×560). Source archived to upload/rose_bouquet_clean_source.png.
+- md-blocks.ts: FLOWERS[0] caption → "Four red roses in a black wrap with gold trim, white lining and a satin bow — 'Just For You'. A gift that never fades."
+- FLOWERS id "bouquet" unchanged → zero migration, every saved moment auto-updates.
+- E2E via agent-browser + VLM:
+  - Flower editor: "Rose Bouquet" radio selected → new clean artwork on the plum stage (black/white/gold wrap, "For You" card, red bow, whole bouquet, clean edges, no cropping).
+  - Recipient player (tapped past intro): bouquet fully visible, "Just For You" card with hearts, cream message card + VOICE NOTE · 0:42 below, nothing cropped, no remnants.
+  - Mobile 390×844: bouquet fully visible, card readable, scrollW 390 = innerW 390 (no overflow), 0 console/page errors.
+- bun run lint CLEAN; dev.log zero errors; committed 6c1ba08 and PUSHED to origin/main.
+
+Stage Summary:
+- The Rose Bouquet block now uses the user's clean GitHub-pushed artwork (file_00000000fb4081f49b22c2c3d431970e.png) — no more screenshot-cut artifacts or cropped ribbon. The block lineup: Rose Bouquet = clean 4-rose black/gold-wrap compact bouquet; Grand Rose Bouquet = 9-rose white/burgundy-wrap grand bouquet (Task 50).
+- KEY DIAGNOSTIC: an EMPTY user commit ("Rose Bouquet png", zero diff) means the user re-pushed an identical existing file — search the repo for the file with the matching commit-message name in earlier history (git log --all --name-only + grep) instead of assuming a failed upload.
+- TIMELINE FIX: this file was pushed during Task 47's window but the screenshot got used instead — the clean PNG was sitting unused at repo root for hours. Always enumerate ALL recently-pushed root files when the user says "new pushed file".
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
