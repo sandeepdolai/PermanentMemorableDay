@@ -1609,3 +1609,25 @@ Stage Summary:
 - Player lessons: the scene scroll container must be scrolled via JS AFTER tapping into the flower scene (scrolling the end screen scrolls the end screen); scenes stack multiple blocks vertically — two flower blocks in one scene = both visible, scrollable.
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 49
+Agent: Z.ai Code (main orchestrator)
+Task: User pushed a replacement rose bouquet PNG ("Replacement of the png rose bouqet", commit 7b90256) — replace the primary Rose Bouquet (the screenshot-cut 4-rose asset whose ribbon tails were cropped) with the new artwork.
+
+Work Log:
+- Pulled 7b90256: "New Project 517 [A2CF96C].png" (2160×3840 RGBA, clean alpha cutout, content 2117×2511).
+- VLM analysis: 9 red roses, baby's breath, eucalyptus, white+burgundy double wrap, burgundy satin bow, "Just for you" card — 9/10 e-commerce quality, no UI chrome, whole bouquet visible (unlike the old asset's cropped ribbon).
+- scripts/replace_bouquet.py: killed alpha noise (<8→0), trimmed to alpha bbox, downscaled 2511→1200px height (stage renders ~330px — 3.6x retina), rebuilt 560×560 thumb.
+- Size optimization: palette-quantized A/B (256 colors, 237KB, MSE 36) vs RGBA original (1449KB) — VLM verdict "USE QUANTIZED" (no visible banding). Final saved as straight RGBA for max compatibility: 669KB (half the raw size; bouquet2 stays 1.8MB).
+- Replaced public/models/bouquet.png + bouquet-thumb.png IN PLACE — the FLOWERS id stays "bouquet" so every saved moment auto-updates to the new artwork with no data migration.
+- md-blocks.ts: caption updated to "A hand-tied bouquet of nine red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'…". Name "Rose Bouquet" and id unchanged.
+- Source file moved to upload/New_Project_517_A2CF96C.png for repo hygiene.
+- E2E via agent-browser: builder flower editor shows the NEW 9-rose "Just for you" bouquet cleanly on the plum stage, two-option Flower radiogroup intact (9/10). Player flower scene shows the new bouquet fully visible, seamless on the dark background, cream card + voice note below. Zero console/page errors; lint clean.
+
+Stage Summary:
+- The primary "Rose Bouquet" block now uses the new 9-rose artwork everywhere (editor stage, player, block cards, library tile, starter palette default) — one file swap, zero migration, all existing moments updated automatically. The old 4-rose screenshot-cut asset remains recoverable from git history (commit f34d7c2).
+- Asset pipeline lessons: P-mode palette PNGs (tRNS) break PIL paste — convert('RGBA') before compositing; for web assets prefer straight-RGBA at ~1200px over palette tricks unless every byte counts; always A/B quantized vs original via VLM before shipping.
+- E2E note: draft-preview player VLM reads dock the score for surrounding app chrome (sidebar, dots, "Tap to continue") — that's the preview shell, not the recipient view; evaluate the bouquet itself.
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).

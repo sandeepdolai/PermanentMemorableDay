@@ -53,7 +53,7 @@ export const FLOWERS = [
     image: "/models/bouquet.png",
     thumb: "/models/bouquet-thumb.png",
     accent: "#E0244A",
-    caption: "A wrapped bouquet of red roses — ribbon, gold trim and all. A gift that never fades.",
+    caption: "A hand-tied bouquet of nine red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'. A gift that never fades.",
   },
   {
     id: "bouquet2",
