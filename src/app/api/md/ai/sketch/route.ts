@@ -179,6 +179,8 @@ function sanitizeBlock(raw: SketchBlock, idx: number, sceneNo: number): BlockDoc
     }
     case "flower": {
       data.flower = "bouquet";
+      const note = str(raw.message, 220);
+      if (note) data.message = note;
       break;
     }
     case "cta": {
@@ -238,7 +240,7 @@ export async function POST(req: Request) {
             "- Allowed block types and fields:\n" +
             '  · {"type":"text","body": string} — a message, 1–2 sentences, max 220 chars. The FIRST scene must start with a text block addressing the recipient directly.\n' +
             '  · {"type":"gift","message": string} — a wrapped gift that opens to reveal a short note, max 90 chars.\n' +
-            '  · {"type":"flower"} — a real 3D rose bouquet model floating frameless on the scene; no other fields needed (at most once, for love/gratitude moments).\n' +
+            '  · {"type":"flower","message": string} — a still 3D rose bouquet with the sender\'s note printed on an elegant card beneath it (message optional, max 220 chars; at most once, for love/gratitude/apology moments).\n' +
             '  · {"type":"countdown","minutes": number 1–30} — a timed lock building anticipation (at most once).\n' +
             '  · {"type":"quiz","question": string, "options": [string ×2–4], "answer": 0-based index} — a fun question about the sender/recipient or the occasion.\n' +
             '  · {"type":"reward","rewardKind": string like \"Coffee on me\", "code": string like \"NIGHT-OUT\"} — a redeemable treat in a golden ticket.\n' +

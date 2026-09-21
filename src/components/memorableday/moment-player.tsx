@@ -645,12 +645,100 @@ function QuizBlockView({
   );
 }
 
-/* Flower — the real 3D bloom (GLB) floating frameless on the scene. The
- * block is ONLY the selected flower: no dedication card, no motion options,
- * no zoom — just the bloom at its curated best angle, draggable to look. */
+/* Flower — the real 3D bouquet (GLB) floating frameless on the scene. The
+ * bouquet is locked at its best angle — perfectly still, touches never move
+ * it — and the sender's message sits on an elegant card beneath it, with an
+ * optional voice note the recipient can play. No other chrome: the viewer
+ * sees a bouquet + a card, that's it. */
+
+/** Animated equalizer bars — shown while the voice note plays. */
+function VoiceBars({ active }: { active: boolean }) {
+  const bars = [0.9, 0.45, 1, 0.6, 0.8, 0.5];
+  return (
+    <span className="flex h-4 items-center gap-[3px]" aria-hidden>
+      {bars.map((h, i) => (
+        <motion.span
+          key={i}
+          className="w-[3px] rounded-full bg-[#FF375F]"
+          style={{ height: `${h * 100}%`, originY: 1 }}
+          animate={active ? { scaleY: [0.35, 1, 0.5, 0.85, 0.35] } : { scaleY: 0.3 }}
+          transition={
+            active
+              ? { repeat: Infinity, duration: 1.1 + i * 0.13, ease: "easeInOut" }
+              : { duration: 0.25 }
+          }
+        />
+      ))}
+    </span>
+  );
+}
+
+/** The voice-note row on the card — one tap plays the sender's voice. */
+function VoiceNotePlayer({ url }: { url: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+
+  // Stop on unmount (scene change) — removing the element pauses playback.
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      audio?.pause();
+    };
+  }, []);
+
+  const toggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+    } else {
+      audio.currentTime = 0;
+      void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    }
+  };
+
+  return (
+    <div className="flex w-full items-center gap-3 border-t border-[#B45309]/[0.12] pt-3.5">
+      <audio
+        ref={audioRef}
+        src={url}
+        preload="metadata"
+        onLoadedMetadata={(e) => {
+          const s = e.currentTarget.duration;
+          if (Number.isFinite(s)) setDuration(Math.max(1, Math.round(s)));
+        }}
+        onEnded={() => setPlaying(false)}
+        onPause={() => setPlaying(false)}
+        onPlay={() => setPlaying(true)}
+      />
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={playing ? "Pause voice note" : "Play voice note"}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF375F] text-white shadow-[0_6px_16px_-6px_rgba(255,55,95,0.55)] transition-transform active:scale-90"
+      >
+        {playing ? (
+          <Pause size={15} fill="currentColor" aria-hidden />
+        ) : (
+          <Play size={15} fill="currentColor" className="ml-0.5" aria-hidden />
+        )}
+      </button>
+      <span className="flex min-w-0 flex-1 items-center gap-2.5">
+        <VoiceBars active={playing} />
+        <span className="text-[11.5px] font-semibold uppercase tracking-[0.09em] text-[#8A5A2B]/80">
+          Voice note{duration ? ` · ${formatClock(duration)}` : ""}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const d = block.data;
-  const [hintGone, setHintGone] = useState(false);
+  const message = (d?.message ?? "").trim();
+  const voiceNote = (d?.voiceNote ?? "").trim();
 
   return (
     <motion.div
@@ -659,29 +747,39 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">
-        <Sparkles size={11} aria-hidden /> For you
-      </p>
-
-      {/* Frameless stage — the bloom floats directly on the scene. No box,
-       * no border, no glow, no particles: just the flower. */}
-      <div className="relative mt-4 w-full max-w-[460px]">
-        <div className="relative h-[380px] overflow-hidden md:h-[430px]">
+      {/* Frameless stage — the bouquet floats directly on the scene at its
+       * one best angle. No box, no border, no glow, no hints: nothing but
+       * the flowers. Touches never move it. */}
+      <div className="relative w-full max-w-[460px]">
+        <div className="relative h-[330px] md:h-[370px]">
           <FlowerStage flowerId={d?.flower ?? d?.roseStyle} className="h-full w-full" />
-          {/* the look hint fades on first interaction */}
-          {!hintGone ? (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 2.6 }}
-              className="pointer-events-none absolute bottom-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/30 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.08em] text-white/75 backdrop-blur-sm"
-              onPointerEnter={() => setHintGone(true)}
-            >
-              DRAG TO LOOK
-            </motion.p>
-          ) : null}
         </div>
       </div>
+
+      {/* The sender's card — just the message (and voice, when recorded). */}
+      <motion.div
+        initial={{ opacity: 0, y: 14, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: 0.75 + index * 0.09, type: "spring", stiffness: 260, damping: 24 }}
+        className="relative z-10 -mt-2 w-full max-w-[400px]"
+      >
+        <div className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-6 pb-5 pt-6 shadow-[0_24px_48px_-20px_rgba(0,0,0,0.55)] ring-1 ring-black/[0.06]">
+          {/* subtle top thread the card hangs from */}
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,#FF375F33_18%,#FF375F66_50%,#FF375F33_82%,transparent_100%)]"
+          />
+          <Heart size={13} className="mx-auto mb-2.5 text-[#FF375F]" fill="currentColor" aria-hidden />
+          <p className="text-center font-serif text-[16.5px] italic leading-[1.55] tracking-[-0.005em] text-[#3E2A1E]">
+            {message || "A bouquet for you."}
+          </p>
+          {voiceNote ? (
+            <div className="mt-4">
+              <VoiceNotePlayer url={voiceNote} />
+            </div>
+          ) : null}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

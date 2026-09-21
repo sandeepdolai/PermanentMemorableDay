@@ -4,20 +4,28 @@
  * flower-3d.tsx — the 3D flower stage (GLB models, selection-only block).
  *
  * Renders the user's rose-bouquet GLB (public/models/rose-bouquet.glb — a
- * 1.86M-triangle photogrammetry model, opaque, meshopt-compressed) at its
- * curated hero angle. Recipients can drag to look around — no zoom, no pan,
- * no spin, no extras: the flower is the whole block.
+ * 1.86M-triangle photogrammetry model, opaque, meshopt-compressed) locked at
+ * its curated best angle. The bouquet is PERFECTLY STILL: no drag, no spin,
+ * no zoom, no pan — touching it never moves it. One beautiful angle, always.
+ *
+ * Anti-fade pipeline (the bouquet must read rich, never washed out):
+ *  · NeutralToneMapping — keeps the deep reds saturated where the previous
+ *    ACES curve desaturated highlights.
+ *  · Warm 3-point + rim light so the black wrapping separates from the dark
+ *    stage, and a procedural room env for soft fill.
+ *
+ * Render budget: frameloop="demand" — frames render only while the 0.9s
+ * entry animation plays; once the bouquet settles the canvas goes fully
+ * static (a still flower re-rendering 1.86M tris 60×/s would cook phones).
  *
  * Model notes (from load-time forensics):
  *  · EXT_meshopt_compression + KHR_mesh_quantization — drei's useGLTF wires
  *    the MeshoptDecoder automatically.
  *  · The material is OPAQUE with a packed ORM texture — no alpha games needed.
- *  · The black wrapping needs a warm rim light to separate from the dark
- *    stage backdrop (the gold trim + rim do the work).
  */
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, OrbitControls, useGLTF } from "@react-three/drei";
+import { ContactShadows, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -38,7 +46,7 @@ function StudioLighting() {
     const env = pmrem.fromScene(new RoomEnvironment(), 0.04);
     // eslint-disable-next-line react-hooks/immutability -- three.js scene objects are mutable by design; this is the standard env-map pattern
     scene.environment = env.texture;
-    scene.environmentIntensity = 0.42;
+    scene.environmentIntensity = 0.4;
     return () => {
       scene.environment = null;
       env.dispose();
@@ -48,29 +56,39 @@ function StudioLighting() {
 
   return (
     <>
-      <hemisphereLight args={["#fff1f4", "#2b1512", 0.55]} />
+      <hemisphereLight args={["#fff1f4", "#2b1512", 0.5]} />
       {/* key — warm, from upper front-right */}
-      <directionalLight position={[2.6, 4.2, 3.2]} intensity={1.7} color="#fff6ee" />
+      <directionalLight position={[2.6, 4.2, 3.2]} intensity={1.75} color="#fff6ee" />
       {/* fill — soft pink from the left */}
-      <directionalLight position={[-3.4, 1.6, 1.8]} intensity={0.5} color="#ffe3ec" />
+      <directionalLight position={[-3.4, 1.6, 1.8]} intensity={0.55} color="#ffe3ec" />
       {/* rim — warm edge from behind so the black wrapping reads on the dark stage */}
-      <directionalLight position={[-2.2, 3.4, -3.4]} intensity={1.05} color="#ffd9a8" />
+      <directionalLight position={[-2.2, 3.4, -3.4]} intensity={1.1} color="#ffd9a8" />
     </>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* The model — clone, soften metals, normalize, gentle entry            */
+/* The model — clone, soften metals, normalize, gentle entry,           */
+/* then signal "settled" so the stage can freeze (demand frameloop).    */
 /* ------------------------------------------------------------------ */
 
 function easeOutCubic(t: number) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function FlowerModel({ flower, reducedMotion }: { flower: Flower; reducedMotion: boolean }) {
+function FlowerModel({
+  flower,
+  reducedMotion,
+  onSettled,
+}: {
+  flower: Flower;
+  reducedMotion: boolean;
+  onSettled: () => void;
+}) {
   const { scene } = useGLTF(flower.model);
   const entry = useRef<THREE.Group>(null);
   const startRef = useRef<number | null>(null);
+  const settledRef = useRef(false);
 
   // Clone + harden + normalize. Keyed by the cached scene + flower — a
   // remount (parent keys by flower id) rebuilds everything.
@@ -88,7 +106,7 @@ function FlowerModel({ flower, reducedMotion }: { flower: Flower; reducedMotion:
         if (!m) continue;
         const std = m as THREE.MeshStandardMaterial;
         if (std.metalness > 0.55) std.metalness = 0.35;
-        std.envMapIntensity = 0.45;
+        std.envMapIntensity = 0.5;
         std.needsUpdate = true;
       }
     });
@@ -107,9 +125,11 @@ function FlowerModel({ flower, reducedMotion }: { flower: Flower; reducedMotion:
   }, [scene, flower]);
 
   // Entry: a soft scale-up + rise (0.9s, eased). Snaps when reduced motion.
+  // While it plays the frame is re-invalidated so the demand frameloop keeps
+  // rendering; when it completes the loop is left to freeze.
   useFrame((state) => {
     const g = entry.current;
-    if (!g) return;
+    if (!g || settledRef.current) return;
     if (startRef.current === null) startRef.current = state.clock.elapsedTime;
     const t = reducedMotion
       ? 1
@@ -117,6 +137,12 @@ function FlowerModel({ flower, reducedMotion }: { flower: Flower; reducedMotion:
     const e = easeOutCubic(t);
     g.scale.setScalar(0.86 + 0.14 * e);
     g.position.y = -0.07 * (1 - e);
+    if (t >= 1) {
+      settledRef.current = true;
+      onSettled();
+    } else {
+      state.invalidate();
+    }
   });
 
   return (
@@ -126,23 +152,24 @@ function FlowerModel({ flower, reducedMotion }: { flower: Flower; reducedMotion:
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Camera rig — the curated hero angle. Drag-to-look only.              */
-/* ------------------------------------------------------------------ */
-
-function Rig({ flower }: { flower: Flower }) {
-  const ty = flower.ty * H;
+/** Grounding shadow — mounted only after the entry settles, rendered in a
+ * single frame (the bouquet never moves again, so the shadow never needs
+ * to move either). */
+function SettledShadow({ visible }: { visible: boolean }) {
+  const { invalidate } = useThree();
+  useEffect(() => {
+    if (visible) invalidate();
+  }, [visible, invalidate]);
+  if (!visible) return null;
   return (
-    <OrbitControls
-      target={[0, ty, 0]}
-      enablePan={false}
-      enableZoom={false}
-      enableDamping
-      dampingFactor={0.08}
-      rotateSpeed={0.75}
-      minPolarAngle={0.3}
-      maxPolarAngle={1.52}
-      makeDefault
+    <ContactShadows
+      position={[0, 0.001, 0]}
+      scale={2.9}
+      blur={2.4}
+      far={1.4}
+      opacity={0.32}
+      color="#1d0a12"
+      frames={1}
     />
   );
 }
@@ -156,33 +183,45 @@ export function Flower3D({ flower, className }: { flower: Flower; className?: st
     if (typeof window === "undefined") return false;
     return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   }, []);
+  const [settled, setSettled] = useState(false);
 
-  // Hero camera position from the curated best angle.
+  // Best-angle camera — computed once from the curated hero framing and
+  // NEVER moved: no controls are attached at all.
+  const ty = flower.ty * H;
   const camPos = useMemo(() => {
     const az = THREE.MathUtils.degToRad(flower.az);
     const el = THREE.MathUtils.degToRad(flower.el);
     const d = flower.dist * H;
-    const ty = flower.ty * H;
     return [d * Math.cos(el) * Math.sin(az), ty + d * Math.sin(el), d * Math.cos(el) * Math.cos(az)] as const;
-  }, [flower]);
+  }, [flower, ty]);
 
   return (
-    <div className={className} style={{ touchAction: "none" }}>
+    // touchAction "pan-y": touches pass through as normal page scroll —
+    // the bouquet ignores them entirely.
+    <div className={className} style={{ touchAction: "pan-y" }}>
       <Canvas
+        frameloop="demand"
         camera={{ fov: 34, position: [...camPos], near: 0.05, far: 80 }}
-        onCreated={({ gl }) => {
-          gl.toneMappingExposure = 1.12;
+        onCreated={({ gl, camera }) => {
+          // Neutral tone mapping keeps the roses' deep red saturated
+          // (ACES washed the highlights out — the "faded" look).
+          gl.toneMapping = THREE.NeutralToneMapping;
+          gl.toneMappingExposure = 1.16;
+          camera.lookAt(0, ty, 0);
         }}
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
       >
         <StudioLighting />
         <Suspense fallback={null}>
-          <FlowerModel key={flower.id} flower={flower} reducedMotion={reducedMotion} />
+          <FlowerModel
+            key={flower.id}
+            flower={flower}
+            reducedMotion={reducedMotion}
+            onSettled={() => setSettled(true)}
+          />
         </Suspense>
-        {/* grounds the bouquet so its base doesn't float on the dark stage */}
-        <ContactShadows position={[0, 0.001, 0]} scale={2.9} blur={2.4} far={1.4} opacity={0.32} color="#1d0a12" frames={60} />
-        <Rig flower={flower} />
+        <SettledShadow visible={settled} />
       </Canvas>
     </div>
   );

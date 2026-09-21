@@ -115,7 +115,8 @@ export interface BlockData {
   song?: SongPick;
   /** audio: where it plays — "scene" shows a song card, "background" plays unseen */
   playMode?: "scene" | "background";
-  /** gift */
+  /** gift + flower: the note text — printed on the gift reveal / the card
+   *  under the bouquet (e-commerce apologies, thank-yous, anything). */
   message?: string;
   wrap?: string;
   /** gift: ribbon style on the wrapped box — "classic" | "cross" | "none" */
@@ -150,6 +151,9 @@ export interface BlockData {
    *  Legacy fields (roseStyle/flowerMotion from the retired rose block)
    *  resolve to the bouquet. */
   flower?: string;
+  /** flower: optional voice note (uploaded audio URL) the recipient can
+   *  play from the card — the sender's own voice. */
+  voiceNote?: string;
   /** @deprecated legacy rose block — kept so old moments keep resolving */
   roseStyle?: string;
   /** @deprecated legacy rose block presentation — ignored by the player */

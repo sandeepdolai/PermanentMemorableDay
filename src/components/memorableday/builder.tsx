@@ -23,6 +23,7 @@ import {
   LayoutGrid,
   Link2,
   ListChecks,
+  Mic,
   MousePointerClick,
   Music,
   Pause,
@@ -35,6 +36,7 @@ import {
   Search as SearchIcon,
   Share2,
   Sparkles,
+  Square,
   Trash2,
   Ticket,
   Type,
@@ -483,6 +485,8 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
     }
     case "flower": {
       const f = resolveFlower(d?.flower ?? d?.roseStyle);
+      const note = d?.message?.trim();
+      const hasVoice = !!d?.voiceNote?.trim();
       return (
         <div className="flex items-center gap-3">
           <span
@@ -493,9 +497,19 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D Flower · {f.name}</p>
-            <p className="mt-1 text-[12.5px] text-[#AAAAAA]">A living bloom they can look around in 3D</p>
+            <p className="mt-1 truncate text-[12.5px] text-[#AAAAAA]">
+              {note ? `“${note}”` : "A 3D bouquet with a note card"}
+            </p>
           </div>
           <span className="flex shrink-0 items-center gap-1.5">
+            {hasVoice ? (
+              <span
+                className="flex items-center gap-1 rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]"
+                title="Voice note attached"
+              >
+                <Mic size={10} aria-hidden /> Voice
+              </span>
+            ) : null}
             <span className="rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
               3D
             </span>
@@ -1723,29 +1737,157 @@ function UploadAudioContent({
 }
 
 /* ------------------------------------------------------------------ */
-/* Flower block — the 3D flower. ONLY the flower selection: no          */
-/* presentation options, no dedication, nothing else.                   */
+/* Flower block — the 3D bouquet at one best angle + the message card   */
+/* (+ optional voice note). The bouquet itself is never configurable:   */
+/* no angles, no motion — it sits perfectly still at its best angle.    */
 /* ------------------------------------------------------------------ */
+
+/** Picking the browser's best recording format: Chrome/Android record
+ *  audio/webm, Safari audio/mp4 — each plays back fine where it records. */
+function pickRecorderMime(): string {
+  if (typeof MediaRecorder === "undefined") return "";
+  if (MediaRecorder.isTypeSupported("audio/webm")) return "audio/webm";
+  if (MediaRecorder.isTypeSupported("audio/mp4")) return "audio/mp4";
+  return "";
+}
+
+const VOICE_NOTE_MAX_SECS = 120;
 
 function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
   const d = block.data ?? {};
   const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
   const selected = resolveFlower(d.flower ?? d.roseStyle);
+  const { notify } = useMD();
+
+  const message = d.message ?? "";
+  const voiceUrl = (d.voiceNote ?? "").trim();
+
+  /* ---- voice note: mic recorder ---- */
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+
+  /* ---- voice note: editor preview playback ---- */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const stopEverything = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    const rec = recRef.current;
+    if (rec && rec.state === "recording") rec.stop();
+    recRef.current?.stream.getTracks().forEach((t) => t.stop());
+    recRef.current = null;
+    setRecording(false);
+  }, []);
+
+  // Release mic + stop preview when the sheet closes
+  useEffect(
+    () => () => {
+      stopEverything();
+      audioRef.current?.pause();
+    },
+    [stopEverything]
+  );
+
+  const uploadVoice = useCallback(
+    async (file: File) => {
+      if (file.size > AUDIO_LIMIT_MB * 1024 * 1024) {
+        notify(`Too large — keep it under ${AUDIO_LIMIT_MB} MB`);
+        return;
+      }
+      setUploading(true);
+      setUploadPct(0);
+      try {
+        const url = await apiUploadFile(file, (p) => setUploadPct(p));
+        set({ voiceNote: url });
+        notify("Voice note added to the card");
+      } catch (e) {
+        notify(e instanceof Error ? e.message : "Upload failed — try again");
+      } finally {
+        setUploading(false);
+        setUploadPct(null);
+      }
+    },
+    [notify, d]
+  );
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickRecorderMime();
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+        if (blob.size < 1200) {
+          notify("Didn't catch that — hold the mic a little longer");
+          return;
+        }
+        const ext = (rec.mimeType || "audio/webm").includes("mp4") ? "m4a" : "webm";
+        void uploadVoice(new File([blob], `voice-note.${ext}`, { type: blob.type }));
+      };
+      rec.start();
+      recRef.current = rec;
+      setRecording(true);
+      setRecSecs(0);
+      timerRef.current = setInterval(() => {
+        setRecSecs((s) => {
+          if (s + 1 >= VOICE_NOTE_MAX_SECS) stopEverything();
+          return s + 1;
+        });
+      }, 1000);
+    } catch {
+      notify("Microphone access was blocked — check your browser permissions");
+    }
+  };
+
+  const togglePreview = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (previewing) {
+      audio.pause();
+    } else {
+      audio.currentTime = 0;
+      void audio.play().catch(() => setPreviewing(false));
+    }
+  };
+
+  const previewMessage = message.trim() || "A bouquet for you.";
 
   return (
     <div className="space-y-4 pb-2">
-      {/* Live 3D preview — the exact flower the recipient will get */}
-      <div className="overflow-hidden rounded-[18px] border border-[#1D1D1F]/[0.07] bg-[radial-gradient(circle_at_50%_20%,#3A1526_0%,#1D1D1F_72%)]">
-        <div className="h-[240px]">
+      {/* Live preview — frameless, exactly what the recipient sees: the
+       * still bouquet at its best angle, then the card beneath it. */}
+      <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,#3A1526_0%,#1D1D1F_74%)]">
+        <div className="h-[205px]">
           <FlowerStage flowerId={selected.id} />
         </div>
-        <div className="flex items-center justify-between border-t border-white/10 px-3.5 py-2">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-white/50">Live 3D</p>
-          <p className="text-[10.5px] font-semibold text-white/40">Real model · drag to look</p>
-        </div>
+      </div>
+      <div className="mx-1 overflow-hidden rounded-[16px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-4 py-3.5 shadow-[0_10px_24px_-14px_rgba(29,29,31,0.35)] ring-1 ring-black/[0.05]">
+        <Heart size={11} className="mx-auto mb-1.5 text-[#FF375F]" fill="currentColor" aria-hidden />
+        <p className="text-center font-serif text-[13.5px] italic leading-[1.5] text-[#3E2A1E]">
+          {previewMessage}
+        </p>
+        {voiceUrl ? (
+          <p className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-[#B45309]/[0.12] pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8A5A2B]/75">
+            <Mic size={10} aria-hidden /> Voice note attached
+          </p>
+        ) : null}
       </div>
 
-      {/* The ONLY setting: which flower */}
+      {/* The ONLY flower setting: which flower */}
       <div>
         <FieldLabel>Flower</FieldLabel>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Flower selection">
@@ -1778,6 +1920,150 @@ function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data:
           })}
         </div>
         <p className="mt-1.5 px-1 text-[11px] font-medium text-[#AAAAAA]">{selected.caption}</p>
+      </div>
+
+      {/* The card message */}
+      <div>
+        <label
+          htmlFor="md-flower-note"
+          className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]"
+        >
+          Message on the card
+        </label>
+        <textarea
+          id="md-flower-note"
+          rows={3}
+          maxLength={220}
+          value={message}
+          onChange={(e) => set({ message: e.target.value })}
+          placeholder="We're so sorry your parcel is delayed — thank you for your patience. These roses are for you 💐"
+          className={cn(fieldInput, "resize-none leading-relaxed")}
+        />
+        <div className="mt-1.5 flex justify-end">
+          <span className="text-[10.5px] font-semibold tabular-nums text-[#AAAAAA]">
+            {message.length}/220
+          </span>
+        </div>
+      </div>
+
+      {/* The optional voice note */}
+      <div>
+        <div className="mb-2 flex items-center justify-between px-1">
+          <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+            Voice note
+          </span>
+          <span className="rounded-full bg-[#1D1D1F]/[0.05] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#AAAAAA]">
+            Optional
+          </span>
+        </div>
+
+        {voiceUrl ? (
+          /* Attached — preview + replace + remove */
+          <div className="flex items-center gap-3 rounded-[16px] border-2 border-[#FF375F]/[0.35] bg-[#FF375F]/[0.04] p-3">
+            <button
+              type="button"
+              onClick={togglePreview}
+              aria-label={previewing ? "Pause voice note" : "Play voice note"}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF375F] text-white transition-transform active:scale-90"
+            >
+              {previewing ? (
+                <Pause size={15} aria-hidden />
+              ) : (
+                <Play size={15} fill="currentColor" className="ml-0.5" aria-hidden />
+              )}
+            </button>
+            <audio
+              ref={audioRef}
+              src={voiceUrl}
+              preload="metadata"
+              onPlay={() => setPreviewing(true)}
+              onPause={() => setPreviewing(false)}
+              onEnded={() => setPreviewing(false)}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">Your voice note</p>
+              <p className="mt-0.5 text-[11.5px] text-[#AAAAAA]">Plays right from the card</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                audioRef.current?.pause();
+                set({ voiceNote: undefined });
+              }}
+              aria-label="Remove voice note"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FF375F]/[0.1] text-[#FF375F] transition-transform active:scale-90"
+            >
+              <Trash2 size={14} aria-hidden />
+            </button>
+          </div>
+        ) : recording ? (
+          /* Recording — live timer + stop */
+          <div className="flex items-center gap-3 rounded-[16px] border-2 border-[#FF375F]/[0.4] bg-[#FF375F]/[0.05] p-3">
+            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-[#FF375F]/25" aria-hidden />
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FF375F] text-white">
+                <Mic size={15} aria-hidden />
+              </span>
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] font-bold tracking-[-0.01em] text-[#1D1D1F]">
+                Recording… <span className="tabular-nums">{formatClock(recSecs)}</span>
+              </p>
+              <p className="mt-0.5 text-[11.5px] text-[#AAAAAA]">Up to {VOICE_NOTE_MAX_SECS / 60} minutes</p>
+            </div>
+            <button
+              type="button"
+              onClick={stopEverything}
+              aria-label="Stop recording"
+              className="flex h-10 items-center gap-1.5 rounded-full bg-[#1D1D1F] px-4 text-[12.5px] font-bold text-white transition-transform active:scale-95"
+            >
+              <Square size={11} fill="currentColor" aria-hidden /> Stop
+            </button>
+          </div>
+        ) : uploading ? (
+          /* Uploading the take */
+          <div className="flex items-center gap-3 rounded-[16px] border-2 border-dashed border-[#FF375F]/[0.3] bg-[#FF375F]/[0.03] p-3.5">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#FF375F] border-t-transparent" aria-hidden />
+            <p className="text-[13px] font-semibold text-[#1D1D1F]/80">
+              Saving your voice note{uploadPct !== null ? ` · ${uploadPct}%` : "…"}
+            </p>
+          </div>
+        ) : (
+          /* Idle — record or upload */
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void startRecording()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#FF375F] py-2.5 text-[13px] font-bold text-white shadow-[0_8px_20px_-8px_rgba(255,55,95,0.6)] transition-transform active:scale-[0.97]"
+            >
+              <Mic size={15} aria-hidden /> Record
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-[#1D1D1F]/[0.09] bg-white py-2.5 text-[13px] font-semibold text-[#1D1D1F]/80 transition-transform active:scale-[0.97]"
+            >
+              <Upload size={14} aria-hidden /> Upload audio
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm,.aac,.flac"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) {
+                  if (!file.type.startsWith("audio/")) {
+                    notify("That file isn't audio");
+                    return;
+                  }
+                  void uploadVoice(file);
+                }
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2220,12 +2506,13 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     id: "flower-3d",
     type: "flower",
     name: "3D Rose Bouquet",
-    blurb: "A wrapped bouquet of roses floating in 3D — a gift that never fades",
+    blurb: "A still 3D bouquet with a message card and an optional voice note — perfect for apologies and thank-yous",
     category: "Rewards",
     accent: "#FF375F",
     isNew: true,
     data: {
       flower: "bouquet",
+      message: "We're so sorry your parcel is delayed — thank you for your patience. These roses are for you 💐",
     },
   },
   {
@@ -2685,6 +2972,7 @@ function starterBlockData(type: string): BlockData | undefined {
   if (type === "flower") {
     return {
       flower: "bouquet",
+      message: "We're so sorry your parcel is delayed — thank you for your patience. These roses are for you 💐",
     };
   }
   return undefined;
