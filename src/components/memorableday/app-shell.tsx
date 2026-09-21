@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Bell, Check, Info, LayoutTemplate, Sparkles } from "lucide-react";
 import { PRICING_PLANS, type AppNotification, type InsightRange } from "@/lib/mock-data";
@@ -52,6 +52,11 @@ import { ExploreView } from "./views/explore-view";
 import { GalleryView } from "./views/gallery-view";
 import { ProfileView } from "./views/profile-view";
 import { cn } from "@/lib/utils";
+
+/* Isomorphic before-paint effect: useLayoutEffect in the browser (runs
+ * before the first paint — no visible state flash), plain useEffect during
+ * SSR (no-op there; avoids React's server useLayoutEffect warning). */
+const useBeforePaint = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const TAB_TITLES: Record<Tab, string> = {
   home: "Home",
@@ -267,7 +272,19 @@ export function AppShell() {
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [tourOpen, setTourOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [theme, setThemeState] = useState<ThemeMode>("system");
+  // Theme initializes SYNCHRONOUSLY from localStorage (client) so React state
+  // matches the pre-paint theme the blocking script in layout.tsx already
+  // applied to <html> — no system→dark flip after mount. SSR renders "system"
+  // (nothing in the first-paint tree depends on the value).
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "system";
+    try {
+      const t = window.localStorage.getItem("md-theme");
+      return t === "light" || t === "dark" || t === "system" ? t : "system";
+    } catch {
+      return "system";
+    }
+  });
   const [moments, setMoments] = useState<ClientMoment[]>([]);
   const [ready, setReady] = useState(false);
   const [credits, setCredits] = useState(240);
@@ -283,10 +300,6 @@ export function AppShell() {
     const id = requestAnimationFrame(() => {
       try {
         if (!window.localStorage.getItem("md-onboarded")) setTourOpen(true);
-        const storedTheme = window.localStorage.getItem("md-theme");
-        if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
-          setThemeState(storedTheme);
-        }
       } catch {
         // storage unavailable — skip the tour
       }
@@ -343,11 +356,17 @@ export function AppShell() {
   }, []);
 
   // Apply the resolved theme to <html> and follow OS changes while in "system".
+  // Also syncs color-scheme + the browser chrome (theme-color meta) so tabs,
+  // scrollbars and the status bar match the active mode.
   useEffect(() => {
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
       const resolved = theme === "system" ? (mql.matches ? "dark" : "light") : theme;
-      document.documentElement.classList.toggle("dark", resolved === "dark");
+      const el = document.documentElement;
+      el.classList.toggle("dark", resolved === "dark");
+      el.style.colorScheme = resolved;
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", resolved === "dark" ? "#0A0A0C" : "#f5f5f7");
     };
     apply();
     if (theme === "system") {
@@ -365,6 +384,58 @@ export function AppShell() {
       // ignore
     }
   }, []);
+
+  /* ------------------------------------------------------------------ */
+  /* Session restore — "stay where you left off".                        */
+  /* Browsers discard backgrounded tabs (and mobile OSes kill the page     */
+  /* while a file picker / camera is open), then reload it from scratch.   */
+  /* The last navigation state — active tab, search query, open builder    */
+  /* and open player — is mirrored into sessionStorage and replayed on     */
+  /* mount, BEFORE the first paint, so the reload lands exactly where the  */
+  /* user was. sessionStorage survives reloads in the same tab but dies    */
+  /* with the tab, so a fresh visit still starts on Home.                  */
+  /* ------------------------------------------------------------------ */
+  const [sessionRestored, setSessionRestored] = useState(false);
+
+  useBeforePaint(() => {
+    try {
+      const raw = window.sessionStorage.getItem("md-session");
+      if (raw) {
+        const s = JSON.parse(raw) as {
+          tab?: Tab;
+          query?: string;
+          builder?: BuilderOptions | null;
+          player?: PlayerPayload | null;
+        };
+        if (s.tab === "home" || s.tab === "create" || s.tab === "explore" || s.tab === "gallery" || s.tab === "profile") {
+          setTabState(s.tab);
+        }
+        if (typeof s.query === "string") setQuery(s.query);
+        // Reopen the builder exactly as it was — its in-progress editing
+        // state (scenes, blocks, title) is restored separately by the
+        // builder itself from its own "live" session key.
+        if (s.builder && typeof s.builder === "object") setBuilder(s.builder);
+        if (s.player && typeof s.player === "object" && Array.isArray(s.player.scenes)) setPlayer(s.player);
+      }
+    } catch {
+      // corrupted or unavailable — start fresh on Home
+    }
+    setSessionRestored(true);
+  }, []);
+
+  // Mirror the navigation state on every change (throttled by React's
+  // commit batching — the payload is small and writes are synchronous).
+  useEffect(() => {
+    if (!sessionRestored) return;
+    try {
+      window.sessionStorage.setItem(
+        "md-session",
+        JSON.stringify({ tab, query, builder, player })
+      );
+    } catch {
+      // quota/unavailable — restoring is best-effort
+    }
+  }, [tab, query, builder, player, sessionRestored]);
 
   /** Quiet re-sync of the activity feed (used after tracked views/loves) */
   const refreshNotifications = useCallback(async () => {
@@ -727,10 +798,27 @@ export function AppShell() {
     // Same guard for the player (z-70) — e.g. tapping a Home draft card while
     // an experience is still open must not leave the player above the builder.
     setPlayer(null);
+    // A fresh builder session never resumes the previous in-progress edits —
+    // clear the builder's live-editing key (it only survives page reloads).
+    try {
+      window.sessionStorage.removeItem("md-builder-live");
+    } catch {
+      // ignore
+    }
     setBuilder(opts ?? {});
   }, []);
 
-  const closeBuilder = useCallback(() => setBuilder(null), []);
+  const closeBuilder = useCallback(() => {
+    // Closing cleanly means the edits are either saved (Save Draft / Send) or
+    // intentionally discarded — either way the live-editing key must go so
+    // the next open starts fresh instead of resuming stale edits.
+    try {
+      window.sessionStorage.removeItem("md-builder-live");
+    } catch {
+      // ignore
+    }
+    setBuilder(null);
+  }, []);
 
   const openSettings = useCallback((topic: SettingsTopic) => {
     setSettingsTopic(topic);

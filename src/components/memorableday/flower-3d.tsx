@@ -5,19 +5,26 @@
  *
  * Renders the user's rose GLB (public/models/rose-3d.glb — a 374K-vertex
  * Tripo-generated single red rose, meshopt-compressed, optimized 17.5 MB →
- * 5.7 MB) locked at its curated best angle. The rose is PERFECTLY STILL:
- * no drag, no spin, no zoom, no pan — touching it never moves it. One
- * beautiful angle, always.
+ * 5.7 MB) at its curated best angle. Two presentations, both chosen by the
+ * creator in the block editor:
+ *
+ *  · STILL (default) — the rose holds one viewing angle. The creator picks
+ *    it with a 0-100 slider: a percent of a full turn around the rose
+ *    (0 = the curated portrait angle). Renders one frame on demand — the
+ *    canvas freezes when settled, so still roses cost nothing to display.
+ *
+ *  · SPIN — the rose turns slowly on display like a jewelry showcase. The
+ *    creator sets the pace with a 0-100 slider (0 = a barely-there drift,
+ *    100 = a lively turn). Renders continuously while visible.
+ *
+ * Either way the rose is never interactive: no drag, no pinch, no pan —
+ * touches pass straight through as normal page scroll.
  *
  * Anti-fade pipeline (the rose must read rich, never washed out):
  *  · NeutralToneMapping — keeps the deep reds saturated where the previous
  *    ACES curve desaturated highlights.
  *  · Warm 3-point + rim light so the petals separate from the dark stage,
  *    and a procedural room env for soft fill.
- *
- * Render budget: frameloop="demand" — frames render only while the 0.9s
- * entry animation plays; once the rose settles the canvas goes fully
- * static (a still rose re-rendering 374K verts 60×/s would cook phones).
  *
  * Model notes (from load-time forensics):
  *  · EXT_meshopt_compression + KHR_mesh_quantization — drei's useGLTF wires
@@ -35,10 +42,17 @@ import type { Flower } from "@/lib/md-blocks";
 /** Normalized model height in world units — the stage is built around it. */
 const H = 1.7;
 
-/** How much of H the model fills. Tuned on the offline rig: 0.78 keeps the
- * WHOLE rose — bloom top, stem end, leaves — inside the frame with
- * breathing room (A/B vs 0.72/0.84 on the final render). */
-const MODEL_FILL = 0.78;
+/** How much of H the model fills. Tuned on the offline rig + in-app at the
+ * angle-slider extremes: 0.86 keeps the WHOLE rose — bloom top, stem end,
+ * leaves — inside the frame at every turn position while reading a little
+ * bigger than the old 0.78. */
+const MODEL_FILL = 0.86;
+
+/** Spin speed mapping — slider 0-100 → radians/second. 0 is a barely-there
+ * drift (~75 s per turn) so "spins" never looks frozen; 100 is a lively
+ * ~5-second turn. */
+const SPIN_MIN = 0.08;
+const SPIN_MAX = 1.2;
 
 /* ------------------------------------------------------------------ */
 /* Studio lighting — procedural env (no network HDR) + 3-point + rim    */
@@ -74,8 +88,8 @@ function StudioLighting() {
 }
 
 /* ------------------------------------------------------------------ */
-/* The model — clone, soften metals, normalize, gentle entry,           */
-/* then signal "settled" so the stage can freeze (demand frameloop).    */
+/* The model — clone, soften metals, normalize, gentle entry, then      */
+/* either spin forever or settle and signal the freeze.                 */
 /* ------------------------------------------------------------------ */
 
 function easeOutCubic(t: number) {
@@ -84,17 +98,28 @@ function easeOutCubic(t: number) {
 
 function FlowerModel({
   flower,
+  motion,
+  speed01,
+  angle01,
   reducedMotion,
   onSettled,
 }: {
   flower: Flower;
+  motion: "spin" | "still";
+  /** spin: 0-1 slider value */
+  speed01: number;
+  /** still: 0-1 slider value — percent of a full turn */
+  angle01: number;
   reducedMotion: boolean;
   onSettled: () => void;
 }) {
   const { scene } = useGLTF(flower.model ?? "");
+  const { invalidate } = useThree();
   const entry = useRef<THREE.Group>(null);
+  const spinRef = useRef<THREE.Group>(null);
   const startRef = useRef<number | null>(null);
   const settledRef = useRef(false);
+  const spinning = motion === "spin";
 
   // Clone + harden + normalize. Keyed by the cached scene + flower — a
   // remount (parent keys by flower id) rebuilds everything.
@@ -131,12 +156,21 @@ function FlowerModel({
     return wrap;
   }, [scene, flower]);
 
-  // Entry: a soft scale-up + rise (0.9s, eased). Snaps when reduced motion.
-  // While it plays the frame is re-invalidated so the demand frameloop keeps
-  // rendering; when it completes the loop is left to freeze.
-  useFrame((state) => {
+  // STILL mode: the creator's angle slider turns the model around Y —
+  // 0-100 % of a full turn (0 = the curated portrait angle). One prop,
+  // one rotation, one extra frame — nothing else moves.
+  useEffect(() => {
+    if (spinning || !spinRef.current) return;
+    spinRef.current.rotation.y = angle01 * Math.PI * 2;
+    invalidate();
+  }, [angle01, spinning, invalidate, model]);
+
+  // SPIN + entry: a soft scale-up + rise (0.9s, eased); while spinning the
+  // turntable keeps rotating forever after. Snaps when reduced motion.
+  useFrame((state, delta) => {
     const g = entry.current;
-    if (!g || settledRef.current) return;
+    if (!g) return;
+
     if (startRef.current === null) startRef.current = state.clock.elapsedTime;
     const t = reducedMotion
       ? 1
@@ -144,29 +178,39 @@ function FlowerModel({
     const e = easeOutCubic(t);
     g.scale.setScalar(0.86 + 0.14 * e);
     g.position.y = -0.07 * (1 - e);
-    if (t >= 1) {
+
+    if (spinning && spinRef.current) {
+      // linear turntable — the showcase feel
+      spinRef.current.rotation.y += delta * (SPIN_MIN + speed01 * (SPIN_MAX - SPIN_MIN));
+    }
+
+    if (t >= 1 && !settledRef.current) {
       settledRef.current = true;
       onSettled();
-    } else {
-      state.invalidate();
+      if (!spinning) return; // demand loop may freeze now
+    }
+    if (spinning || t < 1) {
+      state.invalidate(); // keep the loop alive
     }
   });
 
   return (
     <group ref={entry}>
-      <primitive object={model} />
+      <group ref={spinRef}>
+        <primitive object={model} />
+      </group>
     </group>
   );
 }
 
-/** Grounding shadow — mounted only after the entry settles, rendered in a
- * single frame (the rose never moves again, so the shadow never needs
- * to move either). */
-function SettledShadow({ visible }: { visible: boolean }) {
+/** Grounding shadow — in STILL mode rendered once after the entry settles
+ * (the rose never moves again); in SPIN mode it updates every frame so it
+ * follows the turning rose. */
+function SettledShadow({ continuous, visible }: { continuous: boolean; visible: boolean }) {
   const { invalidate } = useThree();
   useEffect(() => {
-    if (visible) invalidate();
-  }, [visible, invalidate]);
+    if (visible && !continuous) invalidate();
+  }, [visible, continuous, invalidate]);
   if (!visible) return null;
   return (
     <ContactShadows
@@ -176,7 +220,7 @@ function SettledShadow({ visible }: { visible: boolean }) {
       far={1.4}
       opacity={0.32}
       color="#1d0a12"
-      frames={1}
+      frames={continuous ? Infinity : 1}
     />
   );
 }
@@ -185,12 +229,31 @@ function SettledShadow({ visible }: { visible: boolean }) {
 /* Public component                                                    */
 /* ------------------------------------------------------------------ */
 
-export function Flower3D({ flower, className }: { flower: Flower; className?: string }) {
+export function Flower3D({
+  flower,
+  motion = "still",
+  speed = 40,
+  angle = 0,
+  className,
+}: {
+  flower: Flower;
+  /** presentation: "spin" = turntable, "still" = held angle */
+  motion?: "spin" | "still";
+  /** spin speed 0-100 */
+  speed?: number;
+  /** still angle 0-100 (percent of a full turn) */
+  angle?: number;
+  className?: string;
+}) {
   const reducedMotion = useMemo(() => {
     if (typeof window === "undefined") return false;
     return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   }, []);
   const [settled, setSettled] = useState(false);
+
+  const spinning = motion === "spin";
+  const speed01 = THREE.MathUtils.clamp((Number.isFinite(speed) ? speed : 40) / 100, 0, 1);
+  const angle01 = THREE.MathUtils.clamp((Number.isFinite(angle) ? angle : 0) / 100, 0, 1);
 
   // Best-angle camera — computed once from the curated hero framing and
   // NEVER moved: no controls are attached at all.
@@ -207,7 +270,8 @@ export function Flower3D({ flower, className }: { flower: Flower; className?: st
     // the rose ignores them entirely.
     <div className={className} style={{ touchAction: "pan-y" }}>
       <Canvas
-        frameloop="demand"
+        /* continuous rendering while spinning; on-demand when still */
+        frameloop={spinning ? "always" : "demand"}
         camera={{ fov: 34, position: [...camPos], near: 0.05, far: 80 }}
         onCreated={({ gl, camera }) => {
           // Neutral tone mapping keeps the rose's deep red saturated
@@ -224,11 +288,14 @@ export function Flower3D({ flower, className }: { flower: Flower; className?: st
           <FlowerModel
             key={flower.id}
             flower={flower}
+            motion={spinning ? "spin" : "still"}
+            speed01={speed01}
+            angle01={angle01}
             reducedMotion={reducedMotion}
             onSettled={() => setSettled(true)}
           />
         </Suspense>
-        <SettledShadow visible={settled} />
+        <SettledShadow continuous={spinning} visible={settled} />
       </Canvas>
     </div>
   );

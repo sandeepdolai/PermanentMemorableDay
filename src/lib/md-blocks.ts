@@ -98,7 +98,7 @@ export const FLOWERS: Flower[] = [
     model: "/models/rose-3d.glb",
     thumb: "/models/rose3d-thumb.png",
     accent: "#FF375F",
-    caption: "A single red rose in full bloom — a real 3D rose, lit like a portrait. One perfect angle, always.",
+    caption: "A single red rose in full bloom — a real 3D rose, lit like a portrait. Let it spin on display or hold one perfect angle.",
     /* curated hero angle (tuned on the offline rig, A/B verified): az 20 =
      * the bloom's face head-on with the stem sweeping right; el 12 = a
      * natural three-quarter height; dist 1.9 + ty 0.38 = the whole rose
@@ -195,13 +195,20 @@ export interface BlockData {
    *  Legacy fields (roseStyle/flowerMotion from the retired rose block)
    *  resolve to the bouquet. */
   flower?: string;
+  /** flower (3D rose): presentation — "spin" turns the rose on display,
+   *  "still" holds one viewing angle. Legacy free-text values from the
+   *  retired rose block resolve to "still". */
+  flowerMotion?: "spin" | "still";
+  /** flower (3D rose): spin speed 0-100 (0 = barely drifting, 100 = lively). */
+  flowerSpeed?: number;
+  /** flower (3D rose): viewing angle 0-100 — a percent of a full turn when
+   *  held still (0 = the curated portrait angle). */
+  flowerAngle?: number;
   /** flower: optional voice note (uploaded audio URL) the recipient can
    *  play from the card — the sender's own voice. */
   voiceNote?: string;
   /** @deprecated legacy rose block — kept so old moments keep resolving */
   roseStyle?: string;
-  /** @deprecated legacy rose block presentation — ignored by the player */
-  flowerMotion?: string;
 }
 
 export interface BlockDoc {

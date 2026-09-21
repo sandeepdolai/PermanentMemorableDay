@@ -116,26 +116,42 @@ export function FlowerGlyph({ size = 64, className }: { size?: number; className
 
 /**
  * The stage — one flower, floating frameless on the scene. Renders the
- * 3D canvas for MODEL flowers (WebGL, still at one best angle) or the
- * still image for IMAGE flowers. Both paths ignore pointer events, so a
- * touch always passes through as normal page scroll.
+ * 3D canvas for MODEL flowers (WebGL, spinning or held at the creator's
+ * chosen angle) or the still image for IMAGE flowers. Both paths ignore
+ * pointer events, so a touch always passes through as normal page scroll.
  */
 export function FlowerStage({
   flowerId,
+  motion,
+  speed,
+  angle,
   className,
 }: {
   flowerId?: string;
+  /** 3D roses: "spin" = turntable, "still" = held angle (default) */
+  motion?: "spin" | "still";
+  /** 3D roses: spin speed 0-100 */
+  speed?: number;
+  /** 3D roses: viewing angle 0-100 (% of a full turn) when held */
+  angle?: number;
   className?: string;
 }) {
   const f: Flower = resolveFlower(flowerId);
   const [loaded, setLoaded] = useState(false);
 
-  // MODEL flower — WebGL stage at its curated angle.
+  // MODEL flower — WebGL stage, spinning or at its curated angle.
   if (f.model) {
     return (
       <FlowerBoundary>
         <div className={cn("relative h-full w-full select-none", className)} style={{ touchAction: "pan-y" }}>
-          <Flower3D key={f.id} flower={f} className="h-full w-full" />
+          <Flower3D
+            key={f.id}
+            flower={f}
+            motion={motion === "spin" ? "spin" : "still"}
+            speed={speed}
+            angle={angle}
+            className="h-full w-full"
+          />
           <LoadVeil name={f.name} />
         </div>
       </FlowerBoundary>

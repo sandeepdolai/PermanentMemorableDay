@@ -17,7 +17,6 @@ import {
   Pause,
   Play,
   RotateCcw,
-  Share2,
   Sparkles,
   Video as VideoIcon,
   X,
@@ -748,11 +747,18 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
       className="flex w-full flex-col items-center"
     >
       {/* Frameless stage — the bouquet floats directly on the scene at its
-       * one best angle. No box, no border, no glow, no hints: nothing but
-       * the flowers. Touches never move it. */}
+       * one best angle, or the 3D rose turns / holds the chosen angle.
+       * No box, no border, no glow, no hints: nothing but the flowers.
+       * Touches never move it. */}
       <div className="relative w-full max-w-[460px]">
         <div className="relative h-[330px] md:h-[370px]">
-          <FlowerStage flowerId={d?.flower ?? d?.roseStyle} className="h-full w-full" />
+          <FlowerStage
+            flowerId={d?.flower ?? d?.roseStyle}
+            motion={d?.flowerMotion === "spin" ? "spin" : "still"}
+            speed={typeof d?.flowerSpeed === "number" ? d.flowerSpeed : undefined}
+            angle={typeof d?.flowerAngle === "number" ? d.flowerAngle : undefined}
+            className="h-full w-full"
+          />
         </div>
       </div>
 
@@ -1338,7 +1344,7 @@ const QUIZ_OPTIONS = [
 const LEGACY_SCENE_COUNT = 5;
 
 export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClose: () => void }) {
-  const { setTab, notify, openShare, sheet, trackLove } = useMD();
+  const { setTab, notify, sheet, trackLove } = useMD();
   const [scene, setScene] = useState(0);
   const [giftOpen, setGiftOpen] = useState(false);
   const [quizSolved, setQuizSolved] = useState(false);
@@ -1879,16 +1885,6 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      openShare({ id: moment.id, title: moment.title });
-                    }}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.1] bg-white py-3 text-[14px] font-semibold text-[#007AFF] hairline transition-transform active:scale-[0.97]"
-                  >
-                    <Share2 size={14} aria-hidden /> Share this moment
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
                       replay();
                     }}
                     className="flex w-full items-center justify-center gap-1.5 rounded-full py-2 text-[13.5px] font-semibold text-[#AAAAAA] transition-colors active:text-[#1D1D1F]"
@@ -2006,22 +2002,6 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
             >
               <Heart size={17} fill={loved ? "currentColor" : "none"} strokeWidth={2.2} aria-hidden />
             </motion.span>
-          </button>
-          <button
-            type="button"
-            aria-label="Share experience"
-            onClick={(e) => {
-              e.stopPropagation();
-              openShare({ id: moment.id, title: moment.title });
-            }}
-            className={cn(
-              "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full transition-transform active:scale-90",
-              isLightScene
-                ? "bg-white/80 text-[#007AFF] hairline backdrop-blur-xl"
-                : "bg-[#1D1D1F]/35 text-white backdrop-blur-md"
-            )}
-          >
-            <Share2 size={17} strokeWidth={2.2} />
           </button>
         </div>
       </div>

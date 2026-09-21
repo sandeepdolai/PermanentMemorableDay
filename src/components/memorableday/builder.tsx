@@ -1759,6 +1759,13 @@ function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data:
   const message = d.message ?? "";
   const voiceUrl = (d.voiceNote ?? "").trim();
 
+  /* ---- 3D rose motion: spin (turntable + speed slider) or still (angle
+   * slider). Image bouquets ignore these entirely. ---- */
+  const isModel = !!selected.model;
+  const motion: "spin" | "still" = d.flowerMotion === "spin" ? "spin" : "still";
+  const spinSpeed = typeof d.flowerSpeed === "number" ? Math.round(d.flowerSpeed) : 40;
+  const viewAngle = typeof d.flowerAngle === "number" ? Math.round(d.flowerAngle) : 0;
+
   /* ---- voice note: mic recorder ---- */
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -1866,10 +1873,15 @@ function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data:
   return (
     <div className="space-y-4 pb-2">
       {/* Live preview — frameless, exactly what the recipient sees: the
-       * still bouquet at its best angle, then the card beneath it. */}
+       * bouquet (or 3D rose, spinning or held) then the card beneath it. */}
       <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,#3A1526_0%,#1D1D1F_74%)]">
         <div className="h-[205px]">
-          <FlowerStage flowerId={selected.id} />
+          <FlowerStage
+            flowerId={selected.id}
+            motion={motion}
+            speed={spinSpeed}
+            angle={viewAngle}
+          />
         </div>
       </div>
       <div className="mx-1 overflow-hidden rounded-[16px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-4 py-3.5 shadow-[0_10px_24px_-14px_rgba(29,29,31,0.35)] ring-1 ring-black/[0.05]">
@@ -1918,6 +1930,110 @@ function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data:
         </div>
         <p className="mt-1.5 px-1 text-[11px] font-medium text-[#AAAAAA]">{selected.caption}</p>
       </div>
+
+      {/* 3D roses only: presentation — spins (turntable + pace) or stays
+       * still (chosen angle). Image bouquets never show this section. */}
+      {isModel ? (
+        <div>
+          <FieldLabel>Motion</FieldLabel>
+          <div className="flex gap-2" role="radiogroup" aria-label="Rose motion">
+            {([
+              { value: "spin", label: "Spins", hint: "Turns on display", icon: RotateCw },
+              { value: "still", label: "Stays still", hint: "Holds one angle", icon: Pause },
+            ] as const).map((m) => {
+              const active = motion === m.value;
+              const Icon = m.icon;
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => set({ flowerMotion: m.value })}
+                  className={cn(
+                    "flex flex-1 items-center gap-2.5 rounded-[16px] border-2 px-3 py-2.5 text-left transition-all active:scale-[0.97]",
+                    active
+                      ? "border-[#FF375F] bg-[#FF375F]/[0.06]"
+                      : "border-[#1D1D1F]/[0.09] bg-white"
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                      active ? "bg-[#FF375F] text-white" : "bg-[#1D1D1F]/[0.06] text-[#1D1D1F]/60"
+                    )}
+                  >
+                    <Icon size={16} strokeWidth={2.4} className={m.value === "spin" && active ? "animate-[spin_5s_linear_infinite]" : undefined} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className={cn("block text-[13px] font-bold tracking-[-0.01em]", active ? "text-[#D6336C]" : "text-[#1D1D1F]")}>
+                      {m.label}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] font-medium text-[#AAAAAA]">{m.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* The one slider that matches the mode — a pace for spinning,
+           * a viewing angle for still. 0-100, no presets to pick from. */}
+          {motion === "spin" ? (
+            <div className="mt-3 rounded-[16px] border border-[#1D1D1F]/[0.07] bg-[#F5F5F7] px-3.5 py-3">
+              <div className="flex items-baseline justify-between">
+                <label htmlFor="md-rose-speed" className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+                  Spin speed
+                </label>
+                <span className="text-[13px] font-bold tabular-nums text-[#1D1D1F]" aria-hidden>
+                  {spinSpeed}
+                  <span className="text-[10px] font-semibold text-[#AAAAAA]"> / 100</span>
+                </span>
+              </div>
+              <Slider
+                id="md-rose-speed"
+                value={[spinSpeed]}
+                min={0}
+                max={100}
+                step={1}
+                onValueChange={(v) => set({ flowerSpeed: v[0] })}
+                aria-label="Spin speed"
+                aria-valuetext={`${spinSpeed} of 100`}
+                className="mt-2"
+              />
+              <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                The rose turns like a showcase display — drag to set the pace, from a slow drift to a lively turn.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 rounded-[16px] border border-[#1D1D1F]/[0.07] bg-[#F5F5F7] px-3.5 py-3">
+              <div className="flex items-baseline justify-between">
+                <label htmlFor="md-rose-angle" className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+                  Viewing angle
+                </label>
+                <span className="text-[13px] font-bold tabular-nums text-[#1D1D1F]" aria-hidden>
+                  {viewAngle}
+                  <span className="text-[10px] font-semibold text-[#AAAAAA]"> / 100</span>
+                </span>
+              </div>
+              <Slider
+                id="md-rose-angle"
+                value={[viewAngle]}
+                min={0}
+                max={100}
+                step={1}
+                onValueChange={(v) => set({ flowerAngle: v[0] })}
+                aria-label="Viewing angle"
+                aria-valuetext={`${viewAngle} of 100`}
+                className="mt-2"
+              />
+              <p className="mt-2 px-1 text-[11.5px] font-medium leading-relaxed text-[#AAAAAA]">
+                Drag to turn the rose in place — 0 is the classic portrait angle, 100 brings it all the way around.
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* The card message */}
       <div>
@@ -2548,6 +2664,8 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     isNew: true,
     data: {
       flower: "rose3d",
+      flowerMotion: "spin",
+      flowerSpeed: 40,
       message: "One rose, one promise — I'll never let you go 🌹",
     },
   },
@@ -4280,15 +4398,50 @@ function SceneRow({
 
 export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onClose: () => void }) {
   const { notify, openMoment, openShare, sheet, player, aiInsertRef, openComposer, saveDraft, sendMoment } = useMD();
-  const [title, setTitle] = useState(opts.title ?? "Untitled Experience");
+
+  /* ---------------------------------------------------------------- */
+  /* Live-editing session — survives page reloads (browsers discard    */
+  /* backgrounded tabs and mobile OSes kill the page while a file      */
+  /* picker is open). The in-progress document is mirrored into        */
+  /* sessionStorage and replayed on mount, so a reload lands exactly   */
+  /* where the user left. Cleared by the app shell whenever the        */
+  /* builder is opened fresh or closed cleanly — only a page death     */
+  /* leaves it behind.                                                 */
+  /* ---------------------------------------------------------------- */
+  const [liveSession] = useState<{
+    title: string;
+    scenes: Scene[];
+    sceneIdx: number;
+    cover: number;
+    track: SongPick | null;
+  } | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.sessionStorage.getItem("md-builder-live");
+      if (!raw) return null;
+      const s = JSON.parse(raw) as { title?: string; scenes?: Scene[]; sceneIdx?: number; cover?: number; track?: SongPick | null };
+      if (!Array.isArray(s.scenes) || s.scenes.length === 0) return null;
+      return {
+        title: typeof s.title === "string" ? s.title : "Untitled Experience",
+        scenes: s.scenes,
+        sceneIdx: typeof s.sceneIdx === "number" ? Math.min(s.sceneIdx, s.scenes.length - 1) : 0,
+        cover: typeof s.cover === "number" ? s.cover : 5,
+        track: s.track ?? null,
+      };
+    } catch {
+      return null;
+    }
+  });
+
+  const [title, setTitle] = useState(liveSession?.title ?? opts.title ?? "Untitled Experience");
   const [editing, setEditing] = useState(false);
-  const [scenes, setScenes] = useState<Scene[]>(() => seedScenes(opts));
-  const [sceneIdx, setSceneIdx] = useState(0);
+  const [scenes, setScenes] = useState<Scene[]>(() => liveSession?.scenes ?? seedScenes(opts));
+  const [sceneIdx, setSceneIdx] = useState(liveSession?.sceneIdx ?? 0);
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
   const [past, setPast] = useState<Snapshot[]>([]);
   const [future, setFuture] = useState<Snapshot[]>([]);
-  const [track, setTrack] = useState<SongPick | null>(opts.doc?.track ?? null);
+  const [track, setTrack] = useState<SongPick | null>(liveSession?.track ?? opts.doc?.track ?? null);
   const [editBlockId, setEditBlockId] = useState<string | null>(null);
   const [musicOpen, setMusicOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -4302,7 +4455,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   const blocksEndRef = useRef<HTMLDivElement>(null);
   const blockDragStarted = useRef(false);
   const sceneDragStarted = useRef(false);
-  const [cover, setCover] = useState(opts.cover ?? 5);
+  const [cover, setCover] = useState(liveSession?.cover ?? opts.cover ?? 5);
   /** Palette strip scrolled to the end? (mobile scroll-affordance) */
   const paletteRef = useRef<HTMLDivElement>(null);
   const [paletteAtEnd, setPaletteAtEnd] = useState(false);
@@ -4364,6 +4517,23 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
     applySnapshot(next);
     notify(`Redo — ${next.label}`);
   }, [future, snapshot, applySnapshot, notify]);
+
+  /* ---------- Live-editing session mirror (see liveSession above) ----------
+   * Debounced write of the in-progress document; a page death mid-edit is
+   * exactly the case this key exists for. */
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      try {
+        window.sessionStorage.setItem(
+          "md-builder-live",
+          JSON.stringify({ title, scenes, sceneIdx, cover, track })
+        );
+      } catch {
+        // quota/unavailable — session restore is best-effort
+      }
+    }, 350);
+    return () => window.clearTimeout(id);
+  }, [title, scenes, sceneIdx, cover, track]);
 
   /* ---------- Mutations (each pushes history) ---------- */
 
@@ -4990,7 +5160,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 type="button"
                 onClick={() => setLibraryOpen(true)}
                 aria-label="Browse the block library"
-                className="flex shrink-0 items-center gap-2 rounded-full bg-[#1D1D1F] py-2.5 pl-3 pr-4 text-white transition-transform active:scale-[0.94] pill-shadow"
+                className="flex shrink-0 items-center gap-2 rounded-full bg-[#1D1D1F] py-2.5 pl-3 pr-4 text-white transition-transform active:scale-[0.94]"
               >
                 <span
                   className="flex h-[30px] w-[30px] items-center justify-center rounded-full"
@@ -5007,7 +5177,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 type="button"
                 onClick={() => openComposer()}
                 aria-label="Ask AI to write a message"
-                className="flex shrink-0 items-center gap-2 rounded-full py-2.5 pl-3 pr-4 text-white transition-transform active:scale-[0.94] pill-shadow"
+                className="flex shrink-0 items-center gap-2 rounded-full py-2.5 pl-3 pr-4 text-white transition-transform active:scale-[0.94]"
                 style={{ background: "linear-gradient(135deg, #5E5CE6, #7D7AFF)" }}
               >
                 <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white/25">
@@ -5052,7 +5222,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
                 type="button"
                 aria-label="Scroll for more blocks"
                 onClick={() => paletteRef.current?.scrollBy({ left: 260, behavior: "smooth" })}
-                className="absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#1D1D1F] card-shadow hairline transition-transform active:scale-90 lg:hidden"
+                className="absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#1D1D1F] hairline transition-transform active:scale-90 lg:hidden"
               >
                 <ChevronRight size={17} strokeWidth={2.4} aria-hidden />
               </button>
