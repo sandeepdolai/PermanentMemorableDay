@@ -1587,3 +1587,25 @@ Stage Summary:
 - E2E lessons this round: the builder "Edit <block>" opens a BottomSheet (button "Edit Flower content", appears after selecting the block card); "Preview experience" is an icon button (38×38) sometimes covered — click via JS eval; player drag-test is impossible (drag ends as tap → advances scene) — use the editor stage for stillness tests.
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 48
+Agent: Z.ai Code (main orchestrator)
+Task: User pushed a 2nd rose bouquet PNG to GitHub ("2ndrose boquet png") — add a NEW flower block using it, same structure as the existing flower block.
+
+Work Log:
+- Pulled df6f330: file_00000000eb648208815f11fd697efd3e.png (1135×1386 RGBA) — already a CLEAN alpha cutout (a dozen red roses, baby's breath, eucalyptus, dark-red/white wrap, satin bow, "Just for you" card; no UI chrome, no background).
+- Alpha quality check: content mean alpha 252.4 (98.6% of content px at 250+) — solid, no wash-out risk.
+- scripts/process_bouquet2.py: killed sub-perceptual alpha noise (<8→0), trimmed to alpha bbox + 12px margin → public/models/bouquet2.png (1135×1381, 1.8MB) + bouquet2-thumb.png (560×560). Source moved to upload/ for repo hygiene.
+- VLM stage-gradient mockup check: 9/10 — no UI remnants, no frames, clean edges, no halo (ribbon-tail tightness is inherent to the source artwork's own crop).
+- md-blocks.ts: added FLOWERS[1] = { id "bouquet2", name "Grand Rose Bouquet", image /models/bouquet2.png, thumb, accent #C81E3C }.
+- builder.tsx: added LIBRARY_TEMPLATES entry "flower-grand" (type flower, data.flower "bouquet2", default message "Thank you for waiting — your parcel is on its way. A dozen roses to make it up to you 💐", isNew). Library tile auto-resolves t.data.flower → bouquet2 thumb; block-card label already generic ("Rose Bouquet" per f.name).
+- E2E via agent-browser: Block Library shows BOTH templates with distinct images + New badges (VLM confirmed different tiles). Added "Grand Rose Bouquet" → drops into Scene 1. Editor sheet: grand bouquet on plum stage, two-option Flower radiogroup (Grand selected), cream thank-you card (9/10). Player: both bouquets render stacked in Scene 1 (multi-block scene = designed behavior); scrolled view shows grand bouquet FULLY visible, clean, seamless, correct cream card + generous size (7/10 only due to surrounding app chrome VLM saw in builder preview).
+- bun run lint clean; dev.log zero errors; browser console/page errors zero.
+
+Stage Summary:
+- Two flower blocks now ship: "Rose Bouquet" (compact 4-rose, bouquet) and "Grand Rose Bouquet" (dozen-rose, bouquet2) — both same structure (still image stage + message card + optional voice note), both selectable in the flower editor radiogroup, both addable from the Block Library. The starter palette "Flower" button still defaults to the compact bouquet.
+- Reusable lesson: check git remote for user-pushed commits FIRST (git fetch origin && git log HEAD..origin/main) — the 2nd bouquet arrived as a root-level file commit.
+- Player lessons: the scene scroll container must be scrolled via JS AFTER tapping into the flower scene (scrolling the end screen scrolls the end screen); scenes stack multiple blocks vertically — two flower blocks in one scene = both visible, scrollable.
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).

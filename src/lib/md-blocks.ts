@@ -55,6 +55,14 @@ export const FLOWERS = [
     accent: "#E0244A",
     caption: "A wrapped bouquet of red roses — ribbon, gold trim and all. A gift that never fades.",
   },
+  {
+    id: "bouquet2",
+    name: "Grand Rose Bouquet",
+    image: "/models/bouquet2.png",
+    thumb: "/models/bouquet2-thumb.png",
+    accent: "#C81E3C",
+    caption: "A grand bouquet of a dozen red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'.",
+  },
 ] as const;
 
 export type Flower = (typeof FLOWERS)[number];
