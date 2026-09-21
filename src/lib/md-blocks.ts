@@ -52,17 +52,18 @@ export const FLOWERS = [
     name: "Rose Bouquet",
     model: "/models/rose-bouquet.glb",
     thumb: "/models/bouquet-thumb.png",
-    /* curated hero angle (matched to the reference photo, "same to same"):
-     * camera to the LEFT of the bouquet's axis (az −18 — ribbon reads
-     * front-center, wrap's right flank opens up like the reference), clearly
-     * above the blooms looking down (el 16 — we see the rose tops), framed
-     * so the ENTIRE bouquet — blooms, wrap, stem tip — plus the message
-     * card tucked behind the top roses all sit fully in frame (~82% fill,
-     * content riding slightly upper-middle). Never cropped, never hidden. */
-    az: -18,
-    el: 16,
-    dist: 1.95,
-    ty: 0.46,
+    /* curated hero angle (matched to the reference photo, front view):
+     * az 60 = straight at the bouquet's FACE — all four rose blooms look
+     * into the camera, ribbon centered at the bottom, wrap symmetric,
+     * exactly like the reference. el 9 = just high enough to peek over
+     * the front blooms onto the wrap's white inner lining, like the
+     * reference. dist 1.75 + ty 0.38 = the ENTIRE bouquet (bloom tops →
+     * wrap tip) sits in frame at ~77% height fill like the reference,
+     * blooms riding upper-middle. Verified on light + dark. */
+    az: 60,
+    el: 9,
+    dist: 1.75,
+    ty: 0.38,
     accent: "#E0244A",
     caption: "A wrapped bouquet of red roses — ribbon, gold trim and all. A gift that never fades.",
   },

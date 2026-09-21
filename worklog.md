@@ -1533,3 +1533,31 @@ Stage Summary:
 - The MessageCard CanvasTexture pattern (unlit, toneMapped=false, auto-fit text) is reusable for any future in-scene text surface.
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 46
+Agent: Z.ai Code (main orchestrator)
+Task: User feedback round 2: "The Previous One Is Good But this one looks Garbage" — revert the flower block to the previous good version (564a064: HTML cream card BELOW the stage), but (1) make the rose a little smaller, (2) make the angle match the uploaded reference "same to same" — the bouquet FRONT should be ALL FLOWERS (face-on view like the reference photo).
+
+Work Log:
+- Reverted 5 flower files to commit 564a064 (flower-3d.tsx, flower-stage.tsx, moment-player.tsx, builder.tsx, md-blocks.ts) — the previous good layout: still bouquet + HTML cream message card below + voice note, no 3D tucked card.
+- VLM analysis of the reference photo (upload/Screenshot_2026_0921_112634.png): camera STRAIGHT FRONT (az ~0-5° in photo space), ~10-15° above looking down, 4 red rose blooms facing the camera, ribbon centered at bottom, wrap symmetric, ~70-75% frame fill, whole bouquet visible.
+- VLM comparison of the two prior renders vs reference: az 20 (previous good) = front-right 3/4, 3-4 blooms visible; az −18 (garbage one) = LEFT-side view, 0-1 blooms, mostly wrap side — confirmed the model's flower FACE is NOT at az 0 in model space.
+- Rebuilt the offline angle rig at public/_rig (import-map three.module.js + three.core.js; GLTFLoader + SkeletonUtils + BufferGeometryUtils under loaders//utils/ + meshopt decoder under libs/ — relative imports must resolve). window.__cam(az,el,dist,ty,fill) + window.__bg(hex), 460×430, same pipeline as Flower3D (fov 34, same lights, NeutralToneMapping 1.16, same normalize).
+- FIXED rig bug found mid-session: normalize() was not idempotent (re-measured the already-scaled model → size/pos drift after fill changes). Reset transform to identity before measuring. Az/el sweeps done before any fill change were valid; size tests redone.
+- AZIMUTH SWEEP (el 13): 0=side(1/10), 20=3/4(4/10), 40(7/10), 60=FRONT FACE 9/10 (all 4 blooms centered, ribbon symmetric); fine sweep 52/56/60/64/68 → 60 wins (9/10). THE MODEL'S FACE IS AT az 60.
+- ELEVATION SWEEP at az 60: 8=6/10, 12=9/10, 16=7/10 (first pass, fill 0.94); after final framing settled: 12=4/10, 9=9/10, 6=6/10; head-to-head A/B el 9 vs 7 → 9 wins ("modest band of white lining, blooms dominate").
+- SIZE/FRAMING: pixel-verified candidates (fill/dist/ty): A(.78/1.75/.42) rides low; D(.78/1.75/.34) high; E(.78/1.75/.38) = 9/10 — balanced margins (top 51px/bottom 48px of 430), ~77% frame fill, nothing touching edges. Whole-bouquet completeness re-verified on light + dark backgrounds (top blooms + wrap tip + stem all inside).
+- FINAL HERO ANGLE: az 60, el 9, dist 1.75, ty 0.38, MODEL_FILL 0.78 (applied to md-blocks.ts + flower-3d.tsx with reference-matching comments).
+- Regenerated public/models/bouquet-thumb.png (560×560) from the final rig render (content-bbox-centered square crop).
+- E2E via agent-browser + VLM: builder editor = full bouquet front-face, whole bouquet visible, breathing room, card preview below with apology text + voice chip; recipient player (desktop 1280×633) = full bouquet (bloom tops → ribbon tails), front face, cream card below with readable message, VOICE NOTE · 0:42 player, NO DRAG TO LOOK / angle UI; stage-only crop vs reference = 8/10 angle + "yes, effectively same to same" (earlier harsh read traced to an aspect-distorted crop I made — redone natively).
+- DRAG PIXEL TEST on the settled editor canvas (398×205): full multi-waypoint drag → 0 of 81,590 pixels changed — perfectly still. (First attempt on the player failed because ANY tap advances the scene — player behavior, not bouquet movement.)
+- MOBILE 390×844: whole bouquet visible, front face, readable card, thumb-sized voice player, no horizontal overflow (scrollW 390 = innerW 390).
+- bun run lint CLEAN; dev.log zero errors; rig (public/_rig) removed after tuning.
+
+Stage Summary:
+- The flower block is back to the previous good version's structure (still bouquet at ONE best angle + cream message card below + voice note) and now matches the reference photo: az 60 = straight at the bouquet's FACE (all four rose blooms look into the camera, ribbon centered, wrap symmetric), el 9 = peeking slightly over the blooms onto the wrap's white inner lining, and the rose is a little smaller (fill 0.94→0.78, dist 1.4→1.75) so the ENTIRE bouquet sits in frame at ~77% fill with breathing room — nothing cropped, nothing hidden, exactly like the reference.
+- KEY LESSON: the bouquet GLB's flower face is at az 60 in model space (az 0 shows the wrap's side) — always sweep azimuth empirically; VLM ratings are noisy (±2 points between runs) so use head-to-head A/B for final picks; make rig normalize() idempotent; compare crops at NATIVE aspect or perspective reads get distorted.
+- E2E workflow lessons: the home "Continue editing" cards are div[role=button] not <button> (querySelectorAll('button') misses them); the onboarding walkthrough (Skip/I have an account) reappears per fresh browser session; builder block cards are Reorder.Item divs with role=button; the player advances scenes on ANY tap so the drag-still test must run on the EDITOR canvas; heavy WebGL tabs crash after ~2 min under 4GB RAM — be quick, one flow per session.
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).

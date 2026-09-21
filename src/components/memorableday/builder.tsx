@@ -18,6 +18,7 @@ import {
   Focus,
   Gift,
   GripVertical,
+  Heart,
   Images as ImagesIcon,
   LayoutGrid,
   Link2,
@@ -1867,19 +1868,24 @@ function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data:
 
   return (
     <div className="space-y-4 pb-2">
-      {/* Live preview — frameless, exactly what the recipient sees: the still
-       * bouquet at its best angle with the message card tucked behind the
-       * top roses (true WYSIWYG — the card is rendered inside the stage). */}
+      {/* Live preview — frameless, exactly what the recipient sees: the
+       * still bouquet at its best angle, then the card beneath it. */}
       <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,#3A1526_0%,#1D1D1F_74%)]">
-        <div className="h-[280px]">
-          <FlowerStage flowerId={selected.id} message={previewMessage} />
+        <div className="h-[205px]">
+          <FlowerStage flowerId={selected.id} />
         </div>
       </div>
-      {voiceUrl ? (
-        <p className="mx-1 flex items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.07] bg-[#FFFDF6] px-3 py-2 text-[10.5px] font-bold uppercase tracking-[0.09em] text-[#8A5A2B]/80">
-          <Mic size={11} aria-hidden /> Voice note attached — plays under the bouquet
+      <div className="mx-1 overflow-hidden rounded-[16px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-4 py-3.5 shadow-[0_10px_24px_-14px_rgba(29,29,31,0.35)] ring-1 ring-black/[0.05]">
+        <Heart size={11} className="mx-auto mb-1.5 text-[#FF375F]" fill="currentColor" aria-hidden />
+        <p className="text-center font-serif text-[13.5px] italic leading-[1.5] text-[#3E2A1E]">
+          {previewMessage}
         </p>
-      ) : null}
+        {voiceUrl ? (
+          <p className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-[#B45309]/[0.12] pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8A5A2B]/75">
+            <Mic size={10} aria-hidden /> Voice note attached
+          </p>
+        ) : null}
+      </div>
 
       {/* The ONLY flower setting: which flower */}
       <div>

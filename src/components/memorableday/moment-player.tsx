@@ -700,7 +700,7 @@ function VoiceNotePlayer({ url }: { url: string }) {
   };
 
   return (
-    <div className="flex w-full items-center gap-3 rounded-full border border-white/[0.14] bg-white/[0.09] px-3 py-2.5 shadow-[0_14px_34px_-18px_rgba(0,0,0,0.6)] backdrop-blur-md">
+    <div className="flex w-full items-center gap-3 border-t border-[#B45309]/[0.12] pt-3.5">
       <audio
         ref={audioRef}
         src={url}
@@ -727,7 +727,7 @@ function VoiceNotePlayer({ url }: { url: string }) {
       </button>
       <span className="flex min-w-0 flex-1 items-center gap-2.5">
         <VoiceBars active={playing} />
-        <span className="truncate text-[11.5px] font-semibold uppercase tracking-[0.09em] text-white/70">
+        <span className="text-[11.5px] font-semibold uppercase tracking-[0.09em] text-[#8A5A2B]/80">
           Voice note{duration ? ` · ${formatClock(duration)}` : ""}
         </span>
       </span>
@@ -747,27 +747,39 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
     >
-      {/* Frameless portrait stage — the same framing as the reference photo:
-       * the ENTIRE bouquet in view at its one best angle, with the sender's
-       * message on a paper card tucked BEHIND the top roses (so the card can
-       * never hide a single petal). Touches never move it. */}
-      <div className="relative w-full max-w-[430px]">
-        <div className="relative h-[400px] md:h-[430px]">
-          <FlowerStage flowerId={d?.flower ?? d?.roseStyle} message={message} className="h-full w-full" />
+      {/* Frameless stage — the bouquet floats directly on the scene at its
+       * one best angle. No box, no border, no glow, no hints: nothing but
+       * the flowers. Touches never move it. */}
+      <div className="relative w-full max-w-[460px]">
+        <div className="relative h-[330px] md:h-[370px]">
+          <FlowerStage flowerId={d?.flower ?? d?.roseStyle} className="h-full w-full" />
         </div>
       </div>
 
-      {/* The sender's voice — the one control that must stay tappable HTML. */}
-      {voiceNote ? (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85 + index * 0.09, duration: 0.35, ease: "easeOut" }}
-          className="relative z-10 mt-1 w-full max-w-[360px]"
-        >
-          <VoiceNotePlayer url={voiceNote} />
-        </motion.div>
-      ) : null}
+      {/* The sender's card — just the message (and voice, when recorded). */}
+      <motion.div
+        initial={{ opacity: 0, y: 14, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: 0.75 + index * 0.09, type: "spring", stiffness: 260, damping: 24 }}
+        className="relative z-10 -mt-2 w-full max-w-[400px]"
+      >
+        <div className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-6 pb-5 pt-6 shadow-[0_24px_48px_-20px_rgba(0,0,0,0.55)] ring-1 ring-black/[0.06]">
+          {/* subtle top thread the card hangs from */}
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,#FF375F33_18%,#FF375F66_50%,#FF375F33_82%,transparent_100%)]"
+          />
+          <Heart size={13} className="mx-auto mb-2.5 text-[#FF375F]" fill="currentColor" aria-hidden />
+          <p className="text-center font-serif text-[16.5px] italic leading-[1.55] tracking-[-0.005em] text-[#3E2A1E]">
+            {message || "A bouquet for you."}
+          </p>
+          {voiceNote ? (
+            <div className="mt-4">
+              <VoiceNotePlayer url={voiceNote} />
+            </div>
+          ) : null}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

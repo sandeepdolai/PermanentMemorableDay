@@ -105,19 +105,16 @@ class FlowerBoundary extends Component<{ children: ReactNode }, { failed: boolea
 
 export function FlowerStage({
   flowerId,
-  message,
   className,
 }: {
   flowerId?: string;
-  /** The sender's note — painted on the 3D card tucked behind the roses. */
-  message?: string;
   className?: string;
 }) {
   const f: Flower = resolveFlower(flowerId);
   return (
     <FlowerBoundary>
       <div className="relative h-full w-full">
-        <Flower3D key={f.id} flower={f} message={message} className={cn("h-full w-full", className)} />
+        <Flower3D key={f.id} flower={f} className={cn("h-full w-full", className)} />
         <LoadVeil name={f.name} />
       </div>
     </FlowerBoundary>
