@@ -2526,6 +2526,32 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     },
   },
   {
+    id: "flower-hearts",
+    type: "flower",
+    name: "Roses & Hearts Bouquet",
+    blurb: "A lush bouquet of red roses with a heart-envelope card and a pink ribbon — a love letter in flower form",
+    category: "Rewards",
+    accent: "#E84393",
+    isNew: true,
+    data: {
+      flower: "bouquet3",
+      message: "Sending you a bouquet and all my love — every rose here says what words can't ❤️",
+    },
+  },
+  {
+    id: "flower-3d-rose",
+    type: "flower",
+    name: "3D Red Rose",
+    blurb: "A single red rose in full bloom — a real 3D rose, lit like a portrait at one perfect angle",
+    category: "Rewards",
+    accent: "#FF375F",
+    isNew: true,
+    data: {
+      flower: "rose3d",
+      message: "One rose, one promise — I'll never let you go 🌹",
+    },
+  },
+  {
     id: "gift-box",
     type: "gift",
     name: "Gift Box",

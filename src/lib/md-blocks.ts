@@ -41,12 +41,33 @@ export interface SongResult {
 /** Card colors the creator can assign to claw-machine coupons (pile art). */
 export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"] as const;
 
-/** Flowers — the user's own rose-bouquet artwork (cleaned, transparent
- *  PNG cutouts of their uploads: UI chrome removed, backgrounds knocked
- *  out, silhouettes feathered). Each flower carries an accent color and a
- *  thumbnail used across lists. The block editor offers ONLY this
- *  selection — nothing else is configurable. */
-export const FLOWERS = [
+/** One flower in the FLOWERS library. IMAGE flowers (image set) render as a
+ * still PNG; MODEL flowers (model set) render as a WebGL 3D rose at their
+ * curated hero angle (azimuth/elevation in degrees, distance in
+ * model-heights, target height fraction). Every flower carries an accent
+ * color and a thumbnail used across lists. The block editor offers ONLY
+ * this selection — nothing else is configurable. */
+export interface Flower {
+  id: string;
+  name: string;
+  /** image flowers: the still artwork PNG */
+  image?: string;
+  /** model flowers: the GLB to render (WebGL stage) */
+  model?: string;
+  thumb: string;
+  accent: string;
+  caption: string;
+  /* curated hero angle for model flowers */
+  az?: number;
+  el?: number;
+  dist?: number;
+  ty?: number;
+}
+
+/** Flowers — the user's own rose artwork (cleaned, transparent PNG
+ * cutouts of their uploads: UI chrome removed, backgrounds knocked out,
+ * silhouettes feathered) plus their 3D rose GLB. */
+export const FLOWERS: Flower[] = [
   {
     id: "bouquet",
     name: "Rose Bouquet",
@@ -63,9 +84,31 @@ export const FLOWERS = [
     accent: "#C81E3C",
     caption: "A grand bouquet of nine red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'. A gift that never fades.",
   },
-] as const;
-
-export type Flower = (typeof FLOWERS)[number];
+  {
+    id: "bouquet3",
+    name: "Roses & Hearts Bouquet",
+    image: "/models/bouquet3.png",
+    thumb: "/models/bouquet3-thumb.png",
+    accent: "#E84393",
+    caption: "A lush bouquet of red roses with a pink envelope card of hearts, tied with a glossy pink ribbon — a love letter in flower form.",
+  },
+  {
+    id: "rose3d",
+    name: "3D Red Rose",
+    model: "/models/rose-3d.glb",
+    thumb: "/models/rose3d-thumb.png",
+    accent: "#FF375F",
+    caption: "A single red rose in full bloom — a real 3D rose, lit like a portrait. One perfect angle, always.",
+    /* curated hero angle (tuned on the offline rig, A/B verified): az 20 =
+     * the bloom's face head-on with the stem sweeping right; el 12 = a
+     * natural three-quarter height; dist 1.9 + ty 0.38 = the whole rose
+     * (bloom tip → stem end) in frame with even margins. */
+    az: 20,
+    el: 12,
+    dist: 1.9,
+    ty: 0.38,
+  },
+];
 
 /** Resolves a stored flower id → flower. Legacy fields (roseStyle with the
  *  old "rose"/"azalea"/palette ids) all map to the current bouquet. */
