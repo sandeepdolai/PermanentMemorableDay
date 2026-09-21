@@ -496,9 +496,9 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
             <img src={f.thumb} alt="" width={58} height={58} className="h-full w-full object-cover" draggable={false} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">3D Flower · {f.name}</p>
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Rose Bouquet</p>
             <p className="mt-1 truncate text-[12.5px] text-[#AAAAAA]">
-              {note ? `“${note}”` : "A 3D bouquet with a note card"}
+              {note ? `“${note}”` : "A bouquet with a note card"}
             </p>
           </div>
           <span className="flex shrink-0 items-center gap-1.5">
@@ -510,9 +510,6 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
                 <Mic size={10} aria-hidden /> Voice
               </span>
             ) : null}
-            <span className="rounded-full bg-[#FF375F]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#FF375F]">
-              3D
-            </span>
           </span>
         </div>
       );
@@ -1737,7 +1734,7 @@ function UploadAudioContent({
 }
 
 /* ------------------------------------------------------------------ */
-/* Flower block — the 3D bouquet at one best angle + the message card   */
+/* Flower block — the still bouquet at one best angle + the message card   */
 /* (+ optional voice note). The bouquet itself is never configurable:   */
 /* no angles, no motion — it sits perfectly still at its best angle.    */
 /* ------------------------------------------------------------------ */
@@ -2505,8 +2502,8 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
   {
     id: "flower-3d",
     type: "flower",
-    name: "3D Rose Bouquet",
-    blurb: "A still 3D bouquet with a message card and an optional voice note — perfect for apologies and thank-yous",
+    name: "Rose Bouquet",
+    blurb: "A still bouquet with a message card and an optional voice note — perfect for apologies and thank-yous",
     category: "Rewards",
     accent: "#FF375F",
     isNew: true,

@@ -1561,3 +1561,29 @@ Stage Summary:
 - E2E workflow lessons: the home "Continue editing" cards are div[role=button] not <button> (querySelectorAll('button') misses them); the onboarding walkthrough (Skip/I have an account) reappears per fresh browser session; builder block cards are Reorder.Item divs with role=button; the player advances scenes on ANY tap so the drag-still test must run on the EDITOR canvas; heavy WebGL tabs crash after ~2 min under 4GB RAM — be quick, one flow per session.
 - SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
+
+---
+Task ID: 47
+Agent: Z.ai Code (main orchestrator)
+Task: User request: "Replace the rose with the new uploaded rose bouquet png And Make a Little bigger" — swap the 3D GLB bouquet for the user's uploaded screenshot artwork (cleaned PNG) and display it a little bigger.
+
+Work Log:
+- Analyzed the uploaded reference PNG (upload/Screenshot_2026_0921_112634.png, 765×651 RGBA, pure-black bg): it contains viewer UI chrome — a left info column/panel (flat grey 19,19,19, x≤178, y≈390-650, incl. an input pill at y 380-420 and white text) + a blue "Z" badge (x 749-764, y 567-589). VLM confirmed the bouquet itself never overlaps them (foliage leftmost x=187, panel right edge x=178 — 9px gap).
+- scripts/process_bouquet.py: neutralized UI zones → pure black; flood-filled border-connected near-black bg (max channel ≤10) → transparent via scipy.ndimage.label (the very dark wrap paper survives — never border-connected); 0.8px alpha feather at the silhouette; cropped to content+10px margin → public/models/bouquet.png (466×606, 359KB). Regenerated bouquet-thumb.png (560×560 square, content-centered).
+- VLM check of the PNG composited on the real stage gradient: 10/10 — no UI remnants, no rectangle edges, seamless blend, whole bouquet visible.
+- md-blocks.ts: FLOWERS[0] now `image: "/models/bouquet.png"` (model/az/el/dist/ty removed).
+- flower-stage.tsx: full rewrite — plain <img> (h-[90%], centered, object-contain, pointer-events:none, draggable=false, select-none) with a soft bloom shimmer until load + 700ms fade-in. No Canvas/WebGL/GLB download. FlowerGlyph kept.
+- Deleted flower-3d.tsx + public/models/rose-bouquet.glb (17.7MB, no longer referenced; restorable via `git checkout aa97b8b -- public/models/rose-bouquet.glb src/components/memorableday/flower-3d.tsx`).
+- builder.tsx label cleanup: "3D Flower · X"→"Rose Bouquet", "A 3D bouquet…"→"A bouquet…", removed the "3D" badge, template name "3D Rose Bouquet"→"Rose Bouquet" (template id "flower-3d" kept for stability).
+- E2E via agent-browser: builder editor sheet = clean bouquet on plum gradient, whole bouquet, generous size, cream card + voice chip (VLM 9/10). Recipient player flower scene = clean floating bouquet, seamless blend, whole bouquet incl. ribbon tails, cream apology card + VOICE NOTE · 0:42, no DRAG TO LOOK/angle UI (VLM 9/10).
+- Stillness pixel test on the editor stage: full multi-waypoint drag → 0 of 738,560 pixels changed (and the img is pointer-events:none by construction). Player tap-advance re-confirmed (drag-ended-as-tap advances — player behavior, not bouquet movement).
+- Mobile 390×844: whole bouquet visible, no horizontal overflow (scrollW 390 = innerW 390), readable card, thumb-sized voice player (VLM 9/10).
+- Size verified via DOM: img = 297px of the 330px stage = 90% (bouquet ≈86% visual fill vs old 3D 0.78 MODEL_FILL → "a little bigger", whole bouquet still fully visible).
+- bun run lint clean; dev.log zero errors; browser console/page errors zero.
+
+Stage Summary:
+- The flower block now renders the user's own uploaded bouquet artwork (cleaned, transparent, UI-chrome-free) instead of the 3D GLB — pixel-identical to the reference screenshot, loads in ~360KB instead of 17.7MB, no WebGL (no more heavy-tab crashes), and displays a little bigger (~86% stage fill vs 78%). Perfectly still (pointer-events:none), one best look, card + voice note unchanged.
+- Image-cleaning recipe that worked: locate UI chrome by exact flat-grey signature + column scans → neutralize → border-connected flood-fill (not naive black-removal — the wrap paper is nearly black) → alpha feather → tight crop. VLM-verify composited on the REAL stage gradient before wiring in.
+- E2E lessons this round: the builder "Edit <block>" opens a BottomSheet (button "Edit Flower content", appears after selecting the block card); "Preview experience" is an icon button (38×38) sometimes covered — click via JS eval; player drag-test is impossible (drag ends as tap → advances scene) — use the editor stage for stillness tests.
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).

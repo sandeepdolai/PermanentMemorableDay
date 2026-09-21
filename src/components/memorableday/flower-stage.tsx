@@ -1,52 +1,23 @@
 "use client";
 
 /**
- * flower-stage.tsx — the client-only wrapper for the 3D flower stage.
+ * flower-stage.tsx — the flower stage.
  *
- * The R3F canvas loads via next/dynamic (ssr: false) so three.js never runs
- * on the server. While the bouquet (~18 MB) downloads, a soft progress veil
- * shows the live percentage; a static SVG bloom is the graceful fallback if
- * WebGL is unavailable.
+ * Renders the user's rose-bouquet artwork (public/models/bouquet.png — a
+ * cleaned, transparent PNG cut from their uploaded screenshot: viewer UI
+ * chrome removed, black background knocked out, silhouette feathered) as a
+ * perfectly still image at a good generous size. No canvas, no WebGL, no
+ * 18 MB GLB download — the bouquet looks exactly like the reference photo,
+ * every time, on every device.
+ *
+ * The bouquet is PERFECTLY STILL: no drag, no spin, no zoom, no pan — the
+ * image ignores pointer events entirely, so touching it never does anything.
  */
-import dynamic from "next/dynamic";
-import { Component, type ReactNode } from "react";
-import { useProgress } from "@react-three/drei";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { flower as resolveFlower, type Flower } from "@/lib/md-blocks";
 
-const Flower3D = dynamic(() => import("./flower-3d").then((m) => m.Flower3D), {
-  ssr: false,
-  loading: () => <FlowerLoading />,
-});
-
-function FlowerLoading() {
-  return (
-    <div className="flex h-full w-full items-center justify-center" aria-hidden>
-      <div className="relative">
-        <span className="absolute inset-0 animate-ping rounded-full bg-[#FF375F]/20" style={{ width: 74, height: 74 }} />
-        <svg width="56" height="56" viewBox="0 0 24 24" className="animate-pulse text-[#FF375F]/80" fill="currentColor">
-          <path d="M12 2c1.9 2.2 2.9 4.4 2.9 6.6 0 1.2-.3 2.3-.9 3.3 1.5-.4 2.7-1.3 3.6-2.8.3 1 .4 1.9.4 2.8 0 4-2.7 7.3-6.5 8.1V22h-1v-2c-3.8-.8-6.5-4.1-6.5-8.1 0-.9.1-1.8.4-2.8.9 1.5 2.1 2.4 3.6 2.8-.6-1-.9-2.1-.9-3.3C6.6 6.4 7.6 4.2 9.5 2c.8.9 1.5 2 2 3.2.5-1.2 1.2-2.3 2-3.2h-1.5Z" />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-/** Live download veil — appears while the GLB streams in. */
-function LoadVeil({ name }: { name: string }) {
-  const { active, progress } = useProgress();
-  if (!active || progress >= 100) return null;
-  return (
-    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2.5">
-      <FlowerLoading />
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
-        Blooming the {name.toLowerCase()} · {Math.round(progress)}%
-      </p>
-    </div>
-  );
-}
-
-/** Static SVG bloom — WebGL fallback + list thumbnails. */
+/** Static SVG bloom — decorative fallback while the artwork streams in. */
 export function FlowerGlyph({ size = 64, className }: { size?: number; className?: string }) {
   return (
     <svg
@@ -82,27 +53,13 @@ export function FlowerGlyph({ size = 64, className }: { size?: number; className
   );
 }
 
-/** WebGL error boundary → static bloom fallback. */
-class FlowerBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch() {
-    /* WebGL unavailable — the static glyph is enough */
-  }
-  render() {
-    if (this.state.failed) {
-      return (
-        <div className="flex h-full w-full items-center justify-center">
-          <FlowerGlyph size={120} />
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
+/**
+ * The stage: the bouquet artwork floating frameless on the scene.
+ * A plain <img> — pointer-events disabled so it can never be touched,
+ * dragged or moved. Sits at ~90% of the stage height, centered: the whole
+ * bouquet (bloom tops → ribbon tails) is always fully visible with a
+ * little breathing room, and reads generously larger than the old 3D view.
+ */
 export function FlowerStage({
   flowerId,
   className,
@@ -111,12 +68,36 @@ export function FlowerStage({
   className?: string;
 }) {
   const f: Flower = resolveFlower(flowerId);
+  const [loaded, setLoaded] = useState(false);
+
   return (
-    <FlowerBoundary>
-      <div className="relative h-full w-full">
-        <Flower3D key={f.id} flower={f} className={cn("h-full w-full", className)} />
-        <LoadVeil name={f.name} />
-      </div>
-    </FlowerBoundary>
+    <div
+      className={cn("relative h-full w-full select-none", className)}
+      style={{ touchAction: "pan-y" }}
+    >
+      {/* soft bloom shimmer while the artwork streams in */}
+      {!loaded ? (
+        <div className="absolute inset-0 flex items-center justify-center" aria-hidden>
+          <div className="relative">
+            <span
+              className="absolute inset-0 animate-ping rounded-full bg-[#FF375F]/20"
+              style={{ width: 74, height: 74 }}
+            />
+            <FlowerGlyph size={56} className="animate-pulse text-[#FF375F]/80" />
+          </div>
+        </div>
+      ) : null}
+      <img
+        src={f.image}
+        alt={f.caption}
+        draggable={false}
+        onLoad={() => setLoaded(true)}
+        className={cn(
+          "absolute left-1/2 top-1/2 h-[90%] w-auto -translate-x-1/2 -translate-y-1/2 object-contain transition-opacity duration-700",
+          loaded ? "opacity-100" : "opacity-0"
+        )}
+        style={{ pointerEvents: "none" }}
+      />
+    </div>
   );
 }

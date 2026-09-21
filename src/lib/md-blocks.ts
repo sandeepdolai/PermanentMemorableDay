@@ -41,29 +41,17 @@ export interface SongResult {
 /** Card colors the creator can assign to claw-machine coupons (pile art). */
 export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"] as const;
 
-/** 3D flowers — real GLB models (user-authored assets from the repo).
- *  Each flower carries its hero camera ("best angle": azimuth/elevation in
- *  degrees, distance in model-heights, target height fraction), an accent
- *  color, and a thumbnail used across lists. The block editor offers ONLY
- *  this selection — nothing else is configurable. */
+/** Flowers — the user's own rose-bouquet artwork (a cleaned, transparent
+ *  PNG cut from their uploaded screenshot: UI chrome removed, black
+ *  background knocked out, silhouette feathered). Each flower carries an
+ *  accent color and a thumbnail used across lists. The block editor offers
+ *  ONLY this selection — nothing else is configurable. */
 export const FLOWERS = [
   {
     id: "bouquet",
     name: "Rose Bouquet",
-    model: "/models/rose-bouquet.glb",
+    image: "/models/bouquet.png",
     thumb: "/models/bouquet-thumb.png",
-    /* curated hero angle (matched to the reference photo, front view):
-     * az 60 = straight at the bouquet's FACE — all four rose blooms look
-     * into the camera, ribbon centered at the bottom, wrap symmetric,
-     * exactly like the reference. el 9 = just high enough to peek over
-     * the front blooms onto the wrap's white inner lining, like the
-     * reference. dist 1.75 + ty 0.38 = the ENTIRE bouquet (bloom tops →
-     * wrap tip) sits in frame at ~77% height fill like the reference,
-     * blooms riding upper-middle. Verified on light + dark. */
-    az: 60,
-    el: 9,
-    dist: 1.75,
-    ty: 0.38,
     accent: "#E0244A",
     caption: "A wrapped bouquet of red roses — ribbon, gold trim and all. A gift that never fades.",
   },

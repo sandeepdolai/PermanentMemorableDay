@@ -645,11 +645,11 @@ function QuizBlockView({
   );
 }
 
-/* Flower — the real 3D bouquet (GLB) floating frameless on the scene. The
- * bouquet is locked at its best angle — perfectly still, touches never move
- * it — and the sender's message sits on an elegant card beneath it, with an
- * optional voice note the recipient can play. No other chrome: the viewer
- * sees a bouquet + a card, that's it. */
+/* Flower — the user's rose-bouquet artwork floating frameless on the scene.
+ * The bouquet is perfectly still, touches never move it — and the sender's
+ * message sits on an elegant card beneath it, with an optional voice note
+ * the recipient can play. No other chrome: the viewer sees a bouquet + a
+ * card, that's it. */
 
 /** Animated equalizer bars — shown while the voice note plays. */
 function VoiceBars({ active }: { active: boolean }) {
