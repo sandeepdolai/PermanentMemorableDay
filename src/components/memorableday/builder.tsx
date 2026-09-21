@@ -2516,13 +2516,13 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     id: "flower-grand",
     type: "flower",
     name: "Grand Rose Bouquet",
-    blurb: "A dozen red roses with baby's breath and a satin bow — a grander way to say sorry or thank you",
+    blurb: "Nine red roses with baby's breath and a satin bow — a grander way to say sorry or thank you",
     category: "Rewards",
     accent: "#C81E3C",
     isNew: true,
     data: {
       flower: "bouquet2",
-      message: "Thank you for waiting — your parcel is on its way. A dozen roses to make it up to you 💐",
+      message: "Thank you for waiting — your parcel is on its way. Nine grand roses to make it up to you 💐",
     },
   },
   {

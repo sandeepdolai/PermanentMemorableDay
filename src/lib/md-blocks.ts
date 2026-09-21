@@ -41,11 +41,11 @@ export interface SongResult {
 /** Card colors the creator can assign to claw-machine coupons (pile art). */
 export const COUPON_COLORS = ["#9B59B6", "#E84393", "#F59E0B", "#2ECC71", "#3498DB", "#FF7A3D"] as const;
 
-/** Flowers — the user's own rose-bouquet artwork (a cleaned, transparent
- *  PNG cut from their uploaded screenshot: UI chrome removed, black
- *  background knocked out, silhouette feathered). Each flower carries an
- *  accent color and a thumbnail used across lists. The block editor offers
- *  ONLY this selection — nothing else is configurable. */
+/** Flowers — the user's own rose-bouquet artwork (cleaned, transparent
+ *  PNG cutouts of their uploads: UI chrome removed, backgrounds knocked
+ *  out, silhouettes feathered). Each flower carries an accent color and a
+ *  thumbnail used across lists. The block editor offers ONLY this
+ *  selection — nothing else is configurable. */
 export const FLOWERS = [
   {
     id: "bouquet",
@@ -53,7 +53,7 @@ export const FLOWERS = [
     image: "/models/bouquet.png",
     thumb: "/models/bouquet-thumb.png",
     accent: "#E0244A",
-    caption: "A hand-tied bouquet of nine red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'. A gift that never fades.",
+    caption: "A wrapped bouquet of red roses — ribbon, gold trim and all. A gift that never fades.",
   },
   {
     id: "bouquet2",
@@ -61,7 +61,7 @@ export const FLOWERS = [
     image: "/models/bouquet2.png",
     thumb: "/models/bouquet2-thumb.png",
     accent: "#C81E3C",
-    caption: "A grand bouquet of a dozen red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'.",
+    caption: "A grand bouquet of nine red roses with baby's breath, eucalyptus and a satin bow — 'Just for you'. A gift that never fades.",
   },
 ] as const;
 
