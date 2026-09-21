@@ -1484,3 +1484,30 @@ Stage Summary:
 - Rig gotchas for future 3D tuning: three 0.186 needs three.core.js beside three.module.js; measure masks on light bg for dark models; keep camera/bg switchers in-page to avoid 17 MB reloads; screenshot viewport crops — render at pixelRatio 1.
 - SECURITY (carried): the GitHub PAT was posted in chat again — rotate at github.com/settings/tokens after sandbox work.
 - Next-phase queue (from Task 42): public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false).
+
+---
+Task ID: 44
+Agent: Z.ai Code (main orchestrator)
+Task: User feedback on the flower block: (1) rose looks faded, remove the invisible frame; (2) bouquet must NOT drag — touches leave it in the same place; (3) one best angle only, no angle selection; (4) add a card where creators write a message (e-commerce apology use case, "no extra text" for viewers); (5) remove "DRAG TO LOOK" text; (6) optional voice note feature.
+
+Work Log:
+- Diagnosed visually via agent-browser + VLM: the PLAYER was already frameless and vibrant; the "invisible frame + fade" read came from the EDITOR preview (bordered rounded box + dark radial-gradient vignette + "LIVE 3D / Real model · drag to look" caption) and from ACES tone mapping desaturating highlights.
+- flower-3d.tsx rewritten:
+  · NO OrbitControls at all — the camera is locked at the curated best angle (az 20/el 15/dist 1.4/ty 0.5); drags/touches can never move the bouquet. touchAction "pan-y" so mobile page scroll works through the canvas.
+  · Anti-fade: THREE.NeutralToneMapping (keeps deep reds saturated where ACES washed them) + exposure 1.16, envMapIntensity 0.5, slightly stronger key/fill/rim lights.
+  · frameloop="demand": frames render only during the 0.9s entry animation; the canvas then freezes completely (a still bouquet re-rendering 1.86M tris 60×/s would cook phones). ContactShadows mounts post-settle with frames={1}.
+- moment-player.tsx FlowerBlockView: REMOVED "For you" eyebrow + "DRAG TO LOOK" hint + hint state. ADDED the message card: cream paper card (gradient #FFFDF6→#FBF3E4, heart accent, serif italic message, spring entrance) below the bouquet; default "A bouquet for you." when empty. ADDED VoiceNotePlayer: round rose play button + framer-motion equalizer bars + duration, plays/pauses the uploaded audio, auto-stops on unmount.
+- builder.tsx FlowerBlockEditor: frameless preview (no border stroke, no caption row) + live card preview under the stage (WYSIWYG); "Message on the card" textarea (220 chars, e-commerce apology placeholder); "Voice note" section — MediaRecorder mic recording (webm/mp4 auto-picked, live timer, 2-min cap, pulsing UI) OR audio file upload; attached state has play-preview + remove. BlockSummary flower row now shows the message snippet + Voice chip. starterBlockData + "3D Rose Bouquet" library template seed the apology message.
+- md-blocks.ts: BlockData.voiceNote (audio URL); message doc updated to gift+flower shared.
+- FIXED LATENT BUG: /api/md/upload route never existed — apiUploadFile() posted to a 404 ("Server action not found"), so ALL builder uploads (audio block too) were broken. Created src/app/api/md/upload/route.ts (storeUpload + expect query; any-kind for webm voice notes).
+- AI sketch route: flower case now accepts an optional message (≤220 chars); prompt line updated.
+- E2E via agent-browser + VLM (desktop 1280×860 + mobile 390×844): editor = vibrant frameless bouquet + card preview + radio + textarea (seeded apology, 95/220) + Record/Upload buttons; real mp3 uploaded through the file input → stored (storage/uploads/uuid.mp3), served 200, editor play/pause toggles; player = NO FOR YOU / NO DRAG TO LOOK / NO frame, vibrant bouquet, card with message, "VOICE NOTE · 0:42" play button works; DRAG PIXEL TEST: full mouse drag across the canvas → 0 of 228,800 canvas pixels changed (only the pulsing "tap to continue" bar differed) — bouquet perfectly still; mobile player + editor verified, no horizontal overflow; zero page errors (only benign drei THREE.Clock warnings); bun run lint CLEAN; tsc 22 pre-existing errors before AND after (zero new).
+- Sandbox ops: the dev server was OOM-killed mid-session (next-server 1.87GB RSS) and background processes now get reaped between Bash invocations — switched to single-invocation test batches (start server + test in one command). Dev server restarted with NODE_OPTIONS=--max-old-space-size=900.
+- Committed + pushed (564a064 + chores → 0b0429b). Test upload file re-tracked per the user's track-everything directive.
+
+Stage Summary:
+- The flower block is now exactly the e-commerce apology machine the user described: a perfectly still, vibrant 3D rose bouquet at one best angle (no drag, no frame, no hints) with the sender's message on an elegant card and an optional voice note the recipient plays with one tap. Creators write e.g. "We're so sorry your parcel is delayed…" straight into the editor.
+- The missing /api/md/upload route is the headline infra fix — the builder's entire upload path (audio blocks, voice notes, photos/videos) was silently 404ing before.
+- frameloop="demand" is the pattern for any future still 3D block; NeutralToneMapping is the fix pattern for washed-out PBR colors.
+- SECURITY (carried): GitHub PAT was posted in chat during earlier rounds — rotate at github.com/settings/tokens after sandbox work.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch (COUPON_REVEAL_ENABLED=false), mic-recording e2e (needs headed browser with fake media stream).
