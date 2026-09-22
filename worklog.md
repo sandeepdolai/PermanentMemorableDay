@@ -1908,3 +1908,30 @@ Stage Summary:
 - The AI Creator now designs with the full emotional toolkit — it can sketch albums, letters, open-when envelopes and fireworks finales, with 3–6 scenes per story.
 - Next-phase queue (carried): public /e/[slug] recipient page, per-scene soundtrack override, creator claims analytics dashboard, library search field, coupon relaunch, mic-recording e2e (PageVoiceInput), save-draft/preview race investigation.
 - SECURITY (carried): GitHub PAT ghp_66Z1… posted in chat previously — rotate at github.com/settings/tokens after sandbox work.
+
+---
+Task ID: 55
+Agent: Z.ai Code (main orchestrator)
+Task: Watch the user's MP4 reference video (pushed to GitHub) and rebuild the Digital Album as the video's Apple-style 3D photo book; remove the Album hero/create card and every "Unlimited" label (cheap feeling).
+
+Work Log:
+- Pulled commit 5db4d38 ("The Same thing I need With our Formate Feature, Album") → fd3c70a0-…mp4 (14s, 1280×960).
+- Extracted 1fps frames + 4 keyframes; analyzed via VLM (3 passes): the reference is an Apple-Photos-style PHOTO BOOK — closed portrait cover (photo + serif title + page count + page-edge stack), opens via 3D rotateY swing, landscape two-page spreads on cream paper, two-sided leaf flips around the center gutter with dynamic sweep shadows, fanned page stacks on both edges, side ghost-circle arrows, bottom folio counter, deep-slate vignette stage, scrapbook serif captions, end on last spread.
+- md-blocks.ts: added `albumCover?: string` (cover photo, falls back to first page's photo); reworded album comments (no "unlimited"/"leather").
+- moment-player.tsx: REPLACED AlbumBlockView (leather/gold/heart design) with a real book engine:
+  • Physical model: sides = [cover, …pages, ending]; leaf k = sides 2k/2k+1; spread v shows sides 2v+1/2v+2; spread −1 = closed cover. spreadCount = floor(len/2).
+  • Turn state machine: `turn {from,to}` renders a two-sided leaf (front = leaving page, back = arriving page) rotating rotateY 0↔−180° around the gutter, 0.9s cubic ease; synchronized shadow overlays (leaf shading, sweep shadow on revealed sheet, landing shadow); statics switch under the leaf via min/max rule so nothing teleports.
+  • Closed cover: full-bleed cover photo + scrim + serif title + "N PAGES" + spine shadow + page-edge stack + floating white open-book button + "Tap the cover to open" pulse.
+  • Open book: 3:2 spread, cream stock (#FBF6EC→#F4EDDE), gutter gradients, ground shadow, page-edge stacks that thin as the story advances, side glass-circle arrows, folio line "1–2 of 4" + slim white progress.
+  • Pages: photo w/ serif-italic caption + folio number; words-only centered quote; voice page (VoiceNotePlayer); ending "The End." + note + signature + "Read it again" (fade-remount reset). Swipe, arrows, arrow-keys, paper-rustle SFX, reduced-motion path, aria labels. Taps never advance the scene.
+- builder.tsx: new AlbumEditor — dark-stage live preview (closed cover w/ live title/photo + first spread with real thumbnails), NEW cover-photo upload field, recolored ink-slate accents (#64748B), "Add a page", ending + signature; new row preview (mini spread), new palette miniature (open spread), template renamed "Photo Book" (accent #64748B, albumCover seed, title "Our Story"), starter data updated, block label "Photo Album" + BookOpen icon.
+- create-view.tsx: REMOVED AlbumHeroCard entirely (the album create-form hero); renamed block tile "Photo Album"; header/footer copy reworded (no "unlimited").
+- Removed ALL "Unlimited" wording: builder Scenes/palette badges, coupon "Unlimited — every player can win it"→"Every player can win it", profile upgrade card, pricing plan note, sketch prompt ("leather memory book"→"photo book"), comments.
+- QA via agent-browser (desktop 1280 + mobile 390): Create page (hero gone, no "Unlimited") → Photo Album tile → editor (preview + fields OK) → preview player → cover → open (3D swing caught mid-frame) → spread 1 (captions/folios/arrows/"1–2 of 4") → forward turn → last spread (note left, "The End." + Read it again right, "3–4 of 4") → backward turn → spread 1 again → Read it again → closed cover. No console/page errors; mobile layout clean. Lint clean; tsc clean except pre-existing unrelated errors (28 pre-existing, verified via stash).
+- Confirmed stale dev.log 500 on POST /api/md/moments was already fixed by previous commit (empty body now → 400 "Missing moment id").
+
+Stage Summary:
+- The Digital Album is now the video's photo book: printed-photo cover → paper spreads with real two-sided 3D page turns, dynamic shadows, thinning page stacks, folio counter, glass arrows — replacing the old leather/gold/heart design everywhere (player, editor, previews, palette, templates).
+- New data field `albumCover` (optional; falls back to first page photo). Old moments keep playing unchanged.
+- "Unlimited" wording removed from every user-facing surface.
+- Unresolved/next: none blocking. Ideas for next round: multi-photo collage spreads (video's editorial layouts), spread-level themes (tape/polaroid/typewriter), background music per album, library/carousel zoom-out transition.

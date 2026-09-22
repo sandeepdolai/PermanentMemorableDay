@@ -134,7 +134,7 @@ export interface CouponDef {
   color: string;
   /** Creator on/off switch — disabled coupons stay visible but never get assigned */
   enabled: boolean;
-  /** Remaining units; null/undefined = unlimited */
+  /** Remaining units; null/undefined = no cap */
   stock?: number | null;
 }
 
@@ -148,9 +148,9 @@ export interface OpenWhenItem {
   message: string;
 }
 
-/** One page in a Digital Album — a mounted photo, a handwritten-style
- *  caption, and/or the sender's voice note. Pages turn one by one, from the
- *  leather cover to the ending page. Any of the three may be empty; a page
+/** One page in a Photo Album — a printed photo, a handwritten-style
+ *  caption, and/or the sender's voice note. Spreads turn like real paper,
+ *  from the cover to the ending page. Any of the three may be empty; a page
  *  with only a voice note is still a page (a memory you can hear). */
 export interface AlbumPage {
   id: string;
@@ -235,9 +235,12 @@ export interface BlockData {
   openWhenItems?: OpenWhenItem[];
   /** letter: the signature line under the typed letter */
   signature?: string;
-  /** album: the title stamped in gold on the leather cover */
+  /** album: the photo printed on the book cover — falls back to the first
+   *  page's photo when empty */
+  albumCover?: string;
+  /** album: the title set in type on the cover */
   albumTitle?: string;
-  /** album: the pages, in order — unlimited */
+  /** album: the pages, in order */
   albumPages?: AlbumPage[];
   /** album: the closing note on the ending page */
   albumEnding?: string;

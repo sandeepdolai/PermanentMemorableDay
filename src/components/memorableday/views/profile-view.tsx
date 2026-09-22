@@ -325,7 +325,7 @@ export function ProfileView() {
             MemorableDay Personal
           </h2>
           <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">
-            Unlimited moments, 3D scenes and AI credits — from $9/month.
+            Every moment you make, 3D scenes and AI credits — from $9/month.
           </p>
           <div className="mt-4 flex items-center justify-between gap-3">
             <span className="rounded-full bg-white px-5 py-2.5 text-[14px] font-semibold text-[#1D1D1F]">

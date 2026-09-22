@@ -7,7 +7,7 @@ import {
   ArrowUp,
   AudioLines,
   Award,
-  BookHeart,
+  BookOpen,
   CalendarDays,
   Check,
   ChevronDown,
@@ -135,7 +135,7 @@ const BLOCKS: BlockDef[] = [
   { type: "flower", label: "Flower", icon: Flower2, tint: "#FF375F" },
   { type: "openwhen", label: "Open When…", icon: Mail, tint: "#E84393" },
   { type: "letter", label: "Letter", icon: PenLine, tint: "#AF52DE" },
-  { type: "album", label: "Album", icon: BookHeart, tint: "#C2185B" },
+  { type: "album", label: "Photo Album", icon: BookOpen, tint: "#64748B" },
   { type: "scratch", label: "Scratch Card", icon: Stamp, tint: "#FFB340" },
   { type: "fireworks", label: "Fireworks", icon: Rocket, tint: "#FF6B35" },
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
@@ -234,7 +234,7 @@ function seedScenes(opts: BuilderOptions): Scene[] {
     return scenes;
   }
   const wantsSeedBlock = !!opts.initialBlock && !!BLOCK_BY_TYPE[opts.initialBlock];
-  // Unlimited scenes — the story decides how long it is, not the app.
+  // The story decides how long it is, not the app.
   const count = Math.max(1, opts.scenes ?? 1);
   // Single-scene starts are honest about what was asked for:
   // - "Blank canvas" → a truly empty scene stack (no hidden pattern blocks)
@@ -620,28 +620,37 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
       const pages = albumPageList(d);
       const title = d?.albumTitle?.trim();
       const voices = pages.filter((p) => !!p.voiceNote?.trim()).length;
+      const coverPhoto = (d?.albumCover ?? "").trim() || pages.find((p) => !!p.image?.trim())?.image?.trim();
       return (
         <div className="flex items-center gap-3">
+          {/* the book, seen open on its first spread */}
           <span
             aria-hidden
-            className="relative flex h-[52px] w-[42px] shrink-0 items-start justify-center overflow-hidden rounded-[6px] pt-[9px]"
-            style={{ background: "linear-gradient(160deg,#6B2237,#3E0F1F)", boxShadow: "inset 0 0 0 1px rgba(232,200,138,0.35)" }}
+            className="flex h-[44px] w-[62px] shrink-0 overflow-hidden rounded-[5px] ring-1 ring-black/[0.12]"
+            style={{ boxShadow: "0 8px 16px -8px rgba(0,0,0,0.55)" }}
           >
-            <Heart size={11} fill="#E8C88A" strokeWidth={0} />
-            {/* stacked page edges */}
-            <span className="absolute inset-y-[3px] right-[-3px] w-[4px] rounded-r-[3px] bg-[#EFE3C8] shadow-[2.5px_0_0 -0.5px_#E4D4B0,5px_0_0_-1px_#D9C69E]" />
+            <span className="flex h-full w-1/2 items-center justify-center overflow-hidden border-r border-[#3A3226]/10" style={{ background: "linear-gradient(175deg,#FBF6EC,#F1E9D8)" }}>
+              {coverPhoto ? <img src={coverPhoto} alt="" className="h-full w-full object-cover" draggable={false} /> : <BookOpen size={13} className="text-[#64748B]/70" />}
+            </span>
+            <span className="flex h-full w-1/2 items-center justify-center overflow-hidden" style={{ background: "linear-gradient(175deg,#FBF6EC,#F1E9D8)" }}>
+              {pages[1]?.image?.trim() ? (
+                <img src={pages[1].image} alt="" className="h-full w-full object-cover" draggable={false} />
+              ) : (
+                <span className="h-3 w-3 rounded-full border border-[#3A3226]/20" />
+              )}
+            </span>
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
-              {title ? `“${title}”` : "Digital album"}
+              {title ? `“${title}”` : "Photo album"}
             </p>
             <p className="mt-1 truncate text-[12.5px] text-[#AAAAAA]">
               {pages.length
-                ? `${pages.length} page${pages.length > 1 ? "s" : ""}${voices ? ` · ${voices} with voice` : ""} · cover → ending`
+                ? `${pages.length} page${pages.length > 1 ? "s" : ""}${voices ? ` · ${voices} with voice` : ""} · spreads turn like paper`
                 : "No pages yet — add photos, words, voice"}
             </p>
           </div>
-          <span className="rounded-full bg-[#C2185B]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#C2185B]">
+          <span className="rounded-full bg-[#64748B]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#64748B]">
             Book
           </span>
         </div>
@@ -3015,6 +3024,7 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
   const playable = albumPageList(d);
   const voices = playable.filter((p) => !!p.voiceNote?.trim()).length;
   const title = (d.albumTitle ?? "").trim();
+  const coverPhoto = (d.albumCover ?? "").trim() || playable.find((p) => !!p.image?.trim())?.image?.trim() || "";
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const updatePage = (id: string, patch: Partial<AlbumPage>) =>
@@ -3036,38 +3046,76 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
 
   return (
     <div className="space-y-4 pb-2">
-      {/* Live preview — the closed leather book, exactly what they'll open */}
-      <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_22%,#3A1526_0%,#1D1D1F_78%)] px-4 py-6">
-        <div className="mx-auto flex max-w-[300px] items-center gap-4">
-          {/* the mini album — leather, gold frame, heart emblem, page edges */}
+      {/* Live preview — the book exactly as they'll open it: the closed
+          cover beside the first spread, on the reader's dark stage. */}
+      <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,#333B4C_0%,#141821_82%)] px-4 py-6">
+        <div className="mx-auto flex max-w-[330px] items-center gap-4">
+          {/* the closed cover */}
           <span
             aria-hidden
-            className="relative flex h-[92px] w-[72px] shrink-0 flex-col items-center justify-center gap-1 rounded-[8px]"
+            className="relative flex h-[100px] w-[72px] shrink-0 flex-col justify-end overflow-hidden rounded-[7px] p-[7px]"
             style={{
-              background: "linear-gradient(160deg,#6B2237 0%,#54172A 46%,#3E0F1F 100%)",
-              boxShadow:
-                "inset 0 0 0 1.5px rgba(232,200,138,0.4), inset 0 0 0 5px rgba(0,0,0,0.12), 0 14px 28px -12px rgba(0,0,0,0.8)",
+              background: coverPhoto
+                ? `center / cover no-repeat url(${JSON.stringify(coverPhoto)})`
+                : "linear-gradient(160deg,#2A3040,#171B26)",
+              boxShadow: "0 16px 30px -12px rgba(0,0,0,0.75), inset 0 0 0 1px rgba(255,255,255,0.08)",
             }}
           >
-            <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full" style={{ boxShadow: "inset 0 0 0 1.2px rgba(232,200,138,0.55)" }}>
-              <Heart size={11} fill="#E8C88A" strokeWidth={0} />
+            <span
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: "linear-gradient(to top, rgba(8,10,16,0.78), rgba(8,10,16,0.08) 55%)" }}
+            />
+            {/* page edges waiting beside the cover */}
+            {playable.length > 0 ? (
+              <span className="absolute inset-y-[4%] right-[-4px] w-[5px] rounded-r-[4px]" style={{ background: "repeating-linear-gradient(180deg,#F1E9D8 0px,#F1E9D8 2px,#DED2B8 2px,#DED2B8 3px)" }} />
+            ) : null}
+            <span className="relative line-clamp-2 font-serif text-[8.5px] font-semibold leading-[1.25] text-[#FBF6EC]">
+              {title || "Untitled book"}
             </span>
-            <span className="max-w-[54px] text-center font-serif text-[7px] italic leading-[1.15] text-[#E8C88A]">
-              {title ? title.slice(0, 34) : "·"}
+            <span className="relative mt-1 text-[5.5px] font-bold uppercase tracking-[0.22em] text-[#FBF6EC]/70">
+              {playable.length} {playable.length === 1 ? "page" : "pages"}
             </span>
-            {/* stacked page edges — pages waiting to be turned */}
-            <span className="absolute inset-y-[4px] right-[-4px] w-[5px] rounded-r-[4px] bg-[#EFE3C8] shadow-[3px_0_0 -0.5px_#E4D4B0,6px_0_0_-1px_#D9C69E]" />
           </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-bold tracking-[-0.01em] text-white">{title || "Untitled album"}</p>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-white/55">
-              {playable.length} playable {playable.length === 1 ? "page" : "pages"}
-              {voices ? ` · ${voices} with voice` : ""}
-              <br />
-              Cover → pages → the ending
-            </p>
-          </div>
+          {/* the first spread */}
+          <span
+            aria-hidden
+            className="flex h-[100px] min-w-0 flex-1 overflow-hidden rounded-[7px] ring-1 ring-black/[0.14]"
+            style={{ boxShadow: "0 16px 30px -12px rgba(0,0,0,0.75)" }}
+          >
+            {[playable[0], playable[1]].map((p, i) => (
+              <span
+                key={i}
+                className={cn("flex h-full w-1/2 flex-col p-[6px]", i === 0 && "border-r border-[#3A3226]/10")}
+                style={{ background: "linear-gradient(175deg,#FBF6EC,#F1E9D8)" }}
+              >
+                {p?.image?.trim() ? (
+                  <span className="min-h-0 flex-1 overflow-hidden rounded-[3px] ring-1 ring-black/[0.12]">
+                    <img src={p.image} alt="" className="h-full w-full object-cover" draggable={false} />
+                  </span>
+                ) : p?.message?.trim() ? (
+                  <span className="flex flex-1 items-center justify-center overflow-hidden px-1">
+                    <span className="line-clamp-3 text-center font-serif text-[7px] italic leading-[1.45] text-[#3A3226]/80">
+                      {p.message}
+                    </span>
+                  </span>
+                ) : p?.voiceNote?.trim() ? (
+                  <span className="flex flex-1 items-center justify-center">
+                    <Mic size={11} className="text-[#FF375F]/70" />
+                  </span>
+                ) : (
+                  <span className="flex flex-1 items-center justify-center">
+                    <span className="h-2 w-2 rounded-full border border-[#3A3226]/20" />
+                  </span>
+                )}
+              </span>
+            ))}
+          </span>
         </div>
+        <p className="mt-4 text-center text-[10.5px] font-bold uppercase tracking-[0.16em] text-white/45">
+          {playable.length} playable {playable.length === 1 ? "page" : "pages"}
+          {voices ? ` · ${voices} with voice` : ""} · cover → spreads → ending
+        </p>
       </div>
 
       <div>
@@ -3079,11 +3127,24 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
           maxLength={60}
           value={d.albumTitle ?? ""}
           onChange={(e) => set({ albumTitle: e.target.value })}
-          placeholder="Our Little Album"
+          placeholder="Our Story"
           className={fieldInput}
         />
         <p className="mt-1.5 px-1 text-[11.5px] font-medium text-[#AAAAAA]">
-          Stamped in gold on the leather cover — the first thing they see.
+          Set in type on the cover — the first thing they read.
+        </p>
+      </div>
+
+      <div>
+        <p className="mb-1.5 px-0.5 text-[11px] font-bold uppercase tracking-[0.05em] text-[#AAAAAA]">Cover photo — optional</p>
+        <MediaUploadField
+          kind="photo"
+          value={d.albumCover}
+          onUploaded={(url) => set({ albumCover: url })}
+          onRemove={() => set({ albumCover: undefined })}
+        />
+        <p className="mt-1.5 px-0.5 text-[11px] font-medium text-[#AAAAAA]">
+          Leave empty and the book prints your first page's photo on the cover.
         </p>
       </div>
 
@@ -3101,7 +3162,7 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
                 key={p.id}
                 className={cn(
                   "rounded-[16px] border bg-[#F5F5F7]/70 transition-colors",
-                  open ? "border-[#C2185B]/25" : "border-[#1D1D1F]/[0.07]"
+                  open ? "border-[#64748B]/30" : "border-[#1D1D1F]/[0.07]"
                 )}
               >
                 <button
@@ -3114,13 +3175,13 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
                     aria-hidden
                     className={cn(
                       "relative flex h-[46px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[6px]",
-                      image ? "" : "bg-[#FFFDF6] ring-1 ring-black/[0.06]"
+                      image ? "" : "bg-[#FBF6EC] ring-1 ring-black/[0.06]"
                     )}
                   >
                     {image ? (
                       <img src={image} alt="" className="h-full w-full object-cover" draggable={false} />
                     ) : (
-                      <PenLine size={13} className="text-[#C2185B]/60" aria-hidden />
+                      <PenLine size={13} className="text-[#64748B]/60" aria-hidden />
                     )}
                     {/* folded page corner */}
                     <span className="absolute bottom-0 right-0 h-[9px] w-[9px] bg-[linear-gradient(135deg,transparent_50%,rgba(0,0,0,0.12)_50%)]" />
@@ -3135,7 +3196,7 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
                       ) : null}
                     </span>
                     <span className="mt-0.5 block truncate text-[12px] text-[#AAAAAA]">
-                      {note ? note : image ? "Photo page" : empty ? "Empty — won't turn until you add something" : "Voice page"}
+                      {note ? note : image ? "Photo page" : empty ? "Empty — won't print until you add something" : "Voice page"}
                     </span>
                   </span>
                   <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="shrink-0 text-[#AAAAAA]">
@@ -3146,8 +3207,8 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
                   <div className="space-y-3 border-t border-[#1D1D1F]/[0.06] p-3">
                     {/* page order — the story reads front to back */}
                     <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.07em] text-[#C2185B]">
-                        <BookHeart size={11} aria-hidden /> Page {i + 1} of the story
+                      <span className="flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.07em] text-[#64748B]">
+                        <BookOpen size={11} aria-hidden /> Page {i + 1} of the story
                       </span>
                       <span className="flex items-center gap-1">
                         <button
@@ -3219,9 +3280,9 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
         <button
           type="button"
           onClick={addPage}
-          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-[#C2185B]/40 py-2.5 text-[13px] font-bold text-[#C2185B] transition-colors hover:bg-[#C2185B]/[0.06] active:scale-[0.98]"
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-[#64748B]/45 py-2.5 text-[13px] font-bold text-[#64748B] transition-colors hover:bg-[#64748B]/[0.06] active:scale-[0.98]"
         >
-          <Plus size={14} aria-hidden /> Add a page — as many as you like
+          <Plus size={14} aria-hidden /> Add a page
         </button>
       </div>
 
@@ -3248,7 +3309,8 @@ function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: Block
         />
       </div>
       <p className="px-1 text-[11.5px] leading-relaxed text-[#AAAAAA]">
-        They open the cover, turn the pages one by one — photos, your words, your voice — and close on your ending note. Empty pages simply don't turn.
+        They tap the cover, the book swings open, and every spread turns like real paper — your photos, your words, your
+        voice — until "The End." Empty pages simply don't print.
       </p>
     </div>
   );
@@ -3627,17 +3689,18 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
   {
     id: "memory-album",
     type: "album",
-    name: "Memory Album",
-    blurb: "A leather-bound book — cover, pages of photos, words & your voice, an ending",
+    name: "Photo Book",
+    blurb: "A living photo book — spreads that turn like real paper",
     category: "Story",
-    accent: "#C2185B",
+    accent: "#64748B",
     isNew: true,
     data: {
-      albumTitle: "Our Little Album",
+      albumTitle: "Our Story",
+      albumCover: "/album/seed-1.jpg",
       albumPages: [
         { id: "tpl-pg-1", image: "/album/seed-1.jpg", message: "Where this story began — the evening we lost track of time completely." },
         { id: "tpl-pg-2", image: "/album/seed-2.jpg", message: "Ordinary mornings, extraordinary company. My favorite kind of day." },
-        { id: "tpl-pg-3", message: "Add as many pages as you like — photos, words, even your voice. This album is yours." },
+        { id: "tpl-pg-3", message: "Photos, words, even your voice — every page of this book is yours to fill." },
       ],
       albumEnding: "Thank you for every page of it.",
       albumSignature: "With all my love",
@@ -3844,24 +3907,25 @@ function LibraryThumb({ t }: { t: LibraryTemplate }) {
         </span>
       );
     case "album":
-      /* Miniature: the leather album — gold heart, gold frame, stacked pages. */
+      /* Miniature: the photo book open on a spread, cream paper, ink photo. */
       return (
         <span aria-hidden className="relative flex h-[76px] w-[86px] items-center justify-center">
           <span
-            className="relative flex h-[72px] w-[56px] flex-col items-center justify-center gap-1.5 rounded-[8px]"
-            style={{
-              background: "linear-gradient(160deg,#6B2237 0%,#54172A 46%,#3E0F1F 100%)",
-              boxShadow: "inset 0 0 0 1.5px rgba(232,200,138,0.42), 0 12px 26px -10px rgba(0,0,0,0.8)",
-            }}
+            className="relative flex h-[54px] w-[74px] overflow-hidden rounded-[6px] ring-1 ring-black/[0.12]"
+            style={{ boxShadow: "0 12px 26px -10px rgba(0,0,0,0.8)" }}
           >
-            {/* spine */}
-            <span className="absolute inset-y-0 left-0 w-[6px] rounded-l-[8px] bg-black/30" />
-            <span className="flex h-[24px] w-[24px] items-center justify-center rounded-full" style={{ boxShadow: "inset 0 0 0 1.2px rgba(232,200,138,0.6)" }}>
-              <Heart size={10} fill="#E8C88A" strokeWidth={0} />
+            {/* left page — photo in a paper mount */}
+            <span className="flex h-full w-1/2 flex-col gap-[3px] border-r border-[#3A3226]/10 p-[4px]" style={{ background: "linear-gradient(175deg,#FBF6EC,#F1E9D8)" }}>
+              <span className="min-h-0 flex-1 overflow-hidden rounded-[2px] bg-[#2A3040]" />
+              <span className="h-[2px] w-[70%] self-center rounded-full bg-[#3A3226]/30" />
             </span>
-            <span className="text-[6px] font-bold uppercase tracking-[0.2em] text-[#E8C88A]/85">ALBUM</span>
-            {/* stacked page edges — pages waiting */}
-            <span className="absolute inset-y-[5px] right-[-5px] w-[6px] rounded-r-[4px] bg-[#EFE3C8] shadow-[3.5px_0_0 -0.5px_#E4D4B0,7px_0_0_-1.5px_#D9C69E]" />
+            {/* right page — the words */}
+            <span className="flex h-full w-1/2 flex-col items-center justify-center gap-[3px] p-[4px]" style={{ background: "linear-gradient(175deg,#FBF6EC,#F1E9D8)" }}>
+              <span className="font-serif text-[10px] italic leading-none text-[#3A3226]/60">The</span>
+              <span className="h-px w-[55%] bg-[#3A3226]/20" />
+              <span className="h-[2px] w-[70%] rounded-full bg-[#3A3226]/25" />
+              <span className="h-[2px] w-[50%] rounded-full bg-[#3A3226]/25" />
+            </span>
           </span>
         </span>
       );
@@ -4243,11 +4307,12 @@ function starterBlockData(type: string): BlockData | undefined {
   }
   if (type === "album") {
     return {
-      albumTitle: "Our Little Album",
+      albumTitle: "Our Story",
+      albumCover: "/album/seed-1.jpg",
       albumPages: [
         { id: uid("pg"), image: "/album/seed-1.jpg", message: "Where this story began — the evening we lost track of time completely." },
         { id: uid("pg"), image: "/album/seed-2.jpg", message: "Ordinary mornings, extraordinary company. My favorite kind of day." },
-        { id: uid("pg"), message: "Add as many pages as you like — photos, words, even your voice. This album is yours." },
+        { id: uid("pg"), message: "Photos, words, even your voice — every page of this book is yours to fill." },
       ],
       albumEnding: "Thank you for every page of it.",
       albumSignature: "With all my love",
@@ -4715,7 +4780,7 @@ function CouponRevealEditor({ block, onChange }: { block: Block; onChange: (data
                                 <span className="text-[11.5px] font-medium text-[#AAAAAA]">left · the server never oversells</span>
                               </>
                             ) : (
-                              <span className="text-[11.5px] font-medium text-[#AAAAAA]">Unlimited — every player can win it</span>
+                              <span className="text-[11.5px] font-medium text-[#AAAAAA]">Every player can win it</span>
                             )}
                           </div>
 
@@ -5706,7 +5771,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   };
 
   const addScene = () => {
-    // Unlimited — add as many scenes as the story needs.
+    // Add as many scenes as the story needs.
     const id = freshSceneId();
     pushHistory("Scene added");
     setScenes((prev) => [...prev, { id, blocks: [] }]);
@@ -5968,9 +6033,6 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
                 Scenes · {scenes.length}
-                <span className="rounded-full bg-[#30D158]/[0.12] px-2 py-[3px] text-[10px] font-bold tracking-[0.04em] text-[#248A3D] normal-case">
-                  Unlimited
-                </span>
               </h2>
               {reorderMode ? (
                 <button
@@ -6278,9 +6340,6 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
                 Add to Scene {scenePos}
-                <span className="rounded-full bg-[#30D158]/[0.12] px-2 py-[3px] text-[10px] font-bold tracking-[0.04em] text-[#248A3D] normal-case">
-                  Unlimited
-                </span>
               </h2>
               <p className="text-[11.5px] font-medium text-[#AAAAAA]">
                 {ADDABLE_BLOCKS.length} block kinds · tap to drop

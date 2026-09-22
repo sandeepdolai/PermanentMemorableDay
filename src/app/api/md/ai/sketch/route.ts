@@ -238,7 +238,7 @@ function sanitizeBlock(raw: SketchBlock, idx: number, sceneNo: number): BlockDoc
       const title = str(raw.title, 40) ?? str(raw.albumTitle, 40);
       if (title) data.albumTitle = title;
       // The AI can't attach photos — it seeds note pages the sender fleshes
-      // out with photos + voice in the editor (unlimited pages there).
+      // out with photos + voice in the editor.
       const pagesRaw = Array.isArray(raw.pages) ? raw.pages : [];
       const pages = pagesRaw
         .map((p, i) => {
@@ -314,7 +314,7 @@ export async function POST(req: Request) {
             '  · {"type":"audio"} — a song placeholder the sender picks later (at most once).\n' +
             '  · {"type":"letter","body": string, "signature": string} — a letter that types itself out live, character by character (at most once; for deep heartfelt moments; body max 500 chars).\n' +
             '  · {"type":"openwhen","items": [{"label": string like "Open when you miss me", "message": string} ×3–6]} — sealed letters the recipient opens by mood, one per envelope.\n' +
-            '  · {"type":"album","title": string, "pages": [{"message": string} ×2–6], "ending": string, "signature": string} — a leather memory book the sender later fills with photos + voice notes (at most once, for milestone moments).\n' +
+            '  · {"type":"album","title": string, "pages": [{"message": string} ×2–6], "ending": string, "signature": string} — a photo book with spreads that turn like real paper; the sender later adds photos + voice notes (at most once, for milestone moments).\n' +
             '  · {"type":"fireworks","message": string} — a night sky that bursts on every tap, the message rising after the third burst (at most once, as the closing finale).\n' +
             "- Write all copy as the sender speaking to the recipient — warm, specific to the brief, no [placeholders], no emoji.\n" +
             "- Include at least one interactive block (gift / quiz / reward / countdown / openwhen) in the middle scene.\n" +

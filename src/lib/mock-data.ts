@@ -164,7 +164,7 @@ export const EXPLORE_ITEMS: ExploreItem[] = [
 
 export const PRICING_PLANS: Plan[] = [
   { id: "free", name: "Starter", price: "$0", period: "forever", note: "3 moments / month" },
-  { id: "personal", name: "Personal", price: "$9", period: "/month", note: "Unlimited moments · 3D · AI credits", recommended: true },
+  { id: "personal", name: "Personal", price: "$9", period: "/month", note: "Every moment · 3D · AI credits", recommended: true },
   { id: "pro", name: "Pro", price: "$19", period: "/month", note: "Everything in Personal + premium 3D packs" },
   { id: "business", name: "Business", price: "$49", period: "/month", note: "Teams, automation & analytics" },
 ];
