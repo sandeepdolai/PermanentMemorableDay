@@ -41,7 +41,8 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const user = await getUser();
-    const body = (await req.json()) as MomentInput;
+    // Tolerate empty/broken bodies (curl-style probes) — they simply miss the id check.
+    const body = (await req.json().catch(() => ({}))) as MomentInput;
     if (!body.id) return fail("Missing moment id");
     if (body.status && !STATUSES.has(body.status)) return fail(`Invalid status: ${body.status}`);
 

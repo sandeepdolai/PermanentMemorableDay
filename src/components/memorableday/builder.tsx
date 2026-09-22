@@ -200,7 +200,6 @@ function countdownLabel(minutes?: number): string | null {
 const fieldInput =
   "w-full rounded-[14px] border border-[#1D1D1F]/[0.09] bg-white px-3.5 py-2.5 text-[14.5px] tracking-[-0.01em] text-[#1D1D1F] outline-none placeholder:text-[#AAAAAA]/70 focus:border-[#007AFF] focus:ring-2 focus:ring-[#007AFF]/25";
 
-const MAX_SCENES = 8;
 const HISTORY_CAP = 30;
 
 /** Deterministic draft layouts — abstract, no themed content */
@@ -235,7 +234,8 @@ function seedScenes(opts: BuilderOptions): Scene[] {
     return scenes;
   }
   const wantsSeedBlock = !!opts.initialBlock && !!BLOCK_BY_TYPE[opts.initialBlock];
-  const count = Math.max(1, Math.min(opts.scenes ?? 1, MAX_SCENES));
+  // Unlimited scenes — the story decides how long it is, not the app.
+  const count = Math.max(1, opts.scenes ?? 1);
   // Single-scene starts are honest about what was asked for:
   // - "Blank canvas" → a truly empty scene stack (no hidden pattern blocks)
   // - "Start with a X block" → just that block, nothing else
@@ -5706,10 +5706,7 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
   };
 
   const addScene = () => {
-    if (scenes.length >= MAX_SCENES) {
-      notify(`Scene limit reached (${MAX_SCENES}) in this preview`);
-      return;
-    }
+    // Unlimited — add as many scenes as the story needs.
     const id = freshSceneId();
     pushHistory("Scene added");
     setScenes((prev) => [...prev, { id, blocks: [] }]);
@@ -5969,8 +5966,11 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
           {/* Scene storyboard / reorder mode */}
           <section aria-label="Scenes">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
-              <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+              <h2 className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
                 Scenes · {scenes.length}
+                <span className="rounded-full bg-[#30D158]/[0.12] px-2 py-[3px] text-[10px] font-bold tracking-[0.04em] text-[#248A3D] normal-case">
+                  Unlimited
+                </span>
               </h2>
               {reorderMode ? (
                 <button
@@ -6276,8 +6276,11 @@ export function ExperienceBuilder({ opts, onClose }: { opts: BuilderOptions; onC
           {/* Block palette */}
           <section aria-label="Block palette">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
-              <h2 className="text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
+              <h2 className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.07em] text-[#AAAAAA]">
                 Add to Scene {scenePos}
+                <span className="rounded-full bg-[#30D158]/[0.12] px-2 py-[3px] text-[10px] font-bold tracking-[0.04em] text-[#248A3D] normal-case">
+                  Unlimited
+                </span>
               </h2>
               <p className="text-[11.5px] font-medium text-[#AAAAAA]">
                 {ADDABLE_BLOCKS.length} block kinds · tap to drop

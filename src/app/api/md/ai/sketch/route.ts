@@ -18,7 +18,21 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
 /** Block types the sketch may emit (no media-dependent ones — no photo/video/background). */
-const ALLOWED_TYPES = ["text", "gift", "flower", "countdown", "quiz", "reward", "cta", "confetti", "audio"] as const;
+const ALLOWED_TYPES = [
+  "text",
+  "gift",
+  "flower",
+  "countdown",
+  "quiz",
+  "reward",
+  "cta",
+  "confetti",
+  "audio",
+  "letter",
+  "openwhen",
+  "album",
+  "fireworks",
+] as const;
 type AllowedType = (typeof ALLOWED_TYPES)[number];
 
 interface SketchBlock {
@@ -39,6 +53,8 @@ interface SketchBlock {
   heading?: unknown;
   stepLabel?: unknown;
   song?: unknown;
+  signature?: unknown;
+  items?: unknown;
 }
 
 interface SketchScene {
@@ -195,6 +211,55 @@ function sanitizeBlock(raw: SketchBlock, idx: number, sceneNo: number): BlockDoc
     case "audio": {
       break; // song picked later by the user in the editor
     }
+    case "letter": {
+      const body = str(raw.body, 600) ?? str(raw.message, 600);
+      if (!body) return null;
+      data.body = body;
+      const sig = str(raw.signature, 40);
+      if (sig) data.signature = sig;
+      break;
+    }
+    case "openwhen": {
+      const itemsRaw = Array.isArray(raw.items) ? raw.items : [];
+      const items = itemsRaw
+        .map((it, i) => {
+          const o = (it ?? {}) as { label?: unknown; message?: unknown };
+          const label = str(o.label, 60);
+          const message = str(o.message, 320);
+          return label && message ? { id: `ow${sceneNo}_${idx + 1}_${i + 1}`, label, message } : null;
+        })
+        .filter((it): it is { id: string; label: string; message: string } => it !== null)
+        .slice(0, 6);
+      if (items.length < 2) return null;
+      data.openWhenItems = items;
+      break;
+    }
+    case "album": {
+      const title = str(raw.title, 40) ?? str(raw.albumTitle, 40);
+      if (title) data.albumTitle = title;
+      // The AI can't attach photos — it seeds note pages the sender fleshes
+      // out with photos + voice in the editor (unlimited pages there).
+      const pagesRaw = Array.isArray(raw.pages) ? raw.pages : [];
+      const pages = pagesRaw
+        .map((p, i) => {
+          const o = (p ?? {}) as { message?: unknown };
+          const message = str(o.message, 220);
+          return message ? { id: `alb${sceneNo}_${idx + 1}_${i + 1}`, message } : null;
+        })
+        .filter((p): p is { id: string; message: string } => p !== null)
+        .slice(0, 8);
+      if (pages.length > 0) data.albumPages = pages;
+      const ending = str(raw.ending, 200) ?? str(raw.albumEnding, 200);
+      if (ending) data.albumEnding = ending;
+      const sig = str(raw.signature, 40);
+      if (sig) data.albumSignature = sig;
+      break;
+    }
+    case "fireworks": {
+      const msg = str(raw.message, 160);
+      if (msg) data.message = msg;
+      break;
+    }
   }
 
   return { id, type, data };
@@ -204,7 +269,7 @@ function sanitizeBlock(raw: SketchBlock, idx: number, sceneNo: number): BlockDoc
 function sanitizeScenes(reply: SketchReply): SceneDoc[] {
   const scenesRaw = Array.isArray(reply.scenes) ? reply.scenes : [];
   const scenes: SceneDoc[] = [];
-  for (const sRaw of scenesRaw.slice(0, 5)) {
+  for (const sRaw of scenesRaw.slice(0, 10)) {
     const s = (sRaw ?? {}) as SketchScene;
     const blocksRaw = Array.isArray(s.blocks) ? s.blocks : [];
     const blocks = blocksRaw
@@ -236,7 +301,7 @@ export async function POST(req: Request) {
             "RULES:\n" +
             "- title: max 40 chars, no surrounding quotes, capture the occasion (e.g. \"For Priya's Birthday\").\n" +
             "- cover: integer 0–9 choosing cover art (0 birthday, 1 love, 2 celebration, 3 travel, 4 nature, 5 minimal light, 6 night sky, 7 gradient warm, 8 ocean, 9 aurora).\n" +
-            "- scenes: exactly 3, ordered as the recipient taps through. Each scene has AT MOST 2 blocks. Keep the whole JSON compact — short field values.\n" +
+            "- scenes: 3 to 6, as many as the story needs (a quick hello needs 3; an anniversary journey can use 5–6). Ordered as the recipient taps through. Each scene has up to 3 blocks. Keep the whole JSON compact — short field values.\n" +
             "- Allowed block types and fields:\n" +
             '  · {"type":"text","body": string} — a message, 1–2 sentences, max 220 chars. The FIRST scene must start with a text block addressing the recipient directly.\n' +
             '  · {"type":"gift","message": string} — a wrapped gift that opens to reveal a short note, max 90 chars.\n' +
@@ -247,8 +312,13 @@ export async function POST(req: Request) {
             '  · {"type":"cta","label": string like \"See the full album\", "url": "https://…"} — an action button (omit url if there is no real link).\n' +
             '  · {"type":"confetti"} — a celebration burst; use exactly once, as the FINAL block of the FINAL scene.\n' +
             '  · {"type":"audio"} — a song placeholder the sender picks later (at most once).\n' +
+            '  · {"type":"letter","body": string, "signature": string} — a letter that types itself out live, character by character (at most once; for deep heartfelt moments; body max 500 chars).\n' +
+            '  · {"type":"openwhen","items": [{"label": string like "Open when you miss me", "message": string} ×3–6]} — sealed letters the recipient opens by mood, one per envelope.\n' +
+            '  · {"type":"album","title": string, "pages": [{"message": string} ×2–6], "ending": string, "signature": string} — a leather memory book the sender later fills with photos + voice notes (at most once, for milestone moments).\n' +
+            '  · {"type":"fireworks","message": string} — a night sky that bursts on every tap, the message rising after the third burst (at most once, as the closing finale).\n' +
             "- Write all copy as the sender speaking to the recipient — warm, specific to the brief, no [placeholders], no emoji.\n" +
-            "- Include at least one interactive block (gift / quiz / reward / countdown) in the middle scene.\n" +
+            "- Include at least one interactive block (gift / quiz / reward / countdown / openwhen) in the middle scene.\n" +
+            "- Milestone moments (anniversaries, a partner's birthday, long-distance love) should consider an album, a letter, or openwhen letters — the keepsake blocks.\n" +
             "- Finish the JSON completely. Never leave it open.",
         },
         {

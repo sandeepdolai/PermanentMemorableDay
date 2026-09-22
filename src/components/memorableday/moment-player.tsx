@@ -41,8 +41,43 @@ import { useMD } from "./md-context";
 import { cn } from "@/lib/utils";
 
 
-/** Progress dots (scene indicator) — adapts to light/dark scenes */
+/** Progress dots (scene indicator) — adapts to light/dark scenes.
+ *  With many scenes (unlimited stacks) the dots would overflow the top
+ *  chrome, so ≥9 scenes switch to a compact capsule: ribbon + "n / N". */
 function SceneDots({ total, current, light }: { total: number; current: number; light?: boolean }) {
+  if (total > 8) {
+    const pct = ((current + 1) / total) * 100;
+    return (
+      <div
+        role="status"
+        aria-label={`Scene ${current + 1} of ${total}`}
+        className={cn(
+          "flex items-center gap-2 rounded-full px-3 py-2",
+          light ? "bg-black/[0.06]" : "bg-[#1D1D1F]/35"
+        )}
+        style={{ WebkitBackdropFilter: "blur(12px)", backdropFilter: "blur(12px)" }}
+      >
+        <span
+          aria-hidden
+          className="relative h-[5px] w-[68px] overflow-hidden rounded-full sm:w-[92px]"
+          style={{ backgroundColor: light ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.28)" }}
+        >
+          <span
+            className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+            style={{ width: `${pct}%`, backgroundColor: light ? "#1D1D1F" : "#FFFFFF" }}
+          />
+        </span>
+        <span
+          className={cn(
+            "text-[11px] font-bold tabular-nums tracking-[0.02em]",
+            light ? "text-[#1D1D1F]" : "text-white"
+          )}
+        >
+          {current + 1} / {total}
+        </span>
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
@@ -1727,8 +1762,6 @@ function AlbumBlockView({ block, index }: { block: BlockDoc; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
       className="flex w-full flex-col items-center"
-      onClick={(e) => e.stopPropagation()}
-      onDoubleClick={(e) => e.stopPropagation()}
       onKeyDown={onKey}
       tabIndex={0}
       role="group"
@@ -1737,6 +1770,8 @@ function AlbumBlockView({ block, index }: { block: BlockDoc; index: number }) {
       <div
         className="relative w-[min(78vw,330px)]"
         style={{ perspective: 1700 }}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => {
           swipeRef.current = { x: e.clientX, y: e.clientY };
         }}
@@ -1781,9 +1816,15 @@ function AlbumBlockView({ block, index }: { block: BlockDoc; index: number }) {
         </div>
       </div>
 
-      {/* reading controls — a page either side, a gold ribbon of progress */}
+      {/* reading controls — a page either side, a gold ribbon of progress.
+          *  Isolated from the scene: turning pages never advances, while taps
+          *  on the gutters around the album pass through to the scene. */}
       {total > 1 ? (
-        <div className="mt-5 flex w-[min(78vw,330px)] items-center gap-3">
+        <div
+          className="mt-5 flex w-[min(78vw,330px)] items-center gap-3"
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={(e) => {
@@ -2486,6 +2527,10 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
   const sceneHasQuiz = !!currentDoc?.blocks.some((b) => b.type === "quiz");
   const sceneHasGift = !!currentDoc?.blocks.some((b) => b.type === "gift");
   const sceneHasAudio = !!currentDoc?.blocks.some((b) => b.type === "audio");
+  /* Album scenes own the bottom chrome — the book's page-turn chevrons live
+   * there. The continue pill would cover them, so it steps aside (tapping
+   * the scene outside the book still advances, like every other scene). */
+  const sceneHasAlbum = !!currentDoc?.blocks.some((b) => b.type === "album");
   const quizGate = authored ? sceneHasQuiz && !solvedMap[authoredIdx] : scene === 2 && !quizSolved;
   const giftGate = authored ? sceneHasGift && !giftMap[authoredIdx] : scene === 3 && !giftOpen;
 
@@ -3084,9 +3129,10 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
           </motion.button>
         ) : null}
 
-        {/* Continue hint */}
+        {/* Continue hint — hidden while a gift gate holds the scene, a quiz
+            waits for the right answer, or an album owns the bottom chrome. */}
         <AnimatePresence>
-          {!isFinal && !quizGate ? (
+          {!isFinal && !quizGate && !sceneHasAlbum ? (
             <motion.button
               type="button"
               aria-label="Continue"

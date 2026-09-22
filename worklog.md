@@ -1863,3 +1863,48 @@ Stage Summary:
 - Voice notes ride the shared singleton — the sender's voice keeps playing across pages AND scenes, pausable from the top chrome, ducking the soundtrack.
 - Next-phase queue (unchanged): public /e/[slug] recipient page, per-scene soundtrack override, AI sketch support for the new block types (album included), creator claims analytics dashboard, coupon relaunch, mic-recording e2e (PageVoiceInput), save-draft/preview race + welcome-tour re-appearance investigation.
 - SECURITY (carried): GitHub PAT ghp_66Z1… posted in chat previously — rotate at github.com/settings/tokens after sandbox work.
+
+---
+Task ID: 58
+Agent: Z.ai Code (main orchestrator)
+Task: User request — "I didn't see Digital Diary on the website. Also the scene has very limited adding — people should be able to add UNLIMITED scenes and UNLIMITED blocks."
+
+Work Log:
+- ROOT CAUSE 1 (Diary invisible): the Create tab's SCENE_BLOCKS grid listed only 12 of the 17 block kinds — the Album (the "Digital Diary"), Open When…, Typewriter Letter, Scratch Card and Fireworks blocks existed ONLY inside the builder's add-block palette, never on the website's browse surface.
+- ROOT CAUSE 2 (limited scenes): builder.tsx had `const MAX_SCENES = 8` enforced in addScene() with a "Scene limit reached (8)" toast. (Blocks per scene were already uncapped — the cap was scenes only.)
+- INVESTIGATION DETOUR (documented for future agents): a suspected syntax error `const ode, setMode]` in app-shell.tsx turned out to be a DISPLAY ARTIFACT — the Bash tool's stdout filter strips ANSI-escape-like `[m` sequences, so `const [mode, setMode]` renders as `const ode, setMode]` in bash output. The actual file bytes were always correct (od -c proved it; tsc/Read-tool/node all see the true content). LESSON: never trust bash `sed`/`grep`/`git show` OUTPUT when the text contains `[m`-like sequences (Tailwind arbitrary values!); verify with the Read tool or `od -c`.
+- UNLIMITED SCENES: removed MAX_SCENES entirely — addScene() no longer checks a cap; seedScenes() clamp `Math.min(opts.scenes, MAX_SCENES)` dropped. Story length is now decided by the creator.
+- UNLIMITED-BLOCKS/SVENES SURFACING: builder headers now carry green "Unlimited" badges — "SCENES · N  [Unlimited]" and "ADD TO SCENE n  [Unlimited]"; Create page header says "unlimited scenes, unlimited blocks"; the block grid footer says "Every block is unlimited — stack as many as you like in every scene, and add as many scenes as your story needs."
+- DIGITAL ALBUM ON THE WEBSITE (Create view rewrite):
+  * New AlbumHeroCard — full-width premium card in the same design language as the player's album cover: burgundy leather gradient + sheen, stitched dashed border, embossed gold frame, spine band, gold ring + heart emblem, gold-foil serif "Our Story / a memory book", stacked cream page edges, ground shadow. Copy: "A diary-style memory book they flip through, page by page." + chips (Photos · Voice notes · Handwritten words · Unlimited pages) + gold "Start a Digital Album" button → opens the builder pre-seeded with the album block.
+  * SCENE_BLOCKS grid now carries ALL 17 kinds (added Digital Album, Open When…, Letter, Scratch Card, Fireworks with the builder palette's exact ids/tints/icons); header reads "17 kinds · tap one to drop it into a new scene".
+- PLAYER — compact scene indicator: SceneDots renders one dot per scene which would overflow the top chrome with unlimited stacks; ≥9 scenes now switch to a capsule with a progress ribbon + "n / N" counter (aria-label "Scene n of N"), adapting to light/dark scenes. (total = authored + 2 wrapper scenes, e.g. 11 authored → "1 / 13".)
+- PLAYER BUG FOUND IN E2E + FIXED (2 fixes):
+  * Bug: in multi-scene experiences the bottom "Tap to continue" pill overlapped/covered the album's page-turn chevrons (agent-browser refused the click: "covered by button.absolute.inset-x-0"). Single-scene E2E in task 57 never hit it because the pill doesn't show on final scenes.
+  * Fix A: the continue pill is now hidden on album scenes (sceneHasAlbum) — the book owns the bottom chrome; same precedent as quiz scenes.
+  * Bug B: the album root was `w-full` with stopPropagation on click AND doubleClick — at desktop preview sizes the album filled the entire column, making it IMPOSSIBLE to advance past the album scene.
+  * Fix B: stopPropagation moved from the album root down to the book wrapper + the controls row (both w-[min(78vw,330px)]) — taps on the book/chevrons still never advance, but taps on the gutters around the album now pass through to the scene and advance.
+- AI CREATOR UPGRADED (sketch route):
+  * Scene count relaxed: "exactly 3" → "3 to 6, as many as the story needs"; blocks per scene 2 → 3; sanitize cap 5 → 10.
+  * The AI can now emit the keepsake block types: letter (body+signature), openwhen (items ×2–6 with labels+messages), album (title + note pages + ending + signature — photos/voice added by the sender in the editor), fireworks (message). Sanitizers validate/clamp every field, generate collision-proof ids, drop invalid letters (openwhen needs ≥2 items, letter needs a body).
+  * New prompt guidance: "Milestone moments should consider an album, a letter, or openwhen letters — the keepsake blocks"; interactive rule now includes openwhen.
+  * LIVE-TESTED: brief "anniversary album for my wife of 5 years, we love the sea" → 3-scene sketch with an album block ("Our Ocean Journey", 5 seeded note pages, ending "You are my ocean, deep and beautiful.", signature "Forever yours").
+- HARDENING: POST /api/md/moments now tolerates empty/broken JSON bodies (req.json().catch(() => ({}))) → clean 400 "Missing moment id" instead of a 500 SyntaxError (found via a curl probe in dev.log).
+- WELCOME-TOUR MYSTERY SOLVED (from task 57's queue): the tour reappears because agent-browser launches with a FRESH browser profile (empty localStorage) — the md-onboarded flag is per-browser and works correctly for real users. Not a bug.
+- E2E VERIFIED (agent-browser + VLM, desktop 1280×800 + mobile 430×880):
+  * Create tab: Digital Album hero region present (VLM: "premium dark leather burgundy card… gold-framed mini-book, heart emblem, gold serif text" — looks premium, no glitches); 17 block tiles render; "unlimited" copy present; mobile stacks correctly (a11y-verified: hero, headline, 4 chips, button, grid).
+  * "Start a Digital Album" → builder opens with seeded "Our Little Album" (BOOK, 3 pages).
+  * Unlimited scenes: clicked Add scene ×10 → "SCENES · 11 Unlimited", NO limit toast (old cap was 8).
+  * Unlimited blocks: Text + Gift + Confetti added to Scene 11 ("Confetti added to Scene 11").
+  * Preview: compact indicator "1 / 13" with ribbon (VLM-confirmed); album scene renders (leather cover, gold heart, "Our Little Album", Open button); chevrons now clickable — opened the album, turned to page 3 ("3 · 3" note page); "Tap to continue" pill gone on the album scene; VLM confirms chevrons "visible and unobstructed".
+  * Scene advance: tap on the book does NOT advance (isolation kept); tap in the left gutter → advanced to "3 / 13" (empty test scene) with the pill back (no album).
+  * Test builder session closed WITHOUT saving — the user's original draft ("Untitled Experience", 1 scene / flower apology) verified intact via the API.
+- bun run lint clean; dev.log clean (only the pre-fix 500 from the curl probe remains in history); site HTTP 200.
+
+Stage Summary:
+- The Digital Album ("Digital Diary") is now the FIRST thing on the Create tab — a premium leather-and-gold hero card that opens the builder pre-seeded — and all 17 block kinds are browsable on the website.
+- Scenes are truly unlimited (8-cap removed end-to-end), blocks were and remain unlimited, both now surfaced with green "Unlimited" badges so creators know.
+- The player handles long experiences gracefully (compact ribbon + n/N counter ≥9 scenes) and the album no longer traps the recipient (pill no longer covers the chevrons; gutter taps advance).
+- The AI Creator now designs with the full emotional toolkit — it can sketch albums, letters, open-when envelopes and fireworks finales, with 3–6 scenes per story.
+- Next-phase queue (carried): public /e/[slug] recipient page, per-scene soundtrack override, creator claims analytics dashboard, library search field, coupon relaunch, mic-recording e2e (PageVoiceInput), save-draft/preview race investigation.
+- SECURITY (carried): GitHub PAT ghp_66Z1… posted in chat previously — rotate at github.com/settings/tokens after sandbox work.
