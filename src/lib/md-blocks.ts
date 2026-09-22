@@ -138,6 +138,16 @@ export interface CouponDef {
   stock?: number | null;
 }
 
+/** One sealed letter in an "Open When…" set — labeled by the mood or moment
+ *  it should be opened for. The recipient works through them one by one. */
+export interface OpenWhenItem {
+  id: string;
+  /** The seal label, e.g. "Open when you miss me" */
+  label: string;
+  /** The letter inside the envelope */
+  message: string;
+}
+
 /** Per-type block configuration (all optional — unset fields fall back to defaults). */
 export interface BlockData {
   /** text: message body */
@@ -207,6 +217,10 @@ export interface BlockData {
   /** flower: optional voice note (uploaded audio URL) the recipient can
    *  play from the card — the sender's own voice. */
   voiceNote?: string;
+  /** openwhen: sealed letters labeled by mood/moment */
+  openWhenItems?: OpenWhenItem[];
+  /** letter: the signature line under the typed letter */
+  signature?: string;
   /** @deprecated legacy rose block — kept so old moments keep resolving */
   roseStyle?: string;
 }
@@ -310,6 +324,13 @@ export function couponPool(d: BlockData | undefined | null): CouponDef[] {
 /** Pool items that may be assigned to a NEW player (enabled + in stock). */
 export function eligibleCoupons(pool: CouponDef[]): CouponDef[] {
   return pool.filter((c) => c.enabled !== false && (c.stock == null || c.stock > 0));
+}
+
+/** The usable envelope list for an openwhen block (label or message present). */
+export function openWhenList(d: BlockData | undefined | null): OpenWhenItem[] {
+  return (d?.openWhenItems ?? []).filter(
+    (it) => it && (typeof it.label === "string" || typeof it.message === "string") && (it.label?.trim() || it.message?.trim())
+  );
 }
 
 /** Background-block overlay options (builder chips + player scrim). */

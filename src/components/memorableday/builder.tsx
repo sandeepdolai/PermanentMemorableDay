@@ -23,25 +23,30 @@ import {
   LayoutGrid,
   Link2,
   ListChecks,
+  Mail,
   Mic,
   MousePointerClick,
   Music,
   Pause,
   PartyPopper,
+  PenLine,
   Pencil,
   Play,
   Plus,
   Redo2,
+  Rocket,
   RotateCw,
   Search as SearchIcon,
   Share2,
   Sparkles,
   Square,
+  Stamp,
   Trash2,
   Ticket,
   Type,
   Undo2,
   Upload,
+  Wand,
   Video,
   Wallpaper,
   X,
@@ -61,6 +66,7 @@ import {
   photoFilterCss,
   FLOWERS,
   flower as resolveFlower,
+  openWhenList,
   uid,
   urlDomain,
   BACKGROUND_DIMS,
@@ -69,6 +75,7 @@ import {
   type BlockData,
   type BlockDoc,
   type CouponDef,
+  type OpenWhenItem,
   type SceneDoc,
   type SongPick,
   type SongResult,
@@ -120,6 +127,10 @@ const BLOCKS: BlockDef[] = [
   { type: "background", label: "Background", icon: Wallpaper, tint: "#64D2FF" },
   { type: "gift", label: "Gift", icon: Gift, tint: "#5E5CE6" },
   { type: "flower", label: "Flower", icon: Flower2, tint: "#FF375F" },
+  { type: "openwhen", label: "Open When…", icon: Mail, tint: "#E84393" },
+  { type: "letter", label: "Letter", icon: PenLine, tint: "#AF52DE" },
+  { type: "scratch", label: "Scratch Card", icon: Stamp, tint: "#FFB340" },
+  { type: "fireworks", label: "Fireworks", icon: Rocket, tint: "#FF6B35" },
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
   { type: "quiz", label: "Quiz", icon: ListChecks, tint: "#007AFF" },
   { type: "reward", label: "Reward", icon: Award, tint: "#30D158" },
@@ -511,6 +522,90 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
               </span>
             ) : null}
           </span>
+        </div>
+      );
+    }
+    case "openwhen": {
+      const items = openWhenList(d);
+      return (
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#E84393]/[0.1] text-[#E84393]">
+            <Mail size={16} strokeWidth={2.2} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+              {items.length ? `${items.length} sealed letter${items.length > 1 ? "s" : ""}` : "Open When… letters"}
+            </p>
+            <p className="mt-1 truncate text-[12.5px] text-[#AAAAAA]">
+              {items[0]?.label ? items[0].label : "Add letters for different moods"}
+            </p>
+          </div>
+          <span className="rounded-full bg-[#E84393]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#E84393]">
+            Sealed
+          </span>
+        </div>
+      );
+    }
+    case "letter": {
+      const body = d?.body?.trim();
+      const signature = d?.signature?.trim();
+      return (
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#AF52DE]/[0.1] text-[#AF52DE]">
+            <PenLine size={16} strokeWidth={2.2} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            {body ? (
+              <>
+                <p className="text-[14px] font-medium italic leading-relaxed tracking-[-0.01em] text-[#1D1D1F]">
+                  “{body.slice(0, 90)}{body.length > 90 ? "…" : ""}”
+                </p>
+                <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[#AAAAAA]">
+                  {signature ? `Signed — ${signature}` : "Types itself out, live"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[14px] font-semibold italic text-[#AAAAAA]">Empty letter</p>
+                <p className="mt-1 text-[12.5px] text-[#AAAAAA]">Recipients see nothing until you write it.</p>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+    case "scratch": {
+      const msg = d?.message?.trim();
+      return (
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#FFB340]/[0.14] text-[#B26A00]">
+            <Stamp size={16} strokeWidth={2.2} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Scratch card</p>
+            <p className="mt-1 truncate text-[12.5px] text-[#AAAAAA]">
+              {msg ? `Hides: “${msg.slice(0, 44)}${msg.length > 44 ? "…" : ""}”` : d?.image ? "Hides a photo under the foil" : "Nothing to reveal yet"}
+            </p>
+          </div>
+          <span className="rounded-full bg-[#FFB340]/[0.16] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#B26A00]">
+            {d?.image ? "Photo" : "Reveal"}
+          </span>
+        </div>
+      );
+    }
+    case "fireworks": {
+      const msg = d?.message?.trim();
+      return (
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-[#FF6B35]/[0.12] text-[#FF6B35]">
+            <Rocket size={16} strokeWidth={2.2} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">Fireworks finale</p>
+            <p className="mt-1 truncate text-[12.5px] text-[#AAAAAA]">
+              {msg ? `After 3 bursts: “${msg.slice(0, 40)}${msg.length > 40 ? "…" : ""}”` : "They tap the sky to celebrate"}
+            </p>
+          </div>
         </div>
       );
     }
@@ -2346,6 +2441,324 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
 }
 
 /* ------------------------------------------------------------------ */
+/* Open When… editor — sealed letters labeled by mood                  */
+/* ------------------------------------------------------------------ */
+
+const OPEN_WHEN_MAX = 6;
+const OPEN_WHEN_PRESETS: { label: string; message: string }[] = [
+  { label: "Open when you miss me", message: "Close your eyes and count to three — I'm sending you the biggest hug across the miles." },
+  { label: "Open when you're sad", message: "Whatever weighed on you today, it doesn't stand a chance against the people who love you. Start with me." },
+  { label: "Open when you can't sleep", message: "Breathe slow. Let tomorrow wait. You did enough today, and I'm so proud of you. 🌙" },
+  { label: "Open when you're happy", message: "YES! Celebrate properly — dance badly, sing loudly, and know I'm grinning ear to ear for you." },
+  { label: "Open when you doubt yourself", message: "Read this twice: you are stronger, kinder and braver than you give yourself credit for. I see it every day." },
+  { label: "Open on our anniversary", message: "Another year of you putting up with me — my favorite tradition. Here's to many more. 🥂" },
+];
+
+function OpenWhenEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const items = d.openWhenItems ?? [];
+  const usedLabels = new Set(items.map((it) => it.label.trim().toLowerCase()));
+  const nextPreset = OPEN_WHEN_PRESETS.find((p) => !usedLabels.has(p.label.toLowerCase()));
+
+  const updateItem = (id: string, patch: Partial<OpenWhenItem>) =>
+    set({ openWhenItems: items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+  const removeItem = (id: string) => set({ openWhenItems: items.filter((it) => it.id !== id) });
+  const addItem = (label = "", message = "") =>
+    set({ openWhenItems: [...items, { id: uid("ow"), label, message }] });
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview — a sealed envelope stack, exactly what they'll see */}
+      <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_20%,#3A1526_0%,#1D1D1F_78%)] px-4 py-5">
+        <div className="grid grid-cols-3 gap-2.5">
+          {(items.length ? items : [{ id: "x", label: "", message: "" }]).slice(0, 6).map((it, i) => (
+            <div key={it.id + i} className="flex flex-col items-center gap-1.5">
+              <span
+                aria-hidden
+                className="relative h-[46px] w-full max-w-[72px] overflow-hidden rounded-[8px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] shadow-[0_6px_14px_-6px_rgba(0,0,0,0.6)] ring-1 ring-black/[0.08]"
+              >
+                <span className="absolute inset-x-0 top-0 h-[45%] bg-[linear-gradient(180deg,#F3E5C9_0%,#EBD9B4_100%)] [clip-path:polygon(0_0,100%_0,50%_100%)]" />
+                <span
+                  className="absolute left-1/2 top-[38%] flex h-[16px] w-[16px] -translate-x-1/2 items-center justify-center rounded-full text-[8px] text-white"
+                  style={{ background: `linear-gradient(135deg, hsl(${(i * 47) % 360} 72% 56%), hsl(${(i * 47 + 30) % 360} 72% 46%))` }}
+                >
+                  <Heart size={8} fill="currentColor" />
+                </span>
+              </span>
+              <span className="line-clamp-2 h-[26px] text-center text-[8.5px] font-bold uppercase tracking-[0.03em] text-white/75">
+                {it.label.trim() || "Unlabeled"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Letters — one per mood</FieldLabel>
+        <div className="space-y-3">
+          {items.map((it, i) => (
+            <div key={it.id} className="rounded-[16px] border border-[#1D1D1F]/[0.07] bg-[#F5F5F7]/70 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#E84393]">
+                  <Mail size={11} aria-hidden /> Letter {i + 1}
+                </span>
+                {items.length > 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => removeItem(it.id)}
+                    aria-label={`Remove letter ${i + 1}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05] text-[#AAAAAA] transition-colors hover:bg-[#FF375F]/10 hover:text-[#FF375F]"
+                  >
+                    <Trash2 size={13} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+              <input
+                maxLength={44}
+                value={it.label}
+                onChange={(e) => updateItem(it.id, { label: e.target.value })}
+                placeholder="Open when… (the seal label)"
+                aria-label={`Letter ${i + 1} label`}
+                className={cn(fieldInput, "py-2 text-[13.5px] font-semibold")}
+              />
+              <textarea
+                rows={3}
+                maxLength={220}
+                value={it.message}
+                onChange={(e) => updateItem(it.id, { message: e.target.value })}
+                placeholder="The words inside this letter…"
+                aria-label={`Letter ${i + 1} message`}
+                className={cn(fieldInput, "mt-2 resize-none text-[13.5px] leading-relaxed")}
+              />
+            </div>
+          ))}
+        </div>
+        {items.length < OPEN_WHEN_MAX ? (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => addItem()}
+              className="flex items-center gap-1.5 rounded-full border border-dashed border-[#E84393]/40 px-3.5 py-2 text-[12.5px] font-bold text-[#E84393] transition-colors hover:bg-[#E84393]/[0.06] active:scale-[0.96]"
+            >
+              <Plus size={13} aria-hidden /> Blank letter
+            </button>
+            {nextPreset ? (
+              <button
+                type="button"
+                onClick={() => addItem(nextPreset.label, nextPreset.message)}
+                className="flex items-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.1] bg-white px-3.5 py-2 text-left text-[12px] font-semibold text-[#1D1D1F]/75 transition-colors hover:bg-[#F5F5F7] active:scale-[0.96]"
+              >
+                <Sparkles size={12} className="text-[#E84393]" aria-hidden /> Add “{nextPreset.label}”
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <p className="px-1 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+        Each envelope stays sealed until they tap it — one letter per mood, opened one at a time.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Letter editor — the self-typing letter                             */
+/* ------------------------------------------------------------------ */
+
+function LetterEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const body = (d.body ?? "").trim();
+  const signature = (d.signature ?? "").trim();
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview — the paper, the caret, the seal */}
+      <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_20%,#2A1A3E_0%,#1D1D1F_80%)] px-4 py-5">
+        <div className="relative mx-auto max-w-[320px] rounded-[14px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-5 py-4 shadow-[0_14px_30px_-14px_rgba(0,0,0,0.7)] ring-1 ring-black/[0.07]">
+          <span aria-hidden className="absolute -top-1.5 right-5 flex h-7 w-7 items-center justify-center rounded-full text-[11px] shadow-md" style={{ background: "linear-gradient(135deg,#C4385C,#8E1F3D)" }}>
+            <Heart size={11} className="text-white/90" fill="currentColor" />
+          </span>
+          <p className="min-h-[44px] font-serif text-[12px] italic leading-[1.6] text-[#3E2A1E]">
+            {body ? `“${body.slice(0, 130)}${body.length > 130 ? "…" : ""}”` : <span className="text-[#3E2A1E]/35">Your letter writes itself here…</span>}
+            <span className="ml-[1px] inline-block h-[12px] w-[2px] translate-y-[2px] animate-pulse rounded-full bg-[#AF52DE]" aria-hidden />
+          </p>
+          {signature ? (
+            <p className="mt-2 text-right font-serif text-[12px] italic text-[#3E2A1E]/70">— {signature}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="md-letter-body" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          The letter
+        </label>
+        <textarea
+          id="md-letter-body"
+          rows={6}
+          maxLength={600}
+          value={d.body ?? ""}
+          onChange={(e) => set({ body: e.target.value })}
+          placeholder="Write what you'd say if you were sitting right next to them…"
+          className={cn(fieldInput, "resize-none leading-relaxed")}
+        />
+        <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">
+          {(d.body ?? "").length}/600
+        </p>
+      </div>
+      <div>
+        <label htmlFor="md-letter-sign" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          Signature
+        </label>
+        <input
+          id="md-letter-sign"
+          maxLength={30}
+          value={d.signature ?? ""}
+          onChange={(e) => set({ signature: e.target.value })}
+          placeholder="Always yours"
+          className={fieldInput}
+        />
+      </div>
+      <p className="px-1 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+        The letter types itself out, like you're writing it to them live. They can skip to the end with one tap.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Scratch card editor — foil over a photo/message                     */
+/* ------------------------------------------------------------------ */
+
+function ScratchEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const message = (d.message ?? "").trim();
+  const hasImage = !!d.image?.trim();
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview — foil over the surprise */}
+      <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_20%,#3A2E1A_0%,#1D1D1F_80%)] px-4 py-5">
+        <div className="relative mx-auto aspect-[4/3] w-full max-w-[300px] overflow-hidden rounded-[16px] shadow-[0_14px_30px_-14px_rgba(0,0,0,0.7)] ring-1 ring-black/10">
+          {/* under-layer */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white px-4 text-center">
+            {hasImage ? (
+              <img src={d.image} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+            ) : (
+              <Heart size={22} className="text-[#FFB340]" fill="currentColor" aria-hidden />
+            )}
+            {message ? (
+              <p className={`relative z-10 rounded-full bg-white/85 px-3 py-1.5 text-[11px] font-bold text-[#1D1D1F] backdrop-blur ${hasImage ? "mt-auto mb-3" : ""}`}>
+                {message.slice(0, 42)}
+              </p>
+            ) : null}
+          </div>
+          {/* foil with a scratch streak */}
+          <span aria-hidden className="absolute inset-0 bg-[linear-gradient(135deg,#FFE9A8_0%,#F2C14E_45%,#E8A33D_60%,#FFD66B_100%)]">
+            <span className="absolute inset-0 opacity-[0.16] [background:repeating-linear-gradient(45deg,transparent_0px,transparent_9px,rgba(120,72,0,0.5)_9px,rgba(120,72,0,0.5)_10px)]" />
+            <span className="absolute left-[16%] top-[10%] h-[80%] w-[16px] rotate-[8deg] rounded-full bg-[#1D1D1F]/[0.06] shadow-[inset_0_0_10px_rgba(255,255,255,0.6)]" />
+            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#7A5410]/80">
+              Scratch
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Hidden photo — optional</FieldLabel>
+        <MediaUploadField
+          kind="photo"
+          value={d.image}
+          onUploaded={(url) => set({ image: url })}
+          onRemove={() => set({ image: undefined })}
+        />
+      </div>
+      <div>
+        <label htmlFor="md-scratch-msg" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          The reveal message
+        </label>
+        <textarea
+          id="md-scratch-msg"
+          rows={3}
+          maxLength={220}
+          value={d.message ?? ""}
+          onChange={(e) => set({ message: e.target.value })}
+          placeholder="What's under the foil?"
+          className={cn(fieldInput, "resize-none leading-relaxed")}
+        />
+        <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">
+          {(d.message ?? "").length}/220
+        </p>
+      </div>
+      <p className="px-1 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+        They scratch the gold foil away with a finger — at just over half-scratched, the rest melts away with confetti.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Fireworks editor — tap-the-sky celebration                          */
+/* ------------------------------------------------------------------ */
+
+function FireworksEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const message = (d.message ?? "").trim();
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview — a night sky vignette */}
+      <div className="relative h-[150px] overflow-hidden rounded-[18px] bg-[radial-gradient(120%_100%_at_50%_0%,#2B3A67_0%,#141A33_55%,#0B0E1E_100%)]">
+        {/* static stars */}
+        {Array.from({ length: 22 }).map((_, i) => (
+          <span
+            key={i}
+            aria-hidden
+            className="absolute rounded-full bg-white"
+            style={{
+              left: `${(i * 37 + 13) % 96}%`,
+              top: `${(i * 23 + 7) % 80}%`,
+              width: i % 5 === 0 ? 2.5 : 1.5,
+              height: i % 5 === 0 ? 2.5 : 1.5,
+              opacity: 0.35 + ((i * 13) % 5) * 0.12,
+            }}
+          />
+        ))}
+        {/* two little bursts */}
+        <span aria-hidden className="absolute left-[26%] top-[30%] h-1.5 w-1.5 rounded-full bg-[#FFD60A] shadow-[0_0_18px_6px_rgba(255,214,10,0.55)]" />
+        <span aria-hidden className="absolute left-[64%] top-[22%] h-1.5 w-1.5 rounded-full bg-[#FF375F] shadow-[0_0_18px_6px_rgba(255,55,95,0.55)]" />
+        <p className="absolute inset-x-0 bottom-3 text-center text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/70">
+          They tap the sky · 3 bursts
+        </p>
+      </div>
+      <div>
+        <label htmlFor="md-fw-msg" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          Message after the finale
+        </label>
+        <textarea
+          id="md-fw-msg"
+          rows={3}
+          maxLength={220}
+          value={d.message ?? ""}
+          onChange={(e) => set({ message: e.target.value })}
+          placeholder="The words that rise with the last burst…"
+          className={cn(fieldInput, "resize-none leading-relaxed")}
+        />
+        <p className="mt-1 px-1 text-right text-[11px] font-medium tabular-nums text-[#AAAAAA]">
+          {(d.message ?? "").length}/220
+        </p>
+      </div>
+      <p className="px-1 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+        The sky invites them to celebrate — every tap launches a firework, and your message appears after the third burst.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Reward block editor — the golden coupon with a live reveal stage    */
 /* ------------------------------------------------------------------ */
 
@@ -2687,6 +3100,55 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     },
   },
   {
+    id: "openwhen",
+    type: "openwhen",
+    name: "Open When… Letters",
+    blurb: "Sealed letters for different moods — they open one when the moment is right",
+    category: "Story",
+    accent: "#E84393",
+    isNew: true,
+    data: {
+      openWhenItems: [
+        { id: "tpl-ow-1", label: "Open when you miss me", message: "Close your eyes and count to three — I'm sending you the biggest hug across the miles. Same sky, same moon, same heart." },
+        { id: "tpl-ow-2", label: "Open when you're sad", message: "Whatever weighed on you today, it doesn't stand a chance against the people who love you. Start with me — call anytime, day or night." },
+        { id: "tpl-ow-3", label: "Open when you can't sleep", message: "Breathe slow. Let tomorrow wait. You did enough today, and I'm so proud of you. Sweet dreams 🌙" },
+      ],
+    },
+  },
+  {
+    id: "letter-typewriter",
+    type: "letter",
+    name: "Typewriter Letter",
+    blurb: "A letter that writes itself out, live — like you're writing to them right now",
+    category: "Story",
+    accent: "#AF52DE",
+    isNew: true,
+    data: {
+      body: "There are things I don't say enough, so I'm writing them down: thank you for every small kindness, every laugh, every time you stayed when it would have been easier to walk away. You make ordinary days feel like celebrations.",
+      signature: "Always yours",
+    },
+  },
+  {
+    id: "scratch-card",
+    type: "scratch",
+    name: "Scratch Card",
+    blurb: "Gold foil over a surprise — they scratch it away with a finger",
+    category: "Interactive",
+    accent: "#FFB340",
+    isNew: true,
+    data: { message: "You just won the best prize of all — a whole day with me, no complaints allowed 😄" },
+  },
+  {
+    id: "fireworks-finale",
+    type: "fireworks",
+    name: "Fireworks Finale",
+    blurb: "A night sky that answers every tap with a burst — your words rise after the third",
+    category: "Celebration",
+    accent: "#FF6B35",
+    isNew: true,
+    data: { message: "Happy YOU day — the world is brighter with you in it 🎆" },
+  },
+  {
     id: "gift-box",
     type: "gift",
     name: "Gift Box",
@@ -2844,6 +3306,81 @@ function LibraryThumb({ t }: { t: LibraryTemplate }) {
       return (
         <span aria-hidden className="flex items-center justify-center">
           <GiftBox wrap="#5E5CE6" ribbon="classic" still scale={0.3} sparkle={false} />
+        </span>
+      );
+    case "openwhen":
+      /* Miniature: three sealed envelopes fanned out, wax seals gleaming. */
+      return (
+        <span aria-hidden className="relative flex h-[72px] w-[86px] items-center justify-center">
+          <span className="absolute left-[8px] top-[24px] h-[34px] w-[52px] -rotate-[14deg] rounded-[6px] bg-[linear-gradient(180deg,#FFFDF6,#F0E4C8)] shadow-[0_4px_10px_-4px_rgba(0,0,0,0.45)] ring-1 ring-black/10">
+            <span className="absolute inset-x-0 top-0 h-[42%] bg-[linear-gradient(180deg,#F3E5C9,#EBD9B4)] [clip-path:polygon(0_0,100%_0,50%_100%)]" />
+            <span className="absolute left-1/2 top-[34%] h-[9px] w-[9px] -translate-x-1/2 rounded-full bg-gradient-to-br from-[#E86A8A] to-[#C2185B]" />
+          </span>
+          <span className="absolute right-[8px] top-[24px] h-[34px] w-[52px] rotate-[14deg] rounded-[6px] bg-[linear-gradient(180deg,#FFFDF6,#F0E4C8)] shadow-[0_4px_10px_-4px_rgba(0,0,0,0.45)] ring-1 ring-black/10">
+            <span className="absolute inset-x-0 top-0 h-[42%] bg-[linear-gradient(180deg,#F3E5C9,#EBD9B4)] [clip-path:polygon(0_0,100%_0,50%_100%)]" />
+            <span className="absolute left-1/2 top-[34%] h-[9px] w-[9px] -translate-x-1/2 rounded-full bg-gradient-to-br from-[#B06AE8] to-[#7D3BB8]" />
+          </span>
+          <span className="relative h-[38px] w-[58px] -translate-y-[6px] rounded-[6px] bg-[linear-gradient(180deg,#FFFDF6,#F0E4C8)] shadow-[0_8px_16px_-6px_rgba(0,0,0,0.55)] ring-1 ring-black/10">
+            <span className="absolute inset-x-0 top-0 h-[42%] bg-[linear-gradient(180deg,#F3E5C9,#EBD9B4)] [clip-path:polygon(0_0,100%_0,50%_100%)]" />
+            <span className="absolute left-1/2 top-[34%] flex h-[11px] w-[11px] -translate-x-1/2 items-center justify-center rounded-full bg-gradient-to-br from-[#FF8FA7] to-[#E84393] shadow-[0_1px_3px_rgba(139,20,90,0.5)]">
+              <Heart size={6} className="text-white" fill="currentColor" />
+            </span>
+          </span>
+        </span>
+      );
+    case "letter":
+      /* Miniature: paper mid-type with a live caret and a wax seal. */
+      return (
+        <span
+          aria-hidden
+          className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[10px] bg-[radial-gradient(circle_at_50%_30%,#3A2A55_0%,#1D1D1F_85%)]"
+        >
+          <span className="relative h-[54px] w-[50px] rotate-[-3deg] rounded-[6px] bg-[linear-gradient(180deg,#FFFDF6,#FBF3E4)] px-[7px] py-[8px] shadow-[0_8px_16px_-8px_rgba(0,0,0,0.7)] ring-1 ring-black/10">
+            <span className="block h-[3px] w-[70%] rounded-full bg-[#3E2A1E]/60" />
+            <span className="mt-[4px] block h-[3px] w-[92%] rounded-full bg-[#3E2A1E]/45" />
+            <span className="mt-[4px] block h-[3px] w-[55%] rounded-full bg-[#3E2A1E]/45" />
+            <span className="mt-[4px] flex items-center gap-[2px]">
+              <span className="block h-[3px] w-[38%] rounded-full bg-[#3E2A1E]/45" />
+              <span className="block h-[8px] w-[2px] rounded-full bg-[#AF52DE]" />
+            </span>
+            <span className="absolute -top-[6px] -right-[5px] flex h-[14px] w-[14px] items-center justify-center rounded-full bg-gradient-to-br from-[#C4385C] to-[#8E1F3D] shadow-[0_2px_5px_rgba(142,31,61,0.5)]">
+              <Heart size={6} className="text-white/90" fill="currentColor" />
+            </span>
+          </span>
+        </span>
+      );
+    case "scratch":
+      /* Miniature: gold foil card with a finger-scratch streak revealing pink. */
+      return (
+        <span aria-hidden className="relative flex h-[56px] w-[80px] items-center justify-center overflow-hidden rounded-[9px] shadow-[0_8px_18px_-8px_rgba(122,84,16,0.55)] ring-1 ring-black/10">
+          <span className="absolute inset-0 bg-[linear-gradient(135deg,#FF9BC8,#FF6B9E)]" />
+          <span className="absolute inset-0 flex items-center justify-center">
+            <Heart size={16} className="text-white" fill="currentColor" />
+          </span>
+          <span className="absolute inset-0 bg-[linear-gradient(135deg,#FFE9A8_0%,#F2C14E_45%,#E8A33D_60%,#FFD66B_100%)] [clip-path:polygon(0_0,38%_0,18%_100%,0_100%)]" />
+          <span className="absolute inset-y-0 right-0 w-[62%] bg-[linear-gradient(135deg,#FFE9A8_0%,#F2C14E_45%,#E8A33D_60%,#FFD66B_100%)] [clip-path:polygon(64%_0,100%_0,100%_100%,46%_100%)]" />
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-18deg] text-[6.5px] font-extrabold uppercase tracking-[0.16em] text-[#7A5410]">
+            Scratch
+          </span>
+        </span>
+      );
+    case "fireworks":
+      /* Miniature: night sky, stars, two glowing bursts. */
+      return (
+        <span
+          aria-hidden
+          className="relative flex h-[72px] w-[86px] items-center justify-center overflow-hidden rounded-[10px] bg-[radial-gradient(120%_100%_at_50%_0%,#2B3A67_0%,#141A33_55%,#0B0E1E_100%)]"
+        >
+          {Array.from({ length: 10 }).map((_, i) => (
+            <span
+              key={i}
+              className="absolute rounded-full bg-white"
+              style={{ left: `${(i * 31 + 9) % 92}%`, top: `${(i * 27 + 11) % 70}%`, width: 1.5, height: 1.5, opacity: 0.3 + (i % 4) * 0.15 }}
+            />
+          ))}
+          <span className="absolute left-[28%] top-[30%] h-[7px] w-[7px] rounded-full bg-[#FFD60A] shadow-[0_0_14px_5px_rgba(255,214,10,0.6)]" />
+          <span className="absolute left-[64%] top-[22%] h-[9px] w-[9px] rounded-full bg-[#FF375F] shadow-[0_0_16px_6px_rgba(255,55,95,0.6)]" />
+          <span className="absolute bottom-[10px] left-1/2 h-[14px] w-[2px] -translate-x-1/2 rounded-full bg-gradient-to-t from-[#FF6B35] to-transparent" />
         </span>
       );
     case "flower":
@@ -3145,6 +3682,27 @@ function starterBlockData(type: string): BlockData | undefined {
       flower: "bouquet",
       message: "We're so sorry your parcel is delayed — thank you for your patience. These roses are for you 💐",
     };
+  }
+  if (type === "openwhen") {
+    return {
+      openWhenItems: [
+        { id: uid("ow"), label: "Open when you miss me", message: "Close your eyes and count to three — I'm sending you the biggest hug across the miles. Same sky, same moon, same heart." },
+        { id: uid("ow"), label: "Open when you're sad", message: "Whatever weighed on you today, it doesn't stand a chance against the people who love you. Start with me — call anytime, day or night." },
+        { id: uid("ow"), label: "Open when you can't sleep", message: "Breathe slow. Let tomorrow wait. You did enough today, and I'm so proud of you. Sweet dreams 🌙" },
+      ],
+    };
+  }
+  if (type === "letter") {
+    return {
+      body: "There are things I don't say enough, so I'm writing them down: thank you for every small kindness, every laugh, every time you stayed when it would have been easier to walk away. You make ordinary days feel like celebrations.",
+      signature: "Always yours",
+    };
+  }
+  if (type === "scratch") {
+    return { message: "You just won the best prize of all — a whole day with me, no complaints allowed 😄" };
+  }
+  if (type === "fireworks") {
+    return { message: "Happy YOU day — the world is brighter with you in it 🎆" };
   }
   return undefined;
 }
@@ -3930,6 +4488,14 @@ function BlockEditorContent({
       return <FlowerBlockEditor block={block} onChange={onChange} />;
     case "gift":
       return <GiftBlockEditor block={block} onChange={onChange} />;
+    case "openwhen":
+      return <OpenWhenEditor block={block} onChange={onChange} />;
+    case "letter":
+      return <LetterEditor block={block} onChange={onChange} />;
+    case "scratch":
+      return <ScratchEditor block={block} onChange={onChange} />;
+    case "fireworks":
+      return <FireworksEditor block={block} onChange={onChange} />;
     case "countdown": {
       const isCustom = !!d.minutes && !COUNTDOWN_PRESETS.some((p) => p.minutes === d.minutes);
       return (

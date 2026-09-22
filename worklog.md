@@ -1793,3 +1793,34 @@ Stage Summary:
 - Builder previews are now true WYSIWYG for all message-bearing blocks (flower, gift, text, quiz).
 - Next-phase queue (unchanged): public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch, mic-recording e2e.
 - SECURITY (carried): GitHub PAT ghp_66Z1… was posted in chat — rotate at github.com/settings/tokens after sandbox work.
+
+---
+Task ID: 56
+Agent: Z.ai Code (main orchestrator)
+Task: Two-part round: (1) BUG — tapping the voice-note play button in the viewer advanced the scene; people should stay and listen. (2) "Think Like Steve Jobs — invent more blocks, make something greatest."
+
+Work Log:
+- VOICE NOTE FIX (root cause + Jobs-grade redesign):
+  * Root cause: VoiceNotePlayer's toggle button had no stopPropagation — every other interactive element in the player had it, the voice button was missed. Tapping play bubbled to the scene's onClick={advance}.
+  * Fix 1: stopPropagation on the toggle button AND the whole voice row.
+  * Fix 2 (the genius part): replaced the per-block <audio> with a module-level SHARED VOICE SINGLETON (voiceAudioEl + voiceSubs + useVoiceAudio hook, ~75 lines in moment-player.tsx). The sender's voice now KEEPS PLAYING when the recipient taps ahead — a voice is never cut off mid-sentence (the old code paused audio on unmount at every scene change).
+  * Fix 3: a "Voice" pause pill appears in the top chrome (animated bars + pause icon) whenever the voice plays — pausable from ANY scene, including after the voice block has scrolled away.
+  * Fix 4: the soundtrack DUCKS (pauses) while a voice note plays and resumes after — mirroring the existing audio-block ducking (separate duckedRef, coordinated so they never fight).
+  * Fix 5: closing the experience stops the voice (unmount effect).
+  * Metadata preload: the first voice note's duration shows before play (idle preload on the shared element).
+  * VERIFIED (trusted CDP clicks, not synthetic): play tap → scene STAYS on the flower (bug fixed); pause controls flip to 2 (card button + chrome pill); advancing to the final scene → pill still alive (voice continues); pill tap → all controls clear. Synthetic .click() can't verify audio (no user activation) — used agent-browser's trusted click.
+- NEW BLOCKS (4, all Jobs-criterion: emotional impact × zero learning curve):
+  1. OPEN WHEN… (type "openwhen", pink #E84393): sealed letters labeled by mood ("Open when you miss me/sad/can't sleep/happy/doubt yourself/anniversary"). Player: 2-col grid of paper envelopes with unique-hue wax seals; tap → flap lifts (rotateX spring) + letter rises + message card with "Seal it back". Editor: per-letter label+message (2-6), remove, "Blank letter" + one-tap next-preset chips, live sealed-stack preview. Data: openWhenItems[] (new OpenWhenItem interface in md-blocks.ts + openWhenList resolver).
+  2. TYPEWRITER LETTER (type "letter", purple #AF52DE): the letter types itself character-by-character (22ms/char) with a blinking caret on cream paper + wax seal; "Show it all" skip; signature fades in after the last character. Editor: 600-char body + signature + live preview with caret. Data: body + signature.
+  3. SCRATCH CARD (type "scratch", gold #FFB340): real canvas foil (gradient + diagonal texture + sparkle dots + SCRATCH TO REVEAL lettering) over an optional photo + message. destination-out pointer scratching (brush 15% of width); progress sampled every 16px grid on every 14th stroke event; ≥55% → foil fades out + ConfettiFX Burst + reveal. "Reveal it instead" accessibility fallback; reduced-motion safe; touch-action none. VERIFIED end-to-end: synthetic PointerEvents scratched the foil, threshold fired, auto-reveal + confetti, VLM confirmed no foil left.
+  4. FIREWORKS (type "fireworks", orange #FF6B35): full canvas night sky (42 seeded stars, radial-gradient sky). One auto-burst 700ms after mount (alive from the first second); every tap launches a rocket from the tapped x → explodes into 44-64 particles (gravity, drag, additive blending, 7-color palette); the message rises with a golden glow after the 3rd burst; hint pill counts down remaining bursts. Keyboard accessible (Enter/Space), reduced-motion static-sky fallback. VERIFIED: auto-burst counted, taps launch + count, message rises after 3rd (VLM confirmed).
+- WIRING (all 4 blocks): BLOCKS palette + ADDABLE_BLOCKS (16 kinds now), starterBlockData (beautiful seeded copy), canvas summary cards (sealed count / letter snippet / hidden-message / finale summary), BlockEditorContent cases, LibraryThumb miniatures (fan of envelopes, mid-type paper, foil streak, starfield), LIBRARY_TEMPLATES (Story ×2, Interactive, Celebration, all isNew), player authored-scene switch cases. Empty-content rule enforced: openwhen with no items → null, empty letter → null, scratch with no photo AND no message → null (hooks-before-early-return fixed a rules-of-hooks lint error).
+- E2E (agent-browser + VLM, all passed): builder palette shows all 4 + editors work (Open When seeded 3 letters, added preset → 4); player: envelopes render (VLM: "2x2 grid, cream envelopes, colored wax seals"), letter opens + "Seal it back"; letter types + full text + "— Always yours" signature + wax seal; scratch full lifecycle; fireworks full lifecycle + message; voice fix (above). Draft cleaned back to flower-only with the exact original message (incl. 💐).
+- BUG FOUND & FIXED MID-E2E: rewrote the React import line and accidentally dropped useMemo → "useMemo is not defined" crash on player open (caught by the Next.js error overlay in the browser — dev.log had no trace). Lesson: the runtime overlay is the early-warning system; always open the page in the browser after touching imports.
+- bun run lint clean; site HTTP 200.
+
+Stage Summary:
+- Voice notes are now first-class citizens: tap-to-listen never advances the scene, the voice follows the recipient across scenes, duckable, pausable from anywhere, never cut off.
+- 4 new blocks shipped (16 total): Open When… (the signature emotional gift), Typewriter Letter (live-writing intimacy), Scratch Card (tactile reveal), Fireworks (interactive celebration finale). All are in the palette + library with seeded starter content, live-preview editors, and empty-content honesty.
+- Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch support for the new block types, creator claims analytics dashboard, coupon relaunch, mic-recording e2e.
+- SECURITY (carried): GitHub PAT ghp_66Z1… posted in chat — rotate at github.com/settings/tokens.

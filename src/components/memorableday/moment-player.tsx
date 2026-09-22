@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   AudioLines,
   Check,
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import type { PlayerPayload } from "./md-context";
 import type { BlockDoc, SceneDoc, SongPick } from "@/lib/md-blocks";
-import { backgroundDimClass, formatClock, normalizeUrl, photoFilterCss, urlDomain } from "@/lib/md-blocks";
+import { backgroundDimClass, formatClock, normalizeUrl, openWhenList, photoFilterCss, urlDomain } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
 import { GiftBox, GiftConfetti, isLightWrap } from "./gift-box";
 import { CONFETTI_PALETTES, ConfettiFX, type ConfettiStyleName } from "./confetti";
@@ -673,46 +673,113 @@ function VoiceBars({ active }: { active: boolean }) {
   );
 }
 
-/** The voice-note row on the card — one tap plays the sender's voice. */
-function VoiceNotePlayer({ url }: { url: string }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState<number | null>(null);
+/* ------------------------------------------------------------------ */
+/* Shared voice-note audio                                             */
+/* ------------------------------------------------------------------ */
+/* ONE <audio> element for the whole experience (module singleton). The
+ * sender's voice keeps playing even when the recipient taps ahead to the
+ * next scene — a voice should never be cut off mid-sentence. Every
+ * VoiceNotePlayer button and the top-bar pill control this one element. */
+interface VoiceAudioState {
+  url: string | null;
+  playing: boolean;
+  duration: number | null;
+}
+let voiceAudioEl: HTMLAudioElement | null = null;
+const voiceSubs = new Set<() => void>();
+let voiceAudioState: VoiceAudioState = { url: null, playing: false, duration: null };
 
-  // Stop on unmount (scene change) — removing the element pauses playback.
+function voiceEmit() {
+  voiceSubs.forEach((fn) => fn());
+}
+
+function voiceElement(): HTMLAudioElement {
+  if (!voiceAudioEl) {
+    voiceAudioEl = new Audio();
+    voiceAudioEl.preload = "metadata";
+    voiceAudioEl.addEventListener("play", () => {
+      voiceAudioState = { ...voiceAudioState, playing: true };
+      voiceEmit();
+    });
+    voiceAudioEl.addEventListener("pause", () => {
+      voiceAudioState = { ...voiceAudioState, playing: false };
+      voiceEmit();
+    });
+    voiceAudioEl.addEventListener("ended", () => {
+      voiceAudioState = { ...voiceAudioState, playing: false };
+      voiceEmit();
+    });
+    voiceAudioEl.addEventListener("loadedmetadata", () => {
+      const s = voiceAudioEl?.duration;
+      voiceAudioState = {
+        ...voiceAudioState,
+        duration: Number.isFinite(s) ? Math.max(1, Math.round(s as number)) : null,
+      };
+      voiceEmit();
+    });
+  }
+  return voiceAudioEl;
+}
+
+/** Plays (or restarts) a voice note on the shared element. */
+function playVoiceNote(url: string) {
+  const el = voiceElement();
+  if (voiceAudioState.url !== url) {
+    el.src = url;
+    voiceAudioState = { url, playing: false, duration: null };
+    voiceEmit();
+  }
+  el.currentTime = 0;
+  void el.play().catch(() => {});
+}
+
+/** Pauses the shared voice note (no-op when nothing plays). */
+function pauseVoiceNote() {
+  voiceAudioEl?.pause();
+}
+
+/** Live state of the shared voice audio — re-renders on every change. */
+function useVoiceAudio(): VoiceAudioState {
+  const [, bump] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
-    const audio = audioRef.current;
+    voiceSubs.add(bump);
     return () => {
-      audio?.pause();
+      voiceSubs.delete(bump);
     };
-  }, []);
+  }, [bump]);
+  return voiceAudioState;
+}
 
-  const toggle = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) {
-      audio.pause();
-      setPlaying(false);
-    } else {
-      audio.currentTime = 0;
-      void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+/** The voice-note row on the card — one tap plays the sender's voice.
+ *  Taps never advance the scene, and playback continues across scenes. */
+function VoiceNotePlayer({ url }: { url: string }) {
+  const voice = useVoiceAudio();
+  const mine = voice.url === url;
+  const playing = mine && voice.playing;
+  const duration = mine ? voice.duration : null;
+
+  // While idle, preload this note's metadata so the duration shows up front.
+  useEffect(() => {
+    if (!voiceAudioState.url) {
+      const el = voiceElement();
+      el.src = url;
+      voiceAudioState = { url, playing: false, duration: null };
+      voiceEmit();
     }
+  }, [url]);
+
+  const toggle = (e: React.MouseEvent) => {
+    // THE FIX: a play/pause tap must NEVER advance the scene.
+    e.stopPropagation();
+    if (playing) pauseVoiceNote();
+    else playVoiceNote(url);
   };
 
   return (
-    <div className="flex w-full items-center gap-3 border-t border-[#B45309]/[0.12] pt-3.5">
-      <audio
-        ref={audioRef}
-        src={url}
-        preload="metadata"
-        onLoadedMetadata={(e) => {
-          const s = e.currentTarget.duration;
-          if (Number.isFinite(s)) setDuration(Math.max(1, Math.round(s)));
-        }}
-        onEnded={() => setPlaying(false)}
-        onPause={() => setPlaying(false)}
-        onPlay={() => setPlaying(true)}
-      />
+    <div
+      className="flex w-full items-center gap-3 border-t border-[#B45309]/[0.12] pt-3.5"
+      onClick={(e) => e.stopPropagation()}
+    >
       <button
         type="button"
         onClick={toggle}
@@ -732,6 +799,617 @@ function VoiceNotePlayer({ url }: { url: string }) {
         </span>
       </span>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Open When… — sealed letters, one per mood                          */
+/* ------------------------------------------------------------------ */
+
+function OpenWhenBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const items = openWhenList(block.data);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openItem = items.find((it) => it.id === openId) ?? null;
+  if (items.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="w-full"
+    >
+      <p className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">
+        A set of letters, sealed
+      </p>
+      <h2 className="mx-auto mt-2 max-w-[440px] text-center text-[22px] font-bold leading-[1.2] tracking-[-0.02em] text-white md:text-[28px]">
+        Open one when the moment is right
+      </h2>
+
+      {/* The envelope grid — every seal a different mood */}
+      <div className="mx-auto mt-7 grid w-full max-w-[380px] grid-cols-2 gap-3.5">
+        {items.map((it, i) => {
+          const isOpen = openId === it.id;
+          return (
+            <button
+              key={it.id}
+              type="button"
+              aria-expanded={isOpen}
+              aria-label={`${it.label || "Letter " + (i + 1)} — ${isOpen ? "close" : "open"} this letter`}
+              onClick={(e) => {
+                e.stopPropagation(); // opening a letter must never advance the scene
+                setOpenId(isOpen ? null : it.id);
+              }}
+              className="group flex flex-col items-center gap-2.5 outline-none"
+            >
+              <motion.span
+                aria-hidden
+                animate={isOpen ? { scale: 1.04 } : { scale: 1 }}
+                whileHover={{ scale: 1.04, rotate: i % 2 === 0 ? -1.5 : 1.5 }}
+                whileTap={{ scale: 0.97 }}
+                className="relative block h-[96px] w-full max-w-[150px] overflow-hidden rounded-[14px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] shadow-[0_14px_30px_-14px_rgba(0,0,0,0.65)] ring-1 ring-black/[0.09]"
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                {/* envelope flap — lifts when opened */}
+                <motion.span
+                  className="absolute inset-x-0 top-0 block h-[46%] origin-top bg-[linear-gradient(180deg,#F3E5C9_0%,#EBD9B4_100%)] [clip-path:polygon(0_0,100%_0,50%_100%)]"
+                  animate={isOpen ? { rotateX: 148 } : { rotateX: 0 }}
+                  transition={{ type: "spring", stiffness: 240, damping: 22 }}
+                  style={{ transformStyle: "preserve-3d", backfaceVisibility: "hidden" }}
+                />
+                {/* wax seal */}
+                <span
+                  className="absolute left-1/2 top-[36%] flex h-[26px] w-[26px] -translate-x-1/2 items-center justify-center rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] ring-[1.5px] ring-white/30"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${(i * 47) % 360} 74% 58%), hsl(${(i * 47 + 30) % 360} 74% 44%))`,
+                  }}
+                >
+                  <Heart size={12} className={isOpen ? "text-white/95" : "text-white/90"} fill="currentColor" aria-hidden />
+                </span>
+                {/* letter peeking out when open */}
+                <motion.span
+                  aria-hidden
+                  className="absolute inset-x-[12%] bottom-[10%] block h-[70%] rounded-[8px] bg-white shadow-[0_4px_10px_-4px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.06]"
+                  animate={isOpen ? { y: -18 } : { y: 26 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                />
+              </motion.span>
+              <span
+                className={cn(
+                  "line-clamp-2 px-1 text-center text-[12px] font-semibold leading-snug tracking-[-0.01em] transition-colors",
+                  isOpen ? "text-white" : "text-white/80"
+                )}
+              >
+                {it.label?.trim() || `Letter ${i + 1}`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* The opened letter — the words inside the seal */}
+      <AnimatePresence>
+        {openItem ? (
+          <motion.div
+            key={openItem.id}
+            initial={{ opacity: 0, y: 26, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 14, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 270, damping: 24 }}
+            className="relative z-10 mx-auto mt-6 w-full max-w-[400px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-6 pb-5 pt-6 shadow-[0_24px_48px_-20px_rgba(0,0,0,0.6)] ring-1 ring-black/[0.06]">
+              <span
+                aria-hidden
+                className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,#E8439333_18%,#E8439366_50%,#E8439333_82%,transparent_100%)]"
+              />
+              <p className="text-center text-[10.5px] font-bold uppercase tracking-[0.16em] text-[#E84393]">
+                {openItem.label?.trim() || "For you"}
+              </p>
+              <p className="mt-3 text-center font-serif text-[16.5px] italic leading-[1.6] tracking-[-0.005em] text-[#3E2A1E]">
+                {openItem.message?.trim() || "(This one is blank — but the thought counts.)"}
+              </p>
+              <div className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenId(null);
+                  }}
+                  className="rounded-full bg-[#1D1D1F]/[0.06] px-4 py-2 text-[12px] font-bold text-[#3E2A1E]/80 transition-all hover:bg-[#1D1D1F]/[0.1] active:scale-95"
+                >
+                  Seal it back
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Letter — types itself out, like it's being written live             */
+/* ------------------------------------------------------------------ */
+
+function LetterBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const body = (block.data?.body ?? "").trim();
+  const signature = (block.data?.signature ?? "").trim();
+  const reduced = useReducedMotion();
+  const [shown, setShown] = useState(() => (reduced ? body.length : 0));
+  const done = shown >= body.length;
+
+  useEffect(() => {
+    if (done || !body) return;
+    const t = window.setTimeout(() => setShown((s) => Math.min(s + 1, body.length)), 22);
+    return () => window.clearTimeout(t);
+  }, [shown, done, body.length]);
+
+  // An empty letter shows nothing — the creator's words are the contract.
+  if (!body) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="w-full"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="relative mx-auto w-full max-w-[420px] rounded-[24px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-7 pb-6 pt-7 shadow-[0_28px_56px_-24px_rgba(0,0,0,0.6)] ring-1 ring-black/[0.07]">
+        {/* wax seal */}
+        <span
+          aria-hidden
+          className="absolute -top-3 right-6 flex h-9 w-9 items-center justify-center rounded-full shadow-[0_4px_10px_rgba(142,31,61,0.5)] ring-[1.5px] ring-white/25"
+          style={{ background: "linear-gradient(135deg,#C4385C,#8E1F3D)" }}
+        >
+          <Heart size={14} className="text-white/95" fill="currentColor" />
+        </span>
+
+        <p className="min-h-[72px] font-serif text-[16px] italic leading-[1.7] tracking-[-0.005em] text-[#3E2A1E]">
+          {body.slice(0, shown)}
+          {!done ? (
+            <span
+              aria-hidden
+              className="ml-[1px] inline-block h-[15px] w-[2.5px] translate-y-[2px] animate-pulse rounded-full bg-[#AF52DE]"
+            />
+          ) : null}
+        </p>
+
+        {done && signature ? (
+          <motion.p
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.5 }}
+            className="mt-4 text-right font-serif text-[15px] italic text-[#3E2A1E]/75"
+          >
+            — {signature}
+          </motion.p>
+        ) : null}
+
+        <div className="mt-4 flex justify-center">
+          {!done ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShown(body.length);
+              }}
+              className="rounded-full bg-[#1D1D1F]/[0.06] px-4 py-2 text-[12px] font-bold text-[#3E2A1E]/80 transition-all hover:bg-[#1D1D1F]/[0.1] active:scale-95"
+            >
+              Show it all
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Scratch card — foil they scratch away with a finger                */
+/* ------------------------------------------------------------------ */
+
+function ScratchBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const image = (block.data?.image ?? "").trim();
+  const message = (block.data?.message ?? "").trim();
+  const [revealed, setRevealed] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const scratchingRef = useRef(false);
+  const lastRef = useRef<{ x: number; y: number } | null>(null);
+  const checkCount = useRef(0);
+  const revealedRef = useRef(false);
+
+  const reveal = () => {
+    if (revealedRef.current) return;
+    revealedRef.current = true;
+    setRevealed(true);
+  };
+
+  // Paint the gold foil once per mount.
+  useEffect(() => {
+    if (revealed) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const w = (canvas.width = Math.max(1, canvas.offsetWidth * 2));
+    const h = (canvas.height = Math.max(1, canvas.offsetHeight * 2));
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, "#FFE9A8");
+    g.addColorStop(0.45, "#F2C14E");
+    g.addColorStop(0.6, "#E8A33D");
+    g.addColorStop(1, "#FFD66B");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    // diagonal texture
+    ctx.strokeStyle = "rgba(120,72,0,0.14)";
+    ctx.lineWidth = Math.max(4, w * 0.012);
+    for (let x = -h; x < w + h; x += w * 0.06) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + h, h);
+      ctx.stroke();
+    }
+    // sparkle dots
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    for (let i = 0; i < 26; i++) {
+      const sx = ((i * 97) % 100) / 100 * w;
+      const sy = ((i * 61) % 100) / 100 * h;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // label
+    ctx.fillStyle = "rgba(122,84,16,0.85)";
+    ctx.font = `800 ${Math.round(w * 0.052)}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("SCRATCH TO REVEAL", w / 2, h / 2);
+  }, [revealed]);
+
+  // Nothing to hide → nothing to show (after hooks — the creator's words
+  // are the contract, an empty scratch card renders nothing).
+  if (!image && !message) return null;
+
+  const checkProgress = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
+    const { width: w, height: h } = canvas;
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let clear = 0;
+    let total = 0;
+    for (let y = 0; y < h; y += 16) {
+      for (let x = 0; x < w; x += 16) {
+        total += 1;
+        if (data[(y * w + x) * 4 + 3] < 40) clear += 1;
+      }
+    }
+    if (clear / total >= 0.55) reveal();
+  };
+
+  const scratchAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || revealedRef.current) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const last = lastRef.current ?? { x, y };
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.lineWidth = canvas.width * 0.15;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    lastRef.current = { x, y };
+    checkCount.current += 1;
+    if (checkCount.current % 14 === 0) checkProgress(canvas, ctx);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+    >
+      <p className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">A little surprise</p>
+
+      <div className="relative mt-4 aspect-[4/3] w-full max-w-[360px] select-none" style={{ touchAction: "none" }}>
+        {/* The surprise underneath */}
+        <div className="absolute inset-0 overflow-hidden rounded-[20px] shadow-[0_24px_48px_-20px_rgba(0,0,0,0.6)] ring-1 ring-white/20">
+          {image ? (
+            <img src={image} alt="The surprise hidden under the foil" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[linear-gradient(180deg,#FFF6FB_0%,#FDE7F0_100%)] px-6">
+              <Heart size={30} className="text-[#FF375F]" fill="currentColor" aria-hidden />
+            </div>
+          )}
+          {message ? (
+            <div className={`absolute inset-x-0 ${image ? "bottom-0 bg-gradient-to-t from-black/65 to-transparent px-4 pb-4 pt-10" : "px-4 pb-1 pt-2"}`}>
+              <p className={`text-center text-[15px] font-bold leading-snug tracking-[-0.01em] ${image ? "text-white drop-shadow-md" : "text-[#1D1D1F]"}`}>
+                {message}
+              </p>
+            </div>
+          ) : null}
+        </div>
+
+        {/* The foil on top */}
+        <AnimatePresence>
+          {!revealed ? (
+            <motion.canvas
+              ref={canvasRef}
+              aria-label="Scratch card — rub to reveal the surprise"
+              role="img"
+              exit={{ opacity: 0, scale: 1.04 }}
+              transition={{ duration: 0.5 }}
+              className="absolute inset-0 h-full w-full cursor-grab rounded-[20px] shadow-[0_18px_40px_-16px_rgba(122,84,16,0.55)] ring-1 ring-black/10 active:cursor-grabbing"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                scratchingRef.current = true;
+                lastRef.current = null;
+                scratchAt(e);
+              }}
+              onPointerMove={(e) => {
+                e.stopPropagation();
+                if (scratchingRef.current) scratchAt(e);
+              }}
+              onPointerUp={() => {
+                scratchingRef.current = false;
+                lastRef.current = null;
+              }}
+              onPointerLeave={() => {
+                scratchingRef.current = false;
+                lastRef.current = null;
+              }}
+            />
+          ) : (
+            <ConfettiFX key="fx" style="Burst" onDark className="rounded-[20px]" />
+          )}
+        </AnimatePresence>
+      </div>
+
+      {!revealed ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            reveal();
+          }}
+          className="mt-4 rounded-full bg-white/15 px-4 py-2 text-[12px] font-bold text-white/85 backdrop-blur-md transition-all hover:bg-white/25 active:scale-95"
+        >
+          Reveal it instead
+        </button>
+      ) : null}
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Fireworks — a night sky that answers every tap                      */
+/* ------------------------------------------------------------------ */
+
+const FIREWORK_COLORS = ["#FF375F", "#FFD60A", "#30D158", "#64D2FF", "#FF9F0A", "#BF5AF2", "#FF6B35"];
+const FIREWORKS_NEEDED = 3;
+
+function FireworksBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const message = (block.data?.message ?? "").trim();
+  const [bursts, setBursts] = useState(0);
+  const reduced = useReducedMotion();
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const launchRef = useRef<((xRatio?: number) => void) | null>(null);
+  const done = bursts >= FIREWORKS_NEEDED;
+
+  useEffect(() => {
+    if (reduced) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const w = (canvas.width = Math.max(1, canvas.offsetWidth * 2));
+    const h = (canvas.height = Math.max(1, canvas.offsetHeight * 2));
+    const scale = w / 640;
+    const stars = Array.from({ length: 42 }, (_, i) => ({
+      x: (((i * 53) % 100) / 100) * w,
+      y: (((i * 29) % 60) / 100) * h,
+      r: (i % 6 === 0 ? 2.6 : 1.5) * scale,
+      a: 0.22 + (i % 5) * 0.14,
+    }));
+
+    interface Particle {
+      x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number;
+    }
+    interface Rocket {
+      x: number; y: number; vy: number; targetY: number; color: string;
+    }
+    let particles: Particle[] = [];
+    let rockets: Rocket[] = [];
+    let alive = true;
+    let raf = 0;
+
+    const explode = (x: number, y: number) => {
+      const color = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
+      const n = 44 + Math.floor(Math.random() * 20);
+      for (let i = 0; i < n; i++) {
+        const ang = (Math.PI * 2 * i) / n + Math.random() * 0.24;
+        const speed = (2.1 + Math.random() * 3.6) * scale;
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(ang) * speed,
+          vy: Math.sin(ang) * speed,
+          life: 1,
+          maxLife: 0.7 + Math.random() * 0.55,
+          color,
+          size: (2.1 + Math.random() * 2.7) * scale,
+        });
+      }
+    };
+
+    const launch = (xRatio?: number) => {
+      rockets.push({
+        x: (xRatio ?? 0.25 + Math.random() * 0.5) * w,
+        y: h + 12,
+        vy: -(9.5 + Math.random() * 2.5) * scale,
+        targetY: h * (0.16 + Math.random() * 0.3),
+        color: FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)],
+      });
+    };
+    launchRef.current = launch;
+
+    // The sky greets them with one burst — it feels alive from the first second.
+    const initial = window.setTimeout(() => {
+      launch();
+      setBursts((b) => b + 1);
+    }, 700);
+
+    const frame = () => {
+      if (!alive) return;
+      ctx.clearRect(0, 0, w, h);
+      for (const s of stars) {
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = "#FFFFFF";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      rockets = rockets.filter((r) => {
+        r.y += r.vy;
+        ctx.strokeStyle = r.color;
+        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = 3 * scale;
+        ctx.beginPath();
+        ctx.moveTo(r.x, r.y + 16 * scale);
+        ctx.lineTo(r.x, r.y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        if (r.y <= r.targetY) {
+          explode(r.x, r.y);
+          return false;
+        }
+        return true;
+      });
+      ctx.globalCompositeOperation = "lighter";
+      particles = particles.filter((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.055 * scale;
+        p.vx *= 0.985;
+        p.vy *= 0.985;
+        p.life -= 0.011;
+        if (p.life <= 0) return false;
+        ctx.globalAlpha = Math.min(1, p.life / p.maxLife);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        return true;
+      });
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+      window.clearTimeout(initial);
+      launchRef.current = null;
+    };
+  }, [reduced]);
+
+  const tapSky = (e: React.PointerEvent) => {
+    // Tapping the sky launches fireworks — it must never advance the scene.
+    e.stopPropagation();
+    if (!reduced && launchRef.current) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      launchRef.current(Math.min(0.92, Math.max(0.08, (e.clientX - rect.left) / rect.width)));
+    }
+    setBursts((b) => b + 1);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+    >
+      <div
+        className="relative h-[300px] w-full max-w-[420px] cursor-pointer touch-none overflow-hidden rounded-[24px] ring-1 ring-white/15"
+        style={{ background: "radial-gradient(120% 100% at 50% 0%, #2B3A67 0%, #141A33 55%, #0B0E1E 100%)" }}
+        onPointerDown={tapSky}
+        role="button"
+        aria-label="Night sky — tap to launch fireworks"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.stopPropagation();
+            if (!reduced && launchRef.current) launchRef.current();
+            setBursts((b) => b + 1);
+          }
+        }}
+      >
+        {reduced ? (
+          <>
+            {Array.from({ length: 26 }).map((_, i) => (
+              <span
+                key={i}
+                aria-hidden
+                className="absolute rounded-full bg-white"
+                style={{
+                  left: `${(i * 41 + 7) % 96}%`,
+                  top: `${(i * 27 + 9) % 75}%`,
+                  width: i % 5 === 0 ? 2.5 : 1.5,
+                  height: i % 5 === 0 ? 2.5 : 1.5,
+                  opacity: 0.3 + (i % 4) * 0.15,
+                }}
+              />
+            ))}
+            <span aria-hidden className="absolute left-[30%] top-[28%] h-2 w-2 rounded-full bg-[#FFD60A] shadow-[0_0_22px_8px_rgba(255,214,10,0.55)]" />
+            <span aria-hidden className="absolute right-[24%] top-[38%] h-2.5 w-2.5 rounded-full bg-[#FF375F] shadow-[0_0_24px_9px_rgba(255,55,95,0.55)]" />
+          </>
+        ) : (
+          <canvas ref={canvasRef} aria-hidden className="absolute inset-0 h-full w-full" />
+        )}
+
+        {/* Hint / the rising message */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6">
+          <AnimatePresence mode="wait">
+            {message && done ? (
+              <motion.p
+                key="msg"
+                initial={{ opacity: 0, y: 22, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ type: "spring", stiffness: 240, damping: 22 }}
+                className="text-center text-[24px] font-extrabold leading-[1.2] tracking-[-0.02em] text-white drop-shadow-[0_4px_18px_rgba(255,214,10,0.45)] md:text-[30px]"
+              >
+                {message}
+              </motion.p>
+            ) : !done ? (
+              <motion.p
+                key="hint"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[12.5px] font-bold tracking-[-0.01em] text-white/85 backdrop-blur-md"
+              >
+                <Sparkles size={13} aria-hidden />
+                Tap the sky to celebrate — {FIREWORKS_NEEDED - bursts} more{" "}
+                {FIREWORKS_NEEDED - bursts === 1 ? "burst" : "bursts"}
+              </motion.p>
+            ) : null}
+          </AnimatePresence>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -1400,6 +2078,26 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
     }
   }, [sceneHasAudio, soundtrack, moment.music]);
 
+  /* Voice note — the sender's voice (shared singleton). While it plays the
+   * soundtrack ducks; it keeps playing across scene changes; the top-bar pill
+   * can pause it from any scene; closing the experience stops it. */
+  const voice = useVoiceAudio();
+  const voiceDuckRef = useRef(false);
+  useEffect(() => {
+    if (!moment.music) return;
+    if (voice.playing) {
+      if (soundtrack.state === "playing") {
+        soundtrack.pause();
+        voiceDuckRef.current = true;
+      }
+    } else if (voiceDuckRef.current && soundtrack.state === "paused" && !sceneHasAudio) {
+      soundtrack.resume();
+      voiceDuckRef.current = false;
+    }
+  }, [voice.playing, soundtrack, moment.music, sceneHasAudio]);
+  // Closing the experience always stops the voice.
+  useEffect(() => () => pauseVoiceNote(), []);
+
   const advance = useCallback(() => {
     // Quiz scenes require a correct answer first
     if (quizGate) return;
@@ -1572,6 +2270,14 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                     // legacy "rose" blocks render as the new flower block
                     case "rose":
                       return <FlowerBlockView key={b.id} block={b} index={i} />;
+                    case "openwhen":
+                      return <OpenWhenBlockView key={b.id} block={b} index={i} />;
+                    case "letter":
+                      return <LetterBlockView key={b.id} block={b} index={i} />;
+                    case "scratch":
+                      return <ScratchBlockView key={b.id} block={b} index={i} />;
+                    case "fireworks":
+                      return <FireworksBlockView key={b.id} block={b} index={i} />;
                     case "countdown":
                       return (
                         <CountdownBlockView
@@ -1988,6 +2694,26 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
         </button>
         <SceneDots total={total} current={scene} light={isLightScene} />
         <div className="pointer-events-auto flex items-center gap-2">
+          {voice.playing ? (
+            <button
+              type="button"
+              aria-label="Pause voice note"
+              onClick={(e) => {
+                e.stopPropagation();
+                pauseVoiceNote();
+              }}
+              className={cn(
+                "flex h-10 items-center gap-2 rounded-full px-3.5 transition-transform active:scale-95",
+                isLightScene
+                  ? "bg-white/80 text-[#1D1D1F] hairline backdrop-blur-xl"
+                  : "bg-[#1D1D1F]/35 text-white backdrop-blur-md"
+              )}
+            >
+              <VoiceBars active />
+              <span className="text-[11.5px] font-bold uppercase tracking-[0.06em]">Voice</span>
+              <Pause size={13} fill="currentColor" aria-hidden />
+            </button>
+          ) : null}
           <button
             type="button"
             aria-label={loved ? "Loved — thank you" : "Love this moment"}
