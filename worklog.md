@@ -1824,3 +1824,42 @@ Stage Summary:
 - 4 new blocks shipped (16 total): Open When… (the signature emotional gift), Typewriter Letter (live-writing intimacy), Scratch Card (tactile reveal), Fireworks (interactive celebration finale). All are in the palette + library with seeded starter content, live-preview editors, and empty-content honesty.
 - Next-phase queue: public /e/[slug] recipient page, per-scene soundtrack override, AI sketch support for the new block types, creator claims analytics dashboard, coupon relaunch, mic-recording e2e.
 - SECURITY (carried): GitHub PAT ghp_66Z1… posted in chat — rotate at github.com/settings/tokens.
+
+---
+Task ID: 57
+Agent: Z.ai Code (main orchestrator)
+Task: User request — "Create One More New Block: DIGITAL ALBUM — a book the viewer flips through 1-by-1: first a cover, then unlimited pages (photos + voice notes + messages), then an ending. Think like Steve Jobs, greatest design, emotion always."
+
+Work Log:
+- DATA MODEL (src/lib/md-blocks.ts): new AlbumPage interface {id, image?, message?, voiceNote?} + BlockData fields albumTitle / albumPages / albumEnding / albumSignature + albumPageList() resolver (a page plays when it carries at least one memory: photo, words, or voice — blank creator rows simply don't turn).
+- PLAYER (moment-player.tsx, ~430 new lines): AlbumBlockView — one object, one ritual:
+  * The sequence: leather COVER → every PAGE → the ENDING back cover. An album with no pages = cover art only; a fully empty album renders NOTHING (creator's-words-are-the-contract rule).
+  * BOOK PHYSICS: pages turn around the LEFT spine — framer-motion AnimatePresence with custom direction; forward = current leaf swings to rotateY -102° while the next page is revealed beneath (opacity/scale settle); backward = the previous leaf swings back over. zIndex snaps via per-value transition. transformPerspective 1700. Reduced-motion → gentle fades.
+  * Cover: burgundy leather gradient + light sheen + spine band + gold hairline + stitched dashed border + embossed gold frame + gold ring emblem (heart) + gold-foil serif title (embossed text-shadow) + "N pages inside" + gold "Open the album" pill.
+  * Pages: cream paper + spine gutter shadow + photo mounted in 4 archival triangle corners (someone placed this by hand) + serif italic caption (line-clamp-4) + page number "n · N" pressed into the paper. No photo + words = NOTE page (oversized ghost quote mark). No photo + no words + voice = VOICE page (mic emblem, "A voice memory"). Voice on any page = the existing cream-styled VoiceNotePlayer on the shared voice singleton (keeps playing across scenes, top-chrome pause pill, ducks the soundtrack — all inherited).
+  * Ending: leather back cover + small emblem + "The End" in gold + cream book-plate card with the ending note + signature + "Read it again" (returns to the cover).
+  * Controls: big chevron buttons + gold ribbon progress bar (spring-animated width) below the book; keyboard ← → / space (focused group with live aria-label "Album: … — Page n of N"); horizontal swipe on the book (pointerdown/up delta-x >44px, dy-guarded); stacked page edges peeking out on the right while pages remain; pulsing "Turn the pages one by one — or swipe" hint on the cover.
+  * SOUND: playPageTurn() — a synthesized paper rustle (WebAudio noise burst through a 2.6kHz→900Hz bandpass sweep, 0.13 gain, 220ms), fired from the turn gesture so autoplay rules never apply. No assets.
+  * ISOLATION: the whole album stops click AND doubleClick propagation — flipping never advances the scene and never triggers the love reaction. All internal buttons stopPropagation (voice-note fix pattern).
+- BUILDER (builder.tsx, ~470 new lines):
+  * Palette: { type "album", label "Album", icon BookHeart, tint #C2185B } — 17 addable kinds.
+  * starterBlockData: seeded "Our Little Album" with 3 pages (2 with generated photos + 1 note page) + ending + signature — playable the moment it lands.
+  * AlbumEditor: live mini-book preview (leather + gold frame + heart + title + page-edge stack + "N playable pages · cover → ending"), cover title input, PAGES accordion (collapsed row = thumb + "Page n" + caption snippet + Voice badge + "Empty — won't turn until you add something" honesty; expanded = move up/down + remove + MediaUploadField photo + words textarea + PageVoiceInput), "Add a page — as many as you like" (NO cap — unlimited), ending textarea + signature input.
+  * PageVoiceInput: per-page voice capture — mic recording (MediaRecorder, live timer, 2:00 cap, pulsing red dot + Stop) OR audio file upload (16MB cap, XHR progress), inline preview playback, Replace/Remove. Mic released on unmount.
+  * Canvas summary card: mini leather book + page-edge stack + "“Title”" + "N pages · M with voice · cover → ending" + BOOK tag.
+  * LibraryThumb "album": leather album miniature (gold frame, heart emblem, ALBUM lettering, stacked edges). LIBRARY_TEMPLATES: "Memory Album" (Story, isNew) with the full seeded data.
+- SEED ART: generated 2 warm 864×1152 photos via image-generation SDK (beach couple at golden hour / heart-latte coffee cups) → public/album/seed-1.jpg + seed-2.jpg, referenced by starter + library template.
+- E2E VERIFIED (agent-browser + VLM, mobile 430×880 AND desktop 1280×800):
+  * Builder: palette shows Album; add → seeded card "“Our Little Album” · 3 pages · cover → ending · BOOK"; editor preview + title + 3 seeded rows (photo thumbs visible); expanded page = photo Replace/Remove + words + Record/Audio file; add 4th page ✓; fill words ✓; move up/down reorder ✓; close/reopen sheet.
+  * Player: cover (leather, gold heart, title, "pages inside", Open button) → open → page 1 beach photo WITH corner mounts + caption + "1 · 3" + chevrons + gold progress → page 2 coffee photo → page 3 note page (ghost quote mark) → page 4 → ending (The End + cream plate + message + signature + Read it again + FULL progress bar) → Read it again → cover → next/back nav → prev disabled at cover; keyboard ArrowRight turns (focused aria-label "Album: Our Little Album — Cover"); mouse-drag swipe turns forward.
+  * SCENE ISOLATION (the voice-fix rule, 2-scene draft): Open/Next×3/Read-again/swipe — scene STAYED on the flower scene every single time (flower text present); tapping OUTSIDE the album advanced to scene 2 normally. Double-tap never fired the love burst.
+  * Desktop: album centered, well-proportioned, all elements present (VLM 5/5).
+- DRAFT RESTORED after testing: 1 scene, flower-only, original apology message intact (verified via server API). bun run lint clean; dev.log zero errors; site 200.
+- DISCOVERED (pre-existing, not album-related): after Save Draft the builder auto-opens a preview that can race the save (first post-save preview showed a stale doc; the immediately-reopened builder preview showed the correct saved doc). Also the app's welcome tour re-appeared once mid-session (tour logic keyed to something beyond md-onboarded). Neither blocks the album; worth a look next round.
+
+Stage Summary:
+- The Digital Album is live end-to-end: 17th block kind, in the palette + library, with an unlimited-page book editor (photo + words + voice per page, reorder, ending + signature) and a physical, emotional reader — cover → pages → ending, real book-flip physics, paper-rustle sound, archival photo corners, gold-foil leather, page numbers, gold progress ribbon, chevrons + keyboard + swipe.
+- Emotion-first Jobs details: the book is ONE object with a ritual (open → turn → close on "The End"); pages mount photos by hand (corner mounts); a voice page is "a memory you can hear"; blank pages honestly don't turn.
+- Voice notes ride the shared singleton — the sender's voice keeps playing across pages AND scenes, pausable from the top chrome, ducking the soundtrack.
+- Next-phase queue (unchanged): public /e/[slug] recipient page, per-scene soundtrack override, AI sketch support for the new block types (album included), creator claims analytics dashboard, coupon relaunch, mic-recording e2e (PageVoiceInput), save-draft/preview race + welcome-tour re-appearance investigation.
+- SECURITY (carried): GitHub PAT ghp_66Z1… posted in chat previously — rotate at github.com/settings/tokens after sandbox work.

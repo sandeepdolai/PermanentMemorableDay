@@ -148,6 +148,20 @@ export interface OpenWhenItem {
   message: string;
 }
 
+/** One page in a Digital Album — a mounted photo, a handwritten-style
+ *  caption, and/or the sender's voice note. Pages turn one by one, from the
+ *  leather cover to the ending page. Any of the three may be empty; a page
+ *  with only a voice note is still a page (a memory you can hear). */
+export interface AlbumPage {
+  id: string;
+  /** Photo URL (uploaded or bundled seed art) — empty = a note page */
+  image?: string;
+  /** The caption under the photo / the note on the page */
+  message?: string;
+  /** Voice note URL — the sender's voice on this page */
+  voiceNote?: string;
+}
+
 /** Per-type block configuration (all optional — unset fields fall back to defaults). */
 export interface BlockData {
   /** text: message body */
@@ -221,6 +235,14 @@ export interface BlockData {
   openWhenItems?: OpenWhenItem[];
   /** letter: the signature line under the typed letter */
   signature?: string;
+  /** album: the title stamped in gold on the leather cover */
+  albumTitle?: string;
+  /** album: the pages, in order — unlimited */
+  albumPages?: AlbumPage[];
+  /** album: the closing note on the ending page */
+  albumEnding?: string;
+  /** album: the signature under the ending note */
+  albumSignature?: string;
   /** @deprecated legacy rose block — kept so old moments keep resolving */
   roseStyle?: string;
 }
@@ -330,6 +352,18 @@ export function eligibleCoupons(pool: CouponDef[]): CouponDef[] {
 export function openWhenList(d: BlockData | undefined | null): OpenWhenItem[] {
   return (d?.openWhenItems ?? []).filter(
     (it) => it && (typeof it.label === "string" || typeof it.message === "string") && (it.label?.trim() || it.message?.trim())
+  );
+}
+
+/** The playable page list for an album block — every page that carries at
+ *  least one memory (a photo, words, or a voice). Blank rows the creator
+ *  added but never filled in simply don't turn. */
+export function albumPageList(d: BlockData | undefined | null): AlbumPage[] {
+  return (d?.albumPages ?? []).filter(
+    (p) =>
+      p &&
+      (typeof p.image === "string" || typeof p.message === "string" || typeof p.voiceNote === "string") &&
+      !!(p.image?.trim() || p.message?.trim() || p.voiceNote?.trim())
   );
 }
 

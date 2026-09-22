@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, Reorder, motion, useDragControls } from "framer-motion";
 import {
+  ArrowDown,
+  ArrowUp,
   AudioLines,
   Award,
+  BookHeart,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -55,6 +59,7 @@ import { Slider } from "@/components/ui/slider";
 import { formatDuration } from "@/lib/mock-data";
 import { apiSearchMusic, apiUploadFile } from "@/lib/md-client";
 import {
+  albumPageList,
   backgroundDimClass,
   COUPON_COLORS,
   couponPool,
@@ -72,6 +77,7 @@ import {
   BACKGROUND_DIMS,
   BACKGROUND_MOTIONS,
   PHOTO_FILTERS,
+  type AlbumPage,
   type BlockData,
   type BlockDoc,
   type CouponDef,
@@ -129,6 +135,7 @@ const BLOCKS: BlockDef[] = [
   { type: "flower", label: "Flower", icon: Flower2, tint: "#FF375F" },
   { type: "openwhen", label: "Open When…", icon: Mail, tint: "#E84393" },
   { type: "letter", label: "Letter", icon: PenLine, tint: "#AF52DE" },
+  { type: "album", label: "Album", icon: BookHeart, tint: "#C2185B" },
   { type: "scratch", label: "Scratch Card", icon: Stamp, tint: "#FFB340" },
   { type: "fireworks", label: "Fireworks", icon: Rocket, tint: "#FF6B35" },
   { type: "countdown", label: "Countdown", icon: Clock, tint: "#FF9F0A" },
@@ -606,6 +613,37 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
               {msg ? `After 3 bursts: “${msg.slice(0, 40)}${msg.length > 40 ? "…" : ""}”` : "They tap the sky to celebrate"}
             </p>
           </div>
+        </div>
+      );
+    }
+    case "album": {
+      const pages = albumPageList(d);
+      const title = d?.albumTitle?.trim();
+      const voices = pages.filter((p) => !!p.voiceNote?.trim()).length;
+      return (
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="relative flex h-[52px] w-[42px] shrink-0 items-start justify-center overflow-hidden rounded-[6px] pt-[9px]"
+            style={{ background: "linear-gradient(160deg,#6B2237,#3E0F1F)", boxShadow: "inset 0 0 0 1px rgba(232,200,138,0.35)" }}
+          >
+            <Heart size={11} fill="#E8C88A" strokeWidth={0} />
+            {/* stacked page edges */}
+            <span className="absolute inset-y-[3px] right-[-3px] w-[4px] rounded-r-[3px] bg-[#EFE3C8] shadow-[2.5px_0_0 -0.5px_#E4D4B0,5px_0_0_-1px_#D9C69E]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">
+              {title ? `“${title}”` : "Digital album"}
+            </p>
+            <p className="mt-1 truncate text-[12.5px] text-[#AAAAAA]">
+              {pages.length
+                ? `${pages.length} page${pages.length > 1 ? "s" : ""}${voices ? ` · ${voices} with voice` : ""} · cover → ending`
+                : "No pages yet — add photos, words, voice"}
+            </p>
+          </div>
+          <span className="rounded-full bg-[#C2185B]/[0.1] px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#C2185B]">
+            Book
+          </span>
         </div>
       );
     }
@@ -2759,6 +2797,464 @@ function FireworksEditor({ block, onChange }: { block: Block; onChange: (data: B
 }
 
 /* ------------------------------------------------------------------ */
+/* Digital Album editor — a book: cover, pages, ending                 */
+/* ------------------------------------------------------------------ */
+
+/** Compact voice-note capture for one album page: record straight from the
+ *  mic (up to 2:00) or upload an audio file, preview it, replace or drop it. */
+function PageVoiceInput({
+  value,
+  onChange,
+  pageLabel,
+}: {
+  value?: string;
+  onChange: (url: string | undefined) => void;
+  pageLabel: string;
+}) {
+  const { notify } = useMD();
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [secs, setSecs] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [pct, setPct] = useState<number | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+
+  const stopRecorder = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    const rec = recRef.current;
+    if (rec && rec.state === "recording") rec.stop();
+    recRef.current?.stream.getTracks().forEach((t) => t.stop());
+    recRef.current = null;
+    setRecording(false);
+  }, []);
+
+  // Release the mic + stop the preview when the row unmounts (page removed / sheet closed)
+  useEffect(
+    () => () => {
+      stopRecorder();
+      audioRef.current?.pause();
+    },
+    [stopRecorder]
+  );
+
+  const upload = async (file: File) => {
+    if (file.size > AUDIO_LIMIT_MB * 1024 * 1024) {
+      notify(`Too large — keep it under ${AUDIO_LIMIT_MB} MB`);
+      return;
+    }
+    setBusy(true);
+    setPct(0);
+    try {
+      const url = await apiUploadFile(file, (p) => setPct(p));
+      onChange(url);
+      notify(`Voice added to ${pageLabel}`);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Upload failed — try again");
+    } finally {
+      setBusy(false);
+      setPct(null);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickRecorderMime();
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+        if (blob.size < 1200) {
+          notify("Didn't catch that — hold the mic a little longer");
+          return;
+        }
+        const ext = (rec.mimeType || "audio/webm").includes("mp4") ? "m4a" : "webm";
+        void upload(new File([blob], `album-voice.${ext}`, { type: blob.type }));
+      };
+      rec.start();
+      recRef.current = rec;
+      setRecording(true);
+      setSecs(0);
+      timerRef.current = setInterval(() => {
+        setSecs((s) => {
+          if (s + 1 >= VOICE_NOTE_MAX_SECS) stopRecorder();
+          return s + 1;
+        });
+      }, 1000);
+    } catch {
+      notify("Microphone access was blocked — check your browser permissions");
+    }
+  };
+
+  const togglePreview = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (previewing) {
+      audio.pause();
+    } else {
+      audio.currentTime = 0;
+      void audio.play().catch(() => setPreviewing(false));
+    }
+  };
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 rounded-[12px] border border-[#FF375F]/[0.14] bg-[#FF375F]/[0.05] px-3 py-2">
+        {value ? <audio ref={audioRef} src={value} onPlay={() => setPreviewing(true)} onPause={() => setPreviewing(false)} onEnded={() => setPreviewing(false)} className="hidden" /> : null}
+        <button
+          type="button"
+          onClick={togglePreview}
+          aria-label={previewing ? "Pause voice note" : "Play voice note"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF375F] text-white transition-transform active:scale-90"
+        >
+          {previewing ? <Pause size={12} fill="currentColor" aria-hidden /> : <Play size={12} fill="currentColor" className="ml-0.5" aria-hidden />}
+        </button>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.06em] text-[#FF375F]">
+          <Mic size={11} aria-hidden /> Voice on this page
+        </span>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="rounded-full bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-[#1D1D1F]/70 shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+        >
+          {busy ? `…${pct ?? 0}%` : "Replace"}
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(undefined)}
+          disabled={busy}
+          aria-label={`Remove voice from ${pageLabel}`}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05] text-[#AAAAAA] transition-colors hover:bg-[#FF375F]/10 hover:text-[#FF375F] disabled:opacity-50"
+        >
+          <Trash2 size={12} aria-hidden />
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void upload(file);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (recording) {
+    return (
+      <div className="flex items-center gap-3 rounded-[12px] border border-[#FF375F]/30 bg-[#FF375F]/[0.07] px-3.5 py-2.5">
+        <span className="relative flex h-3 w-3 shrink-0" aria-hidden>
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#FF375F] opacity-60" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-[#FF375F]" />
+        </span>
+        <span className="text-[13px] font-bold tabular-nums text-[#FF375F]">{formatClock(secs)}</span>
+        <span className="flex-1 text-[12px] font-medium text-[#1D1D1F]/55">Recording {pageLabel.toLowerCase()}…</span>
+        <button
+          type="button"
+          onClick={stopRecorder}
+          className="flex items-center gap-1.5 rounded-full bg-[#1D1D1F] px-3.5 py-1.5 text-[12px] font-bold text-white transition-transform active:scale-95"
+        >
+          <Square size={10} fill="currentColor" aria-hidden /> Stop
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void upload(file);
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => void startRecording()}
+        disabled={busy}
+        className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-dashed border-[#FF375F]/40 py-2 text-[12.5px] font-bold text-[#FF375F] transition-colors hover:bg-[#FF375F]/[0.06] active:scale-[0.97] disabled:opacity-50"
+      >
+        <Mic size={13} aria-hidden /> Record this page
+      </button>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={busy}
+        className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#1D1D1F]/[0.1] bg-white py-2 text-[12.5px] font-semibold text-[#1D1D1F]/75 transition-colors hover:bg-[#F5F5F7] active:scale-[0.97] disabled:opacity-50"
+      >
+        {busy ? `Uploading…${pct !== null ? ` ${pct}%` : ""}` : (<><Upload size={12} aria-hidden /> Audio file</>)}
+      </button>
+    </div>
+  );
+}
+
+function AlbumEditor({ block, onChange }: { block: Block; onChange: (data: BlockData) => void }) {
+  const d = block.data ?? {};
+  const set = (patch: Partial<BlockData>) => onChange({ ...d, ...patch });
+  const pages = d.albumPages ?? [];
+  const playable = albumPageList(d);
+  const voices = playable.filter((p) => !!p.voiceNote?.trim()).length;
+  const title = (d.albumTitle ?? "").trim();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const updatePage = (id: string, patch: Partial<AlbumPage>) =>
+    set({ albumPages: pages.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
+  const removePage = (id: string) => set({ albumPages: pages.filter((p) => p.id !== id) });
+  const addPage = () => {
+    const p: AlbumPage = { id: uid("pg") };
+    set({ albumPages: [...pages, p] });
+    setExpandedId(p.id);
+  };
+  const movePage = (id: string, dir: -1 | 1) => {
+    const idx = pages.findIndex((p) => p.id === id);
+    const to = idx + dir;
+    if (idx < 0 || to < 0 || to >= pages.length) return;
+    const next = [...pages];
+    [next[idx], next[to]] = [next[to], next[idx]];
+    set({ albumPages: next });
+  };
+
+  return (
+    <div className="space-y-4 pb-2">
+      {/* Live preview — the closed leather book, exactly what they'll open */}
+      <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_22%,#3A1526_0%,#1D1D1F_78%)] px-4 py-6">
+        <div className="mx-auto flex max-w-[300px] items-center gap-4">
+          {/* the mini album — leather, gold frame, heart emblem, page edges */}
+          <span
+            aria-hidden
+            className="relative flex h-[92px] w-[72px] shrink-0 flex-col items-center justify-center gap-1 rounded-[8px]"
+            style={{
+              background: "linear-gradient(160deg,#6B2237 0%,#54172A 46%,#3E0F1F 100%)",
+              boxShadow:
+                "inset 0 0 0 1.5px rgba(232,200,138,0.4), inset 0 0 0 5px rgba(0,0,0,0.12), 0 14px 28px -12px rgba(0,0,0,0.8)",
+            }}
+          >
+            <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full" style={{ boxShadow: "inset 0 0 0 1.2px rgba(232,200,138,0.55)" }}>
+              <Heart size={11} fill="#E8C88A" strokeWidth={0} />
+            </span>
+            <span className="max-w-[54px] text-center font-serif text-[7px] italic leading-[1.15] text-[#E8C88A]">
+              {title ? title.slice(0, 34) : "·"}
+            </span>
+            {/* stacked page edges — pages waiting to be turned */}
+            <span className="absolute inset-y-[4px] right-[-4px] w-[5px] rounded-r-[4px] bg-[#EFE3C8] shadow-[3px_0_0 -0.5px_#E4D4B0,6px_0_0_-1px_#D9C69E]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-bold tracking-[-0.01em] text-white">{title || "Untitled album"}</p>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-white/55">
+              {playable.length} playable {playable.length === 1 ? "page" : "pages"}
+              {voices ? ` · ${voices} with voice` : ""}
+              <br />
+              Cover → pages → the ending
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="md-album-title" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          Cover title
+        </label>
+        <input
+          id="md-album-title"
+          maxLength={60}
+          value={d.albumTitle ?? ""}
+          onChange={(e) => set({ albumTitle: e.target.value })}
+          placeholder="Our Little Album"
+          className={fieldInput}
+        />
+        <p className="mt-1.5 px-1 text-[11.5px] font-medium text-[#AAAAAA]">
+          Stamped in gold on the leather cover — the first thing they see.
+        </p>
+      </div>
+
+      <div>
+        <FieldLabel>Pages — photos, words, your voice</FieldLabel>
+        <div className="space-y-2.5">
+          {pages.map((p, i) => {
+            const open = expandedId === p.id;
+            const image = p.image?.trim();
+            const note = p.message?.trim();
+            const hasVoice = !!p.voiceNote?.trim();
+            const empty = !image && !note && !hasVoice;
+            return (
+              <div
+                key={p.id}
+                className={cn(
+                  "rounded-[16px] border bg-[#F5F5F7]/70 transition-colors",
+                  open ? "border-[#C2185B]/25" : "border-[#1D1D1F]/[0.07]"
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(open ? null : p.id)}
+                  aria-expanded={open}
+                  className="flex w-full items-center gap-3 p-3 text-left"
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "relative flex h-[46px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[6px]",
+                      image ? "" : "bg-[#FFFDF6] ring-1 ring-black/[0.06]"
+                    )}
+                  >
+                    {image ? (
+                      <img src={image} alt="" className="h-full w-full object-cover" draggable={false} />
+                    ) : (
+                      <PenLine size={13} className="text-[#C2185B]/60" aria-hidden />
+                    )}
+                    {/* folded page corner */}
+                    <span className="absolute bottom-0 right-0 h-[9px] w-[9px] bg-[linear-gradient(135deg,transparent_50%,rgba(0,0,0,0.12)_50%)]" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className={cn("block text-[13px] font-bold tracking-[-0.01em]", empty ? "text-[#AAAAAA]" : "text-[#1D1D1F]")}>
+                      Page {i + 1}
+                      {hasVoice ? (
+                        <span className="ml-2 inline-flex items-center gap-0.5 rounded-full bg-[#FF375F]/[0.1] px-1.5 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-[#FF375F]">
+                          <Mic size={8} aria-hidden /> Voice
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[12px] text-[#AAAAAA]">
+                      {note ? note : image ? "Photo page" : empty ? "Empty — won't turn until you add something" : "Voice page"}
+                    </span>
+                  </span>
+                  <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="shrink-0 text-[#AAAAAA]">
+                    <ChevronDown size={15} aria-hidden />
+                  </motion.span>
+                </button>
+                {open ? (
+                  <div className="space-y-3 border-t border-[#1D1D1F]/[0.06] p-3">
+                    {/* page order — the story reads front to back */}
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.07em] text-[#C2185B]">
+                        <BookHeart size={11} aria-hidden /> Page {i + 1} of the story
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => movePage(p.id, -1)}
+                          disabled={i === 0}
+                          aria-label={`Move page ${i + 1} earlier`}
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05] text-[#AAAAAA] transition-colors hover:bg-[#1D1D1F]/[0.09] hover:text-[#1D1D1F] disabled:opacity-30"
+                        >
+                          <ArrowUp size={12} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => movePage(p.id, 1)}
+                          disabled={i === pages.length - 1}
+                          aria-label={`Move page ${i + 1} later`}
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05] text-[#AAAAAA] transition-colors hover:bg-[#1D1D1F]/[0.09] hover:text-[#1D1D1F] disabled:opacity-30"
+                        >
+                          <ArrowDown size={12} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            removePage(p.id);
+                            if (expandedId === p.id) setExpandedId(null);
+                          }}
+                          aria-label={`Remove page ${i + 1}`}
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1D1D1F]/[0.05] text-[#AAAAAA] transition-colors hover:bg-[#FF375F]/10 hover:text-[#FF375F]"
+                        >
+                          <Trash2 size={12} aria-hidden />
+                        </button>
+                      </span>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 px-0.5 text-[11px] font-bold uppercase tracking-[0.05em] text-[#AAAAAA]">Photo — optional</p>
+                      <MediaUploadField
+                        kind="photo"
+                        value={p.image}
+                        onUploaded={(url) => updatePage(p.id, { image: url })}
+                        onRemove={() => updatePage(p.id, { image: undefined })}
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1.5 px-0.5 text-[11px] font-bold uppercase tracking-[0.05em] text-[#AAAAAA]">Words on the page</p>
+                      <textarea
+                        rows={2}
+                        maxLength={220}
+                        value={p.message ?? ""}
+                        onChange={(e) => updatePage(p.id, { message: e.target.value })}
+                        placeholder="The caption under the photo — or the whole page if there's no photo…"
+                        aria-label={`Page ${i + 1} words`}
+                        className={cn(fieldInput, "resize-none py-2 text-[13.5px] leading-relaxed")}
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1.5 px-0.5 text-[11px] font-bold uppercase tracking-[0.05em] text-[#AAAAAA]">Your voice — optional</p>
+                      <PageVoiceInput
+                        value={p.voiceNote}
+                        onChange={(url) => updatePage(p.id, { voiceNote: url })}
+                        pageLabel={`page ${i + 1}`}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={addPage}
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-[#C2185B]/40 py-2.5 text-[13px] font-bold text-[#C2185B] transition-colors hover:bg-[#C2185B]/[0.06] active:scale-[0.98]"
+        >
+          <Plus size={14} aria-hidden /> Add a page — as many as you like
+        </button>
+      </div>
+
+      <div>
+        <label htmlFor="md-album-ending" className="mb-2 block px-1 text-[12px] font-bold uppercase tracking-[0.06em] text-[#AAAAAA]">
+          The ending page
+        </label>
+        <textarea
+          id="md-album-ending"
+          rows={2}
+          maxLength={220}
+          value={d.albumEnding ?? ""}
+          onChange={(e) => set({ albumEnding: e.target.value })}
+          placeholder="The closing note on the last page of the book…"
+          className={cn(fieldInput, "resize-none leading-relaxed")}
+        />
+        <input
+          maxLength={30}
+          value={d.albumSignature ?? ""}
+          onChange={(e) => set({ albumSignature: e.target.value })}
+          placeholder="With all my love"
+          aria-label="Album ending signature"
+          className={cn(fieldInput, "mt-2")}
+        />
+      </div>
+      <p className="px-1 text-[11.5px] leading-relaxed text-[#AAAAAA]">
+        They open the cover, turn the pages one by one — photos, your words, your voice — and close on your ending note. Empty pages simply don't turn.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Reward block editor — the golden coupon with a live reveal stage    */
 /* ------------------------------------------------------------------ */
 
@@ -3129,6 +3625,25 @@ const LIBRARY_TEMPLATES_ALL: LibraryTemplate[] = [
     },
   },
   {
+    id: "memory-album",
+    type: "album",
+    name: "Memory Album",
+    blurb: "A leather-bound book — cover, pages of photos, words & your voice, an ending",
+    category: "Story",
+    accent: "#C2185B",
+    isNew: true,
+    data: {
+      albumTitle: "Our Little Album",
+      albumPages: [
+        { id: "tpl-pg-1", image: "/album/seed-1.jpg", message: "Where this story began — the evening we lost track of time completely." },
+        { id: "tpl-pg-2", image: "/album/seed-2.jpg", message: "Ordinary mornings, extraordinary company. My favorite kind of day." },
+        { id: "tpl-pg-3", message: "Add as many pages as you like — photos, words, even your voice. This album is yours." },
+      ],
+      albumEnding: "Thank you for every page of it.",
+      albumSignature: "With all my love",
+    },
+  },
+  {
     id: "scratch-card",
     type: "scratch",
     name: "Scratch Card",
@@ -3325,6 +3840,28 @@ function LibraryThumb({ t }: { t: LibraryTemplate }) {
             <span className="absolute left-1/2 top-[34%] flex h-[11px] w-[11px] -translate-x-1/2 items-center justify-center rounded-full bg-gradient-to-br from-[#FF8FA7] to-[#E84393] shadow-[0_1px_3px_rgba(139,20,90,0.5)]">
               <Heart size={6} className="text-white" fill="currentColor" />
             </span>
+          </span>
+        </span>
+      );
+    case "album":
+      /* Miniature: the leather album — gold heart, gold frame, stacked pages. */
+      return (
+        <span aria-hidden className="relative flex h-[76px] w-[86px] items-center justify-center">
+          <span
+            className="relative flex h-[72px] w-[56px] flex-col items-center justify-center gap-1.5 rounded-[8px]"
+            style={{
+              background: "linear-gradient(160deg,#6B2237 0%,#54172A 46%,#3E0F1F 100%)",
+              boxShadow: "inset 0 0 0 1.5px rgba(232,200,138,0.42), 0 12px 26px -10px rgba(0,0,0,0.8)",
+            }}
+          >
+            {/* spine */}
+            <span className="absolute inset-y-0 left-0 w-[6px] rounded-l-[8px] bg-black/30" />
+            <span className="flex h-[24px] w-[24px] items-center justify-center rounded-full" style={{ boxShadow: "inset 0 0 0 1.2px rgba(232,200,138,0.6)" }}>
+              <Heart size={10} fill="#E8C88A" strokeWidth={0} />
+            </span>
+            <span className="text-[6px] font-bold uppercase tracking-[0.2em] text-[#E8C88A]/85">ALBUM</span>
+            {/* stacked page edges — pages waiting */}
+            <span className="absolute inset-y-[5px] right-[-5px] w-[6px] rounded-r-[4px] bg-[#EFE3C8] shadow-[3.5px_0_0 -0.5px_#E4D4B0,7px_0_0_-1.5px_#D9C69E]" />
           </span>
         </span>
       );
@@ -3703,6 +4240,18 @@ function starterBlockData(type: string): BlockData | undefined {
   }
   if (type === "fireworks") {
     return { message: "Happy YOU day — the world is brighter with you in it 🎆" };
+  }
+  if (type === "album") {
+    return {
+      albumTitle: "Our Little Album",
+      albumPages: [
+        { id: uid("pg"), image: "/album/seed-1.jpg", message: "Where this story began — the evening we lost track of time completely." },
+        { id: uid("pg"), image: "/album/seed-2.jpg", message: "Ordinary mornings, extraordinary company. My favorite kind of day." },
+        { id: uid("pg"), message: "Add as many pages as you like — photos, words, even your voice. This album is yours." },
+      ],
+      albumEnding: "Thank you for every page of it.",
+      albumSignature: "With all my love",
+    };
   }
   return undefined;
 }
@@ -4496,6 +5045,8 @@ function BlockEditorContent({
       return <ScratchEditor block={block} onChange={onChange} />;
     case "fireworks":
       return <FireworksEditor block={block} onChange={onChange} />;
+    case "album":
+      return <AlbumEditor block={block} onChange={onChange} />;
     case "countdown": {
       const isCustom = !!d.minutes && !COUNTDOWN_PRESETS.some((p) => p.minutes === d.minutes);
       return (

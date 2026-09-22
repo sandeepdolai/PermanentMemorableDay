@@ -4,13 +4,16 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   AudioLines,
+  BookOpen,
   Check,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Copy,
   ExternalLink,
   Gift,
   Heart,
+  Mic,
   MousePointerClick,
   Music as MusicIcon,
   PartyPopper,
@@ -23,7 +26,7 @@ import {
 } from "lucide-react";
 import type { PlayerPayload } from "./md-context";
 import type { BlockDoc, SceneDoc, SongPick } from "@/lib/md-blocks";
-import { backgroundDimClass, formatClock, normalizeUrl, openWhenList, photoFilterCss, urlDomain } from "@/lib/md-blocks";
+import { albumPageList, backgroundDimClass, formatClock, normalizeUrl, openWhenList, photoFilterCss, urlDomain } from "@/lib/md-blocks";
 import { CoverArt } from "./cover-art";
 import { GiftBox, GiftConfetti, isLightWrap } from "./gift-box";
 import { CONFETTI_PALETTES, ConfettiFX, type ConfettiStyleName } from "./confetti";
@@ -1413,6 +1416,430 @@ function FireworksBlockView({ block, index }: { block: BlockDoc; index: number }
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Digital Album — a keepsake book: cover → pages → ending             */
+/* ------------------------------------------------------------------ */
+/* One object, one ritual: a leather-bound album the recipient opens,
+ * turns page by page (photos mounted in archival corners, captions in
+ * ink, the sender's voice on any page), and closes on "The End".
+ * Pages turn around the LEFT spine with real book physics — the turning
+ * page lifts above, the next page is revealed beneath. Taps inside the
+ * album NEVER advance the scene; the book is its own little world. */
+
+const ALBUM_GOLD = "#E8C88A";
+
+/** A soft paper rustle on every page turn — synthesized, no assets,
+ *  fired from the turn gesture so autoplay rules never apply. */
+let pageAudioCtx: AudioContext | null = null;
+function playPageTurn() {
+  try {
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return;
+    if (!pageAudioCtx) pageAudioCtx = new Ctor();
+    const ctx = pageAudioCtx;
+    if (ctx.state === "suspended") void ctx.resume();
+    const dur = 0.22;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const t = i / data.length;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 1.6) * Math.min(1, t * 14);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(2600, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(900, ctx.currentTime + dur);
+    filter.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.13;
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start();
+  } catch {
+    /* no audio — the page still turns */
+  }
+}
+
+/** The leather + gold book-plate chrome shared by the cover and the
+ *  ending page (spine, embossed frame, stitched border). */
+function AlbumLeatherBase({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="relative flex h-full flex-col overflow-hidden rounded-[16px] shadow-[0_36px_70px_-28px_rgba(0,0,0,0.72)]"
+      style={{ background: "linear-gradient(160deg,#6B2237 0%,#54172A 46%,#3E0F1F 100%)" }}
+    >
+      {/* light sheen on the leather, top-left */}
+      <span
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 90% at 18% 0%, rgba(255,214,170,0.14) 0%, rgba(255,214,170,0.03) 34%, transparent 60%)",
+        }}
+      />
+      {/* the spine — a darker band with a gold hairline */}
+      <span aria-hidden className="absolute inset-y-0 left-0 w-[13px] bg-[linear-gradient(90deg,rgba(0,0,0,0.42),rgba(0,0,0,0.12)_60%,transparent)]" />
+      <span aria-hidden className="absolute inset-y-[10px] left-[13px] w-px bg-[#E8C88A]/25" />
+      {/* stitched border, just inside the edge */}
+      <span aria-hidden className="absolute inset-[7px] rounded-[10px] border border-dashed border-[#E8C88A]/[0.28]" />
+      {/* embossed gold frame */}
+      <span aria-hidden className="absolute inset-[13px] rounded-[7px] border border-[#E8C88A]/[0.34]" />
+      {children}
+    </div>
+  );
+}
+
+/** The gold emblem on the cover / ending — an embossed ring + heart. */
+function AlbumEmblem({ size = 56 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="relative flex items-center justify-center rounded-full"
+      style={{
+        width: size,
+        height: size,
+        background: "linear-gradient(160deg,rgba(232,200,138,0.16),rgba(232,200,138,0.05))",
+        boxShadow: `inset 0 0 0 1.5px rgba(232,200,138,0.55), inset 0 2px 8px rgba(0,0,0,0.35), 0 2px 10px rgba(0,0,0,0.3)`,
+      }}
+    >
+      <Heart size={size * 0.42} fill={ALBUM_GOLD} strokeWidth={0} style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.45))" }} />
+    </span>
+  );
+}
+
+function AlbumBlockView({ block, index }: { block: BlockDoc; index: number }) {
+  const d = block.data;
+  const title = (d?.albumTitle ?? "").trim();
+  const pages = albumPageList(d);
+  const ending = (d?.albumEnding ?? "").trim();
+  const signature = (d?.albumSignature ?? "").trim();
+  const reduced = useReducedMotion();
+
+  /* The sequence the recipient walks: cover → every page → the ending.
+   * An album with no pages has nothing to open — cover art only. */
+  const hasEnding = pages.length > 0;
+  const total = 1 + pages.length + (hasEnding ? 1 : 0);
+  const [pos, setPos] = useState(0);
+  const [dir, setDir] = useState(1);
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
+
+  // The creator's words are the contract — a fully empty album renders nothing.
+  if (!title && pages.length === 0 && !ending && !signature) return null;
+
+  const atEnd = pos >= total - 1;
+  const turn = (next: number) => {
+    if (next < 0 || next > total - 1 || next === pos) return;
+    setDir(next > pos ? 1 : -1);
+    setPos(next);
+    if (!reduced) playPageTurn();
+  };
+
+  /* Book physics: forward — the current page swings away around the LEFT
+   * spine while the next page is revealed beneath; backward — the previous
+   * page swings back over. zIndex snaps instantly (per-value transition). */
+  const flipVariants = {
+    enter: (direction: number) =>
+      reduced
+        ? { opacity: 0, zIndex: 2 }
+        : direction > 0
+          ? { rotateY: 0, opacity: 0.5, scale: 0.985, zIndex: 1 }
+          : { rotateY: -102, opacity: 1, scale: 1, zIndex: 3 },
+    center: { rotateY: 0, opacity: 1, scale: 1 },
+    exit: (direction: number) =>
+      reduced
+        ? { opacity: 0, zIndex: 2 }
+        : direction > 0
+          ? { rotateY: -102, opacity: 0, scale: 1, zIndex: 3 }
+          : { rotateY: 0, opacity: 0.5, scale: 0.985, zIndex: 1 },
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowRight" || e.key === " ") {
+      e.preventDefault();
+      turn(pos + 1);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      turn(pos - 1);
+    }
+  };
+
+  const pageLabel = pos === 0 ? "Cover" : pos === total - 1 && hasEnding ? "The end" : `Page ${pos} of ${pages.length}`;
+
+  /* One leaf of the book at `pos` (0 = cover, last = ending). */
+  const leaf = (() => {
+    if (pos === 0) {
+      /* ——— the cover ——— */
+      return (
+        <AlbumLeatherBase>
+          <div className="relative flex h-full flex-1 flex-col items-center justify-center gap-4 px-8 pt-6 text-center">
+            <AlbumEmblem />
+            {title ? (
+              <h3
+                className="line-clamp-3 font-serif text-[23px] italic leading-[1.18] tracking-[-0.01em] md:text-[26px]"
+                style={{ color: ALBUM_GOLD, textShadow: "0 1px 0 rgba(0,0,0,0.45), 0 0 22px rgba(232,200,138,0.22)" }}
+              >
+                {title}
+              </h3>
+            ) : null}
+            {pages.length > 0 ? (
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.22em] text-[#E8C88A]/75">
+                {pages.length} {pages.length === 1 ? "page" : "pages"} inside
+              </p>
+            ) : null}
+          </div>
+          {total > 1 ? (
+            <div className="relative flex flex-col items-center pb-7">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  turn(1);
+                }}
+                className="flex items-center gap-2 rounded-full px-6 py-3 text-[13.5px] font-extrabold tracking-[-0.01em] text-[#4A2A12] transition-transform active:scale-95"
+                style={{
+                  background: "linear-gradient(180deg,#F3DFAE 0%,#E4BE7C 55%,#D9B36C 100%)",
+                  boxShadow: "0 12px 26px -10px rgba(212,169,92,0.75), inset 0 1px 0 rgba(255,255,255,0.55)",
+                }}
+              >
+                <BookOpen size={15} strokeWidth={2.4} aria-hidden />
+                Open the album
+              </button>
+            </div>
+          ) : (
+            <div className="pb-7" />
+          )}
+        </AlbumLeatherBase>
+      );
+    }
+    if (pos === total - 1 && hasEnding) {
+      /* ——— the ending page ——— */
+      return (
+        <AlbumLeatherBase>
+          <div className="relative flex h-full flex-1 flex-col items-center justify-center gap-4 px-8 pt-5 text-center">
+            <AlbumEmblem size={44} />
+            <p
+              className="font-serif text-[24px] italic leading-none md:text-[27px]"
+              style={{ color: ALBUM_GOLD, textShadow: "0 1px 0 rgba(0,0,0,0.45), 0 0 22px rgba(232,200,138,0.22)" }}
+            >
+              The End
+            </p>
+            {ending || signature ? (
+              <div className="w-full rounded-[14px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-5 py-4 shadow-[0_14px_30px_-14px_rgba(0,0,0,0.65)] ring-1 ring-black/[0.09]">
+                {ending ? (
+                  <p className="text-center font-serif text-[15px] italic leading-[1.6] text-[#3E2A1E]">{ending}</p>
+                ) : null}
+                {signature ? (
+                  <p className="mt-2.5 text-right font-serif text-[13.5px] italic text-[#3E2A1E]/70">— {signature}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="relative flex flex-col items-center pb-7">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                turn(0);
+              }}
+              className="flex items-center gap-2 rounded-full border border-[#E8C88A]/60 bg-white/[0.06] px-6 py-2.5 text-[13px] font-bold text-[#E8C88A] transition-all hover:bg-white/[0.12] active:scale-95"
+            >
+              <RotateCcw size={13} aria-hidden />
+              Read it again
+            </button>
+          </div>
+        </AlbumLeatherBase>
+      );
+    }
+    /* ——— a photo page ——— */
+    const page = pages[pos - 1] ?? { id: "blank" };
+    const image = page.image?.trim();
+    const note = page.message?.trim();
+    const voice = page.voiceNote?.trim();
+    return (
+      <div className="relative flex h-full flex-col overflow-hidden rounded-[16px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] shadow-[0_36px_70px_-28px_rgba(0,0,0,0.72)] ring-1 ring-black/[0.07]">
+        {/* the gutter — where the page meets the spine */}
+        <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-12 bg-[linear-gradient(90deg,rgba(62,42,30,0.14),transparent)]" />
+        {image ? (
+          <>
+            <div className="relative flex-1 min-h-0 px-[18px] pt-[18px]">
+              <div className="relative h-full w-full">
+                <img
+                  src={image}
+                  alt={note || "Album photo"}
+                  draggable={false}
+                  className="h-full w-full rounded-[10px] object-cover shadow-[0_10px_26px_-12px_rgba(62,42,30,0.55)] ring-1 ring-black/[0.14]"
+                />
+                {/* archival photo corners — someone mounted this by hand */}
+                <span aria-hidden className="absolute -left-[7px] -top-[7px] h-[19px] w-[19px] bg-[#3E2A1E]/[0.17] [clip-path:polygon(0_0,100%_0,0_100%)]" />
+                <span aria-hidden className="absolute -right-[7px] -top-[7px] h-[19px] w-[19px] bg-[#3E2A1E]/[0.17] [clip-path:polygon(0_0,100%_0,100%_100%)]" />
+                <span aria-hidden className="absolute -bottom-[7px] -left-[7px] h-[19px] w-[19px] bg-[#3E2A1E]/[0.17] [clip-path:polygon(0_0,0_100%,100%_100%)]" />
+                <span aria-hidden className="absolute -bottom-[7px] -right-[7px] h-[19px] w-[19px] bg-[#3E2A1E]/[0.17] [clip-path:polygon(100%_0,100%_100%,0_100%)]" />
+              </div>
+            </div>
+            {note ? (
+              <div className="relative px-7 pb-[34px] pt-3">
+                <p className="line-clamp-4 overflow-hidden text-center font-serif text-[15px] italic leading-[1.55] tracking-[-0.005em] text-[#3E2A1E]">
+                  {note}
+                </p>
+              </div>
+            ) : (
+              <div className="pb-[26px] pt-2" />
+            )}
+          </>
+        ) : note ? (
+          /* a note page — words carry the page */
+          <div className="relative flex flex-1 flex-col items-center justify-center gap-1 px-9 pb-8 text-center">
+            <span aria-hidden className="font-serif text-[58px] leading-[0.4] text-[#3E2A1E]/[0.14]">
+              “
+            </span>
+            <p className="font-serif text-[16.5px] italic leading-[1.65] text-[#3E2A1E]">{note}</p>
+          </div>
+        ) : (
+          /* a voice page — a memory you can hear */
+          <div className="relative flex flex-1 flex-col items-center justify-center gap-3 px-9 pb-8 text-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FF375F]/[0.08] ring-1 ring-[#FF375F]/20">
+              <Mic size={20} className="text-[#FF375F]" aria-hidden />
+            </span>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#3E2A1E]/55">A voice memory</p>
+          </div>
+        )}
+        {voice ? (
+          <div className="relative px-[18px] pb-[26px]">
+            <VoiceNotePlayer url={voice} />
+          </div>
+        ) : null}
+        {/* the page number, pressed into the paper */}
+        <span className="absolute inset-x-0 bottom-[9px] text-center text-[10.5px] font-bold tabular-nums tracking-[0.16em] text-[#3E2A1E]/45">
+          {pos} · {pages.length}
+        </span>
+      </div>
+    );
+  })();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 + index * 0.09, duration: 0.4, ease: "easeOut" }}
+      className="flex w-full flex-col items-center"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onKeyDown={onKey}
+      tabIndex={0}
+      role="group"
+      aria-label={`Album: ${title || "photo album"} — ${pageLabel}`}
+    >
+      <div
+        className="relative w-[min(78vw,330px)]"
+        style={{ perspective: 1700 }}
+        onPointerDown={(e) => {
+          swipeRef.current = { x: e.clientX, y: e.clientY };
+        }}
+        onPointerUp={(e) => {
+          const start = swipeRef.current;
+          swipeRef.current = null;
+          if (!start) return;
+          const dx = e.clientX - start.x;
+          const dy = e.clientY - start.y;
+          if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.4) turn(dx < 0 ? pos + 1 : pos - 1);
+        }}
+      >
+        {/* stacked page edges peeking out — there's more ahead */}
+        {pos < total - 1 ? (
+          <span
+            aria-hidden
+            className="absolute right-[-9px] top-[3%] h-[94%] w-[5px] rounded-r-[5px] bg-[#EFE3C8]"
+            style={{ boxShadow: "3px 0 0 -0.5px #E4D4B0, 6px 0 0 -1px #D9C69E, 0 22px 40px -18px rgba(0,0,0,0.55)" }}
+          />
+        ) : null}
+        <div className="relative h-[clamp(400px,58vh,520px)]" style={{ transformStyle: "preserve-3d" }}>
+          <AnimatePresence initial={false} custom={dir}>
+            <motion.div
+              key={pos}
+              custom={dir}
+              variants={flipVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{
+                rotateY: { type: "spring", stiffness: 190, damping: 26 },
+                opacity: { duration: reduced ? 0.25 : 0.42 },
+                scale: { duration: 0.45 },
+                zIndex: { duration: 0 },
+              }}
+              style={{ transformOrigin: "left center", transformPerspective: 1700 }}
+              className="absolute inset-0"
+            >
+              {leaf}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* reading controls — a page either side, a gold ribbon of progress */}
+      {total > 1 ? (
+        <div className="mt-5 flex w-[min(78vw,330px)] items-center gap-3">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              turn(pos - 1);
+            }}
+            disabled={pos === 0}
+            aria-label="Previous page"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/[0.07] text-white/90 backdrop-blur-md transition-all hover:bg-white/[0.14] active:scale-90 disabled:opacity-30"
+          >
+            <ChevronLeft size={17} strokeWidth={2.5} aria-hidden />
+          </button>
+          <div
+            className="flex h-[4px] flex-1 overflow-hidden rounded-full bg-white/[0.16]"
+            role="progressbar"
+            aria-label={`Album progress — ${pageLabel}`}
+            aria-valuemin={1}
+            aria-valuemax={total}
+            aria-valuenow={pos + 1}
+          >
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: "linear-gradient(90deg,#F3DFAE,#D9B36C)" }}
+              initial={false}
+              animate={{ width: `${((pos + 1) / total) * 100}%` }}
+              transition={{ type: "spring", stiffness: 180, damping: 26 }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              turn(pos + 1);
+            }}
+            disabled={atEnd}
+            aria-label="Next page"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/[0.07] text-white/90 backdrop-blur-md transition-all hover:bg-white/[0.14] active:scale-90 disabled:opacity-30"
+          >
+            <ChevronRight size={17} strokeWidth={2.5} aria-hidden />
+          </button>
+        </div>
+      ) : null}
+      {total > 1 && pos === 0 ? (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0.45, 1, 0.45] }}
+          transition={{ repeat: Infinity, duration: 2.2 }}
+          className="mt-3.5 text-[11.5px] font-semibold tracking-[-0.005em] text-white/60"
+        >
+          Turn the pages one by one — or swipe
+        </motion.p>
+      ) : null}
+    </motion.div>
+  );
+}
+
 function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const d = block.data;
   const message = (d?.message ?? "").trim();
@@ -2278,6 +2705,8 @@ export function MomentPlayer({ moment, onClose }: { moment: PlayerPayload; onClo
                       return <ScratchBlockView key={b.id} block={b} index={i} />;
                     case "fireworks":
                       return <FireworksBlockView key={b.id} block={b} index={i} />;
+                    case "album":
+                      return <AlbumBlockView key={b.id} block={b} index={i} />;
                     case "countdown":
                       return (
                         <CountdownBlockView
