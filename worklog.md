@@ -1756,3 +1756,40 @@ Stage Summary:
 - KEY LESSON: if the sandbox ever looks "rolled back", ALWAYS `git fetch` + compare before writing code — the remote is authoritative. And use the double-fork `( setsid ... & )` pattern for the dev server; a dead-looking port 3000 after a restart is usually the sandbox's process reaper, not a crash.
 - SECURITY (repeat, still pending): a GitHub PAT (ghp_66Z1…, user sandeepdolai) was posted in plaintext in chat this round and is embedded in the git remote URL — ROTATE it at github.com/settings/tokens once this sandbox session ends.
 - Next-phase queue (unchanged from Task 53): public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch, mic-recording e2e.
+
+---
+Task ID: 55
+Agent: Z.ai Code (main orchestrator)
+Task: User bug report — "If someone writes NOTHING in message boxes or message blocks, the viewer should show NOTHING. Currently an empty message still shows some message in the viewer."
+
+Work Log:
+- Audited every creator-message fallback in the codebase (moment-player.tsx viewer + builder.tsx previews). Found 5 fake-content spots that ignored the creator's empty input:
+  1. VIEWER TextBlockView: empty text → rendered placeholder "Some words that land."
+  2. VIEWER FlowerBlockView: empty card message → rendered "A bouquet for you."
+  3. VIEWER GiftBlockView: empty message → teaser "A surprise / There's something for you." before open AND card "This is for you." after open
+  4. VIEWER QuizBlockView: empty question → rendered "Who is this moment for?"
+  5. BUILDER live previews: flower editor preview + gift editor preview showed the same fallbacks (violating WYSIWYG — they're labeled "exactly what the recipient sees")
+- FIXES (moment-player.tsx):
+  * TextBlockView: `if (!body) return null;` — an empty text block renders NOTHING in the player.
+  * FlowerBlockView: the cream card now renders only when `message || voiceNote`; inside it the heart + message paragraph render only when message exists; the voice player renders alone (no heart/text) when only a voice note is attached. Empty message + no voice = just the flower, no card.
+  * GiftBlockView: the pre-open teaser ("A surprise / There's something for you.") and the post-open message card now both render only when the creator wrote a message. Empty message = box + "Open the gift" button + confetti, nothing else.
+  * QuizBlockView: question heading renders only when a question exists ("Pop quiz" eyebrow + answers still play — functional UI kept).
+- FIXES (builder.tsx, WYSIWYG parity):
+  * Flower editor live preview: same gating as the viewer (card only when message||voice; heart+text only when message; voice chip alone otherwise) + a muted hint "No message — the recipient will see just the flower." in the empty-empty case.
+  * Gift editor live preview: the reveal bubble renders only when a message exists.
+  * Canvas summary cards made honest: empty Text card now shows muted "Empty message / Recipients see nothing until you write something." (was fake "A few words that land."); empty Quiz card shows "No question — answers only" (was fake "Pick the answer that fits —").
+- E2E VERIFIED (agent-browser + VLM):
+  * Flower with empty message + voice note: viewer scene text = "Voice note · 0:42" only; VLM confirms cream card contains ONLY the voice player — no heart, no italic message, no "A bouquet for you".
+  * Empty Text block: renders nothing (no "Some words that land." anywhere in the scene).
+  * Gift with empty message: before open = no teaser (scene text only had "Open the gift"); after open = no card (VLM: "no message card or text saying 'This is for you'").
+  * Regression: typing "Hello my dear friend…" back into the flower → card shows heart + message + voice together (showsMsg true, showsVoice true).
+  * Editor preview matches viewer in both empty and filled states.
+  * Test artifacts cleaned from the user's draft (test Text + Gift blocks removed, original apology message restored).
+- bun run lint clean; dev.log zero errors; site HTTP 200.
+
+Stage Summary:
+- Principle now enforced app-wide: THE CREATOR'S WORDS ARE THE CONTRACT — write nothing, the recipient sees nothing. No fake placeholder messages anywhere in the viewer.
+- Functional game UI (buttons like "Open the gift", quiz answers, countdown numbers, coupon mechanics, CTA labels) intentionally still renders — those are interaction controls, not sender messages.
+- Builder previews are now true WYSIWYG for all message-bearing blocks (flower, gift, text, quiz).
+- Next-phase queue (unchanged): public /e/[slug] recipient page, per-scene soundtrack override, AI sketch→soundtrack, creator claims analytics dashboard, library search field, coupon relaunch, mic-recording e2e.
+- SECURITY (carried): GitHub PAT ghp_66Z1… was posted in chat — rotate at github.com/settings/tokens after sandbox work.

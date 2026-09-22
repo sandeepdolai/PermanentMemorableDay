@@ -284,11 +284,11 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
                 </>
               ) : (
                 <>
-                  <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F]">
-                    A few words that land.
+                  <p className="text-[14px] font-semibold italic leading-snug tracking-[-0.01em] text-[#AAAAAA]">
+                    Empty message
                   </p>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-[#AAAAAA]">
-                    Your message renders here — big type, generous spacing, one idea per scene.
+                    Recipients see nothing until you write something.
                   </p>
                 </>
               )}
@@ -529,12 +529,16 @@ function BlockPreview({ block, cover }: { block: Block; cover: number }) {
       );
     }
     case "quiz": {
-      const question = d?.question?.trim() || "Pick the answer that fits —";
+      const question = d?.question?.trim() || "";
       const options = d?.options?.length ? d.options : ["Option A", "Option B"];
       const answer = d?.answer ?? -1;
       return (
         <div>
-          <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">{question}</p>
+          {question ? (
+            <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[#1D1D1F]">{question}</p>
+          ) : (
+            <p className="text-[13.5px] font-semibold italic tracking-[-0.01em] text-[#AAAAAA]">No question — answers only</p>
+          )}
           <div className="mt-2.5 flex flex-wrap gap-2">
             {options.map((o, i) => {
               const correct = i === answer;
@@ -1868,12 +1872,13 @@ function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data:
     }
   };
 
-  const previewMessage = message.trim() || "A bouquet for you.";
+  const hasMessage = !!message.trim();
 
   return (
     <div className="space-y-4 pb-2">
       {/* Live preview — frameless, exactly what the recipient sees: the
-       * bouquet (or 3D rose, spinning or held) then the card beneath it. */}
+       * bouquet (or 3D rose, spinning or held) then the card beneath it —
+       * and NO card at all when the message is empty and no voice is attached. */}
       <div className="overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_50%_18%,#3A1526_0%,#1D1D1F_74%)]">
         <div className="h-[205px]">
           <FlowerStage
@@ -1884,17 +1889,27 @@ function FlowerBlockEditor({ block, onChange }: { block: Block; onChange: (data:
           />
         </div>
       </div>
-      <div className="mx-1 overflow-hidden rounded-[16px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-4 py-3.5 shadow-[0_10px_24px_-14px_rgba(29,29,31,0.35)] ring-1 ring-black/[0.05]">
-        <Heart size={11} className="mx-auto mb-1.5 text-[#FF375F]" fill="currentColor" aria-hidden />
-        <p className="text-center font-serif text-[13.5px] italic leading-[1.5] text-[#3E2A1E]">
-          {previewMessage}
+      {hasMessage || voiceUrl ? (
+        <div className="mx-1 overflow-hidden rounded-[16px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-4 py-3.5 shadow-[0_10px_24px_-14px_rgba(29,29,31,0.35)] ring-1 ring-black/[0.05]">
+          {hasMessage ? (
+            <>
+              <Heart size={11} className="mx-auto mb-1.5 text-[#FF375F]" fill="currentColor" aria-hidden />
+              <p className="text-center font-serif text-[13.5px] italic leading-[1.5] text-[#3E2A1E]">
+                {message.trim()}
+              </p>
+            </>
+          ) : null}
+          {voiceUrl ? (
+            <p className={`${hasMessage ? "mt-2.5 border-t border-[#B45309]/[0.12] pt-2.5" : ""} flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8A5A2B]/75`}>
+              <Mic size={10} aria-hidden /> Voice note attached
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="px-1 text-center text-[11.5px] font-medium text-[#AAAAAA]">
+          No message — the recipient will see just the flower.
         </p>
-        {voiceUrl ? (
-          <p className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-[#B45309]/[0.12] pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8A5A2B]/75">
-            <Mic size={10} aria-hidden /> Voice note attached
-          </p>
-        ) : null}
-      </div>
+      )}
 
       {/* The ONLY flower setting: which flower */}
       <div>
@@ -2208,15 +2223,17 @@ function GiftBlockEditor({ block, onChange }: { block: Block; onChange: (data: B
           <div className="flex min-h-[44px] w-full max-w-[300px] items-start justify-center pt-1">
             <AnimatePresence>
               {demoOpen ? (
-                <motion.p
-                  initial={{ opacity: 0, y: 10, scale: 0.94 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.96 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 22, delay: 0.18 }}
-                  className="relative z-10 rounded-[18px] border border-[#1D1D1F]/[0.06] bg-white/90 px-4 py-2.5 text-center text-[13.5px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_24px_-10px_rgba(29,29,31,0.25)] backdrop-blur"
-                >
-                  {d.message?.trim() || "This is for you."}
-                </motion.p>
+                d.message?.trim() ? (
+                  <motion.p
+                    initial={{ opacity: 0, y: 10, scale: 0.94 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 22, delay: 0.18 }}
+                    className="relative z-10 rounded-[18px] border border-[#1D1D1F]/[0.06] bg-white/90 px-4 py-2.5 text-center text-[13.5px] font-semibold leading-snug tracking-[-0.01em] text-[#1D1D1F] shadow-[0_10px_24px_-10px_rgba(29,29,31,0.25)] backdrop-blur"
+                  >
+                    {d.message.trim()}
+                  </motion.p>
+                ) : null
               ) : null}
             </AnimatePresence>
           </div>

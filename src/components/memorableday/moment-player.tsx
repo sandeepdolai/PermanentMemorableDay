@@ -206,6 +206,8 @@ function useSoundtrack(music: SongPick | null) {
 
 function TextBlockView({ block, index }: { block: BlockDoc; index: number }) {
   const body = block.text?.trim() || block.data?.body?.trim() || "";
+  // The creator wrote nothing → the recipient sees nothing.
+  if (!body) return null;
   const isAi = !!block.text?.trim();
   const long = body.length > 120;
   const medium = body.length > 40;
@@ -232,11 +234,7 @@ function TextBlockView({ block, index }: { block: BlockDoc; index: number }) {
             </p>
           ) : null}
         </>
-      ) : (
-        <p className="text-[27px] font-bold leading-[1.25] tracking-[-0.02em] text-white md:text-[36px]">
-          Some words that land.
-        </p>
-      )}
+      ) : null}
     </motion.div>
   );
 }
@@ -562,7 +560,8 @@ function QuizBlockView({
   onSolved: () => void;
 }) {
   const d = block.data;
-  const question = d?.question?.trim() || "Who is this moment for?";
+  // Empty question → no question heading (the answers still play).
+  const question = d?.question?.trim() || "";
   const options = d?.options?.length ? d.options : ["You", "Not you", "Someone else"];
   const answer = d?.answer ?? 0;
   const [wrong, setWrong] = useState<number | null>(null);
@@ -575,9 +574,11 @@ function QuizBlockView({
       className="w-full"
     >
       <p className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">Pop quiz</p>
-      <h2 className="mx-auto mt-2 max-w-[440px] text-center text-[22px] font-bold leading-[1.2] tracking-[-0.02em] text-white md:text-[28px]">
-        {question}
-      </h2>
+      {question ? (
+        <h2 className="mx-auto mt-2 max-w-[440px] text-center text-[22px] font-bold leading-[1.2] tracking-[-0.02em] text-white md:text-[28px]">
+          {question}
+        </h2>
+      ) : null}
       <div className="mx-auto mt-7 flex w-full max-w-[320px] flex-col gap-3 md:max-w-[380px]" role="group" aria-label="Quiz answers">
         {options.map((o, i) => {
           const correctPick = solved && i === answer;
@@ -762,30 +763,37 @@ function FlowerBlockView({ block, index }: { block: BlockDoc; index: number }) {
         </div>
       </div>
 
-      {/* The sender's card — just the message (and voice, when recorded). */}
-      <motion.div
-        initial={{ opacity: 0, y: 14, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ delay: 0.75 + index * 0.09, type: "spring", stiffness: 260, damping: 24 }}
-        className="relative z-10 -mt-2 w-full max-w-[400px]"
-      >
-        <div className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-6 pb-5 pt-6 shadow-[0_24px_48px_-20px_rgba(0,0,0,0.55)] ring-1 ring-black/[0.06]">
-          {/* subtle top thread the card hangs from */}
-          <span
-            aria-hidden
-            className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,#FF375F33_18%,#FF375F66_50%,#FF375F33_82%,transparent_100%)]"
-          />
-          <Heart size={13} className="mx-auto mb-2.5 text-[#FF375F]" fill="currentColor" aria-hidden />
-          <p className="text-center font-serif text-[16.5px] italic leading-[1.55] tracking-[-0.005em] text-[#3E2A1E]">
-            {message || "A bouquet for you."}
-          </p>
-          {voiceNote ? (
-            <div className="mt-4">
-              <VoiceNotePlayer url={voiceNote} />
-            </div>
-          ) : null}
-        </div>
-      </motion.div>
+      {/* The sender's card — only when the sender actually wrote something
+          (or left a voice note). Empty message + no voice → no card at all. */}
+      {message || voiceNote ? (
+        <motion.div
+          initial={{ opacity: 0, y: 14, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ delay: 0.75 + index * 0.09, type: "spring", stiffness: 260, damping: 24 }}
+          className="relative z-10 -mt-2 w-full max-w-[400px]"
+        >
+          <div className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(180deg,#FFFDF6_0%,#FBF3E4_100%)] px-6 pb-5 pt-6 shadow-[0_24px_48px_-20px_rgba(0,0,0,0.55)] ring-1 ring-black/[0.06]">
+            {/* subtle top thread the card hangs from */}
+            <span
+              aria-hidden
+              className="absolute inset-x-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,#FF375F33_18%,#FF375F66_50%,#FF375F33_82%,transparent_100%)]"
+            />
+            {message ? (
+              <>
+                <Heart size={13} className="mx-auto mb-2.5 text-[#FF375F]" fill="currentColor" aria-hidden />
+                <p className="text-center font-serif text-[16.5px] italic leading-[1.55] tracking-[-0.005em] text-[#3E2A1E]">
+                  {message}
+                </p>
+              </>
+            ) : null}
+            {voiceNote ? (
+              <div className={message ? "mt-4" : ""}>
+                <VoiceNotePlayer url={voiceNote} />
+              </div>
+            ) : null}
+          </div>
+        </motion.div>
+      ) : null}
     </motion.div>
   );
 }
@@ -804,6 +812,8 @@ function GiftBlockView({
   const d = block.data;
   const wrap = d?.wrap ?? "#5E5CE6";
   const iconTint = isLightWrap(wrap) ? "#1D1D1F" : wrap;
+  // The sender's words — empty means the viewer sees no message at all.
+  const message = (d?.message ?? "").trim();
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -812,7 +822,7 @@ function GiftBlockView({
       className="flex w-full flex-col items-center"
     >
       {open ? <GiftConfetti tint={wrap} /> : null}
-      {!open ? (
+      {!open && message ? (
         <>
           <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">
             <Sparkles size={11} aria-hidden /> A surprise
@@ -832,23 +842,25 @@ function GiftBlockView({
         <GiftBox open={open} wrap={d?.wrap} ribbon={d?.ribbon} onOpen={onOpen} onDark />
       </motion.div>
       {open ? (
-        <motion.div
-          initial={{ opacity: 0, y: 26, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: "spring", stiffness: 260, damping: 21, delay: 0.3 }}
-          className="relative z-20 mt-6 w-full max-w-[340px] rounded-[22px] border border-white/25 bg-white/[0.14] px-6 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl"
-        >
-          <span
-            aria-hidden
-            className="mx-auto mb-2.5 flex h-8 w-8 items-center justify-center rounded-full"
-            style={{ backgroundColor: `${wrap}40` }}
+        message ? (
+          <motion.div
+            initial={{ opacity: 0, y: 26, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 21, delay: 0.3 }}
+            className="relative z-20 mt-6 w-full max-w-[340px] rounded-[22px] border border-white/25 bg-white/[0.14] px-6 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl"
           >
-            <Gift size={15} style={{ color: iconTint }} aria-hidden />
-          </span>
-          <p className="text-[18px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[22px]">
-            {d?.message?.trim() || "This is for you."}
-          </p>
-        </motion.div>
+            <span
+              aria-hidden
+              className="mx-auto mb-2.5 flex h-8 w-8 items-center justify-center rounded-full"
+              style={{ backgroundColor: `${wrap}40` }}
+            >
+              <Gift size={15} style={{ color: iconTint }} aria-hidden />
+            </span>
+            <p className="text-[18px] font-bold leading-snug tracking-[-0.02em] text-white md:text-[22px]">
+              {message}
+            </p>
+          </motion.div>
+        ) : null
       ) : (
         <button
           type="button"
